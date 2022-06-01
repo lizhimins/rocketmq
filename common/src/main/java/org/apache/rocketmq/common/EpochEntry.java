@@ -17,11 +17,12 @@
 
 package org.apache.rocketmq.common;
 
+import java.util.Objects;
 import org.apache.rocketmq.remoting.protocol.RemotingSerializable;
 
 public class EpochEntry extends RemotingSerializable {
 
-    private int epoch;
+    private long epoch;
     private long startOffset;
     private long endOffset = Long.MAX_VALUE;
 
@@ -36,11 +37,11 @@ public class EpochEntry extends RemotingSerializable {
         this.startOffset = startOffset;
     }
 
-    public int getEpoch() {
+    public long getEpoch() {
         return epoch;
     }
 
-    public void setEpoch(int epoch) {
+    public void setEpoch(long epoch) {
         this.epoch = epoch;
     }
 
@@ -60,11 +61,31 @@ public class EpochEntry extends RemotingSerializable {
         this.endOffset = endOffset;
     }
 
-    @Override public String toString() {
+    @Override
+    public String toString() {
         return "EpochEntry{" +
             "epoch=" + epoch +
             ", startOffset=" + startOffset +
             ", endOffset=" + endOffset +
             '}';
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) {
+            return true;
+        }
+
+        if (o == null || getClass() != o.getClass()) {
+            return false;
+        }
+
+        EpochEntry entry = (EpochEntry) o;
+        return epoch == entry.epoch && startOffset == entry.startOffset && endOffset == entry.endOffset;
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(epoch, startOffset, endOffset);
     }
 }

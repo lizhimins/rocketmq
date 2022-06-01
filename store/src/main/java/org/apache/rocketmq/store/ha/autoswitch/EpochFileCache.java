@@ -42,7 +42,7 @@ public class EpochFileCache {
     private final ReadWriteLock readWriteLock = new ReentrantReadWriteLock();
     private final Lock readLock = this.readWriteLock.readLock();
     private final Lock writeLock = this.readWriteLock.writeLock();
-    private final TreeMap<Integer, EpochEntry> epochMap;
+    private final TreeMap<Long, EpochEntry> epochMap;
     private CheckpointFile<EpochEntry> checkpoint;
 
     public EpochFileCache() {
@@ -159,7 +159,7 @@ public class EpochFileCache {
         }
     }
 
-    public int lastEpoch() {
+    public long lastEpoch() {
         final EpochEntry entry = lastEntry();
         if (entry != null) {
             return entry.getEpoch();
@@ -167,7 +167,7 @@ public class EpochFileCache {
         return -1;
     }
 
-    public EpochEntry getEntry(final int epoch) {
+    public EpochEntry getEntry(final long epoch) {
         this.readLock.lock();
         try {
             if (this.epochMap.containsKey(epoch)) {
@@ -184,7 +184,7 @@ public class EpochFileCache {
         this.readLock.lock();
         try {
             if (!this.epochMap.isEmpty()) {
-                for (Map.Entry<Integer, EpochEntry> entry : this.epochMap.entrySet()) {
+                for (Map.Entry<Long, EpochEntry> entry : this.epochMap.entrySet()) {
                     if (entry.getValue().getStartOffset() <= offset && entry.getValue().getEndOffset() > offset) {
                         return new EpochEntry(entry.getValue());
                     }
@@ -199,7 +199,7 @@ public class EpochFileCache {
     public EpochEntry nextEntry(final int epoch) {
         this.readLock.lock();
         try {
-            final Map.Entry<Integer, EpochEntry> entry = this.epochMap.ceilingEntry(epoch + 1);
+            final Map.Entry<Long, EpochEntry> entry = this.epochMap.ceilingEntry(epoch + 1L);
             if (entry != null) {
                 return new EpochEntry(entry.getValue());
             }
@@ -229,12 +229,11 @@ public class EpochFileCache {
         this.readLock.lock();
         try {
             long consistentOffset = -1;
-            final Map<Integer, EpochEntry> descendingMap = new TreeMap<>(this.epochMap).descendingMap();
-            final Iterator<Map.Entry<Integer, EpochEntry>> iter = descendingMap.entrySet().iterator();
-            while (iter.hasNext()) {
-                final Map.Entry<Integer, EpochEntry> curLocalEntry = iter.next();
+            final Map<Long, EpochEntry> descendingMap = new TreeMap<>(this.epochMap).descendingMap();
+            for (Map.Entry<Long, EpochEntry> curLocalEntry : descendingMap.entrySet()) {
                 final EpochEntry compareEntry = compareCache.getEntry(curLocalEntry.getKey());
-                if (compareEntry != null && compareEntry.getStartOffset() == curLocalEntry.getValue().getStartOffset()) {
+                if (compareEntry != null &&
+                    compareEntry.getStartOffset() == curLocalEntry.getValue().getStartOffset()) {
                     consistentOffset = Math.min(curLocalEntry.getValue().getEndOffset(), compareEntry.getEndOffset());
                     break;
                 }
