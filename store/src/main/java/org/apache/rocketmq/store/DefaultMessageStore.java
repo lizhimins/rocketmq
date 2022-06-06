@@ -601,6 +601,7 @@ public class DefaultMessageStore implements MessageStore {
         this.brokerInitMaxOffset = brokerInitMaxOffset;
     }
 
+    @Override
     public SystemClock getSystemClock() {
         return systemClock;
     }

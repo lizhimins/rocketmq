@@ -17,139 +17,281 @@
 
 package org.apache.rocketmq.store.ha.autoswitch;
 
+import io.netty.bootstrap.ServerBootstrap;
+import io.netty.channel.ChannelFuture;
+import io.netty.channel.ChannelInitializer;
+import io.netty.channel.ChannelOption;
+import io.netty.channel.ChannelPipeline;
+import io.netty.channel.EventLoopGroup;
+import io.netty.channel.nio.NioEventLoopGroup;
+import io.netty.channel.socket.SocketChannel;
+import io.netty.channel.socket.nio.NioServerSocketChannel;
 import java.io.IOException;
-import java.nio.channels.SocketChannel;
 import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.CopyOnWriteArraySet;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
 import org.apache.rocketmq.common.EpochEntry;
 import org.apache.rocketmq.common.ThreadFactoryImpl;
 import org.apache.rocketmq.common.constant.LoggerName;
+import org.apache.rocketmq.common.protocol.body.HARuntimeInfo;
 import org.apache.rocketmq.logging.InternalLogger;
 import org.apache.rocketmq.logging.InternalLoggerFactory;
+import org.apache.rocketmq.store.CommitLog;
 import org.apache.rocketmq.store.DefaultMessageStore;
-import org.apache.rocketmq.store.DispatchRequest;
-import org.apache.rocketmq.store.SelectMappedBufferResult;
-import org.apache.rocketmq.store.ha.DefaultHAService;
 import org.apache.rocketmq.store.ha.GroupTransferService;
 import org.apache.rocketmq.store.ha.HAClient;
 import org.apache.rocketmq.store.ha.HAConnection;
+import org.apache.rocketmq.store.ha.HAConnectionStateNotificationRequest;
 import org.apache.rocketmq.store.ha.HAConnectionStateNotificationService;
+import org.apache.rocketmq.store.ha.HAService;
+import org.apache.rocketmq.store.ha.WaitNotifyObject;
+import org.apache.rocketmq.store.ha.netty.NettyHADecoder;
+import org.apache.rocketmq.store.ha.netty.NettyHAEncoder;
+import org.apache.rocketmq.store.ha.netty.NettyHAServerHandler;
 
 /**
  * SwitchAble ha service, support switch role to master or slave.
  */
-public class AutoSwitchHAService extends DefaultHAService {
+public class AutoSwitchHAService implements HAService {
+
     private static final InternalLogger LOGGER = InternalLoggerFactory.getLogger(LoggerName.STORE_LOGGER_NAME);
-    private final ExecutorService executorService = Executors.newSingleThreadExecutor(new ThreadFactoryImpl("AutoSwitchHAService_Executor_"));
+
+    private static final int READ_MAX_BUFFER_SIZE = 4 * 1024 * 1024;
+    private static final int WRITE_MAX_BUFFER_SIZE = 16 * 1024 * 1024;
+
+    private final ExecutorService executorService =
+        Executors.newSingleThreadExecutor(new ThreadFactoryImpl("AutoSwitchHAService_Executor_"));
+
+    private final List<HAConnection> connectionList = new LinkedList<>();
     private final List<Consumer<Set<String>>> syncStateSetChangedListeners = new ArrayList<>();
     private final CopyOnWriteArraySet<String> syncStateSet = new CopyOnWriteArraySet<>();
+
+    private DefaultMessageStore defaultMessageStore;
+
     private String localAddress;
 
-    private EpochFileCache epochCache;
+    private WaitNotifyObject waitNotifyObject = new WaitNotifyObject();
+    private AtomicLong push2SlaveMaxOffset = new AtomicLong(0);
+
+    private GroupTransferService groupTransferService;
+
+    private HAConnectionStateNotificationService haConnectionStateNotificationService;
+
+    private final TruncateStrategy truncateStrategy = new MoveAndDiscardTruncateStrategy();
+
+    private EpochStore epochCache;
+
+    private final EventLoopGroup bossGroup = new NioEventLoopGroup();
+    private final EventLoopGroup workerGroup = new NioEventLoopGroup(2);
     private AutoSwitchHAClient haClient;
 
     public AutoSwitchHAService() {
     }
 
-    @Override public void init(final DefaultMessageStore defaultMessageStore) throws IOException {
-        this.epochCache = new EpochFileCache(defaultMessageStore.getMessageStoreConfig().getStorePathEpochFile());
-        this.epochCache.initCacheFromFile();
+    @Override
+    public void init(final DefaultMessageStore defaultMessageStore) throws IOException {
+        this.epochCache = new EpochFileStore(defaultMessageStore.getMessageStoreConfig().getStorePathEpochFile());
+        this.epochCache.initStateFromFile();
         this.defaultMessageStore = defaultMessageStore;
-        this.acceptSocketService = new AutoSwitchAcceptSocketService(defaultMessageStore.getMessageStoreConfig().getHaListenPort());
         this.groupTransferService = new GroupTransferService(this, defaultMessageStore);
-        this.haConnectionStateNotificationService = new HAConnectionStateNotificationService(this, defaultMessageStore);
+        this.haConnectionStateNotificationService =
+            new HAConnectionStateNotificationService(this, defaultMessageStore);
     }
 
-    @Override public void shutdown() {
-        super.shutdown();
+    @Override
+    public void start() throws Exception {
+        startNettyServer(defaultMessageStore.getMessageStoreConfig().getHaListenPort());
+    }
+
+    @Override
+    public void shutdown() {
         if (this.haClient != null) {
             this.haClient.shutdown();
         }
+        bossGroup.shutdownGracefully();
+        workerGroup.shutdownGracefully();
         this.executorService.shutdown();
     }
 
-    @Override public boolean changeToMaster(int masterEpoch) {
-        final long lastEpoch = this.epochCache.lastEpoch();
+    public void startNettyServer(int port) {
+        LOGGER.info("Server start listen at " + port);
+        System.out.println("server start listen at " + port);
+        EventLoopGroup bossGroup = new NioEventLoopGroup();
+        EventLoopGroup workerGroup = new NioEventLoopGroup(2);
+
+        NettyHAServerHandler serverHandler = new NettyHAServerHandler(this);
+        try {
+            ServerBootstrap bootstrap = new ServerBootstrap();
+            bootstrap.group(bossGroup, workerGroup).channel(NioServerSocketChannel.class)
+                .childOption(ChannelOption.SO_KEEPALIVE, true)
+                .option(ChannelOption.SO_BACKLOG, 128)
+                .childHandler(new ChannelInitializer<io.netty.channel.socket.SocketChannel>() {
+                    @Override
+                    protected void initChannel(SocketChannel channel) throws Exception {
+                        ChannelPipeline pipeline = channel.pipeline();
+                        pipeline.addLast("decoder", new NettyHADecoder());
+                        pipeline.addLast("encoder", new NettyHAEncoder());
+                        pipeline.addLast("serverHandler", serverHandler);
+                    }
+                });
+            ChannelFuture future = bootstrap.bind(port).sync();
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+    }
+
+    public DefaultMessageStore getDefaultMessageStore() {
+        return defaultMessageStore;
+    }
+
+    private void destroyConnections() {
+
+    }
+
+    @Override
+    public boolean changeToMaster(int masterEpoch) {
+        final long lastEpoch = this.epochCache.getLastEpoch();
         if (masterEpoch < lastEpoch) {
             return false;
         }
         destroyConnections();
+
         // Stop ha client if needed
         if (this.haClient != null) {
             this.haClient.shutdown();
         }
 
+        long maxPhyOffset = this.defaultMessageStore.getMaxPhyOffset();
+        long minPhyOffset = this.defaultMessageStore.getMinPhyOffset();
+
         // Truncate dirty file
-        final long truncateOffset = truncateInvalidMsg();
-        if (truncateOffset >= 0) {
-            this.epochCache.truncateSuffixByOffset(truncateOffset);
+        final long truncateSize = truncateStrategy.truncateInvalidMsg(defaultMessageStore, maxPhyOffset);
+        LOGGER.info("Truncate msg file size:{}, minPhyOffset:{}, maxPhyOffset:{}",
+            truncateSize, minPhyOffset, maxPhyOffset);
+
+        if (minPhyOffset >= 0) {
+            this.epochCache.truncateSuffixByOffset(minPhyOffset);
         }
 
-        // Append new epoch to epochFile
-        final EpochEntry newEpochEntry = new EpochEntry(masterEpoch, this.defaultMessageStore.getMaxPhyOffset());
-        if (this.epochCache.lastEpoch() >= masterEpoch) {
+        if (maxPhyOffset >= 0) {
             this.epochCache.truncateSuffixByEpoch(masterEpoch);
+            this.epochCache.tryAppendEpochEntry(new EpochEntry(masterEpoch, maxPhyOffset));
         }
-        this.epochCache.appendEntry(newEpochEntry);
 
+        // Rollback cq index in the end
         this.defaultMessageStore.recoverTopicQueueTable();
 
-        LOGGER.info("Change ha to master success, newMasterEpoch:{}, startOffset:{}", masterEpoch, newEpochEntry.getStartOffset());
+        LOGGER.info("Change ha to master success, newMasterEpoch:{}, startOffset:{}", masterEpoch, maxPhyOffset);
         return true;
     }
 
-    @Override public boolean changeToSlave(String newMasterAddr, int newMasterEpoch, Long slaveId) {
-        final long lastEpoch = this.epochCache.lastEpoch();
+    @Override
+    public boolean changeToSlave(String newMasterAddr, int newMasterEpoch, Long slaveId) {
+        final long lastEpoch = this.epochCache.getLastEpoch();
         if (newMasterEpoch <= lastEpoch) {
+            LOGGER.error("change to slave failed, new master epoch is too small, {} {}",
+                newMasterEpoch, lastEpoch);
             return false;
         }
+
         try {
             destroyConnections();
             if (this.haClient == null) {
-                this.haClient = new AutoSwitchHAClient(this, defaultMessageStore, this.epochCache);
+                this.haClient = new AutoSwitchHAClient(defaultMessageStore, this.epochCache);
             } else {
                 this.haClient.reOpen();
             }
-            this.haClient.setLocalAddress(this.localAddress);
+            this.setLocalAddress(this.localAddress);
             this.haClient.updateSlaveId(slaveId);
             this.haClient.updateMasterAddress(newMasterAddr);
             this.haClient.updateHaMasterAddress(null);
             this.haClient.start();
-            LOGGER.info("Change ha to slave success, newMasterAddress:{}, newMasterEpoch:{}", newMasterAddr, newMasterEpoch);
+            LOGGER.info("Change ha to slave success, newMasterAddress:{}, newMasterEpoch:{}",
+                newMasterAddr, newMasterEpoch);
             return true;
-        } catch (final Exception e) {
+        } catch (Exception e) {
             LOGGER.error("Error happen when change ha to slave", e);
             return false;
         }
     }
 
-    @Override public HAClient getHAClient() {
+    @Override
+    public HAClient getHAClient() {
         return this.haClient;
     }
 
-    @Override public void updateHaMasterAddress(String newAddr) {
+    @Override
+    public AtomicLong getPush2SlaveMaxOffset() {
+        return null;
+    }
+
+    @Override
+    public HARuntimeInfo getRuntimeInfo(long masterPutWhere) {
+        return null;
+    }
+
+    @Override
+    public WaitNotifyObject getWaitNotifyObject() {
+        return null;
+    }
+
+    @Override
+    public boolean isSlaveOK(long masterPutWhere) {
+        return false;
+    }
+
+    @Override
+    public void updateHaMasterAddress(String newAddr) {
         if (this.haClient != null) {
             this.haClient.updateHaMasterAddress(newAddr);
         }
     }
 
-    @Override public void updateMasterAddress(String newAddr) {
+    @Override
+    public int inSyncSlaveNums(long masterPutWhere) {
+        return 0;
     }
 
-    @Override public void removeConnection(HAConnection conn) {
+    @Override
+    public AtomicInteger getConnectionCount() {
+        return null;
+    }
+
+    @Override
+    public void putRequest(CommitLog.GroupCommitRequest request) {
+
+    }
+
+    @Override
+    public void putGroupConnectionStateRequest(HAConnectionStateNotificationRequest request) {
+
+    }
+
+    @Override
+    public List<HAConnection> getConnectionList() {
+        return null;
+    }
+
+    @Override
+    public void updateMasterAddress(String newAddr) {
+    }
+
+    public void removeConnection(HAConnection conn) {
         final Set<String> syncStateSet = getSyncStateSet();
         String slave = ((AutoSwitchHAConnection) conn).getSlaveAddress();
         if (syncStateSet.contains(slave)) {
             syncStateSet.remove(slave);
             notifySyncStateSetChanged(syncStateSet);
         }
-        super.removeConnection(conn);
+        //super.removeConnection(conn);
     }
 
     public void registerSyncStateSetChangedListener(final Consumer<Set<String>> listener) {
@@ -171,12 +313,14 @@ public class AutoSwitchHAService extends DefaultHAService {
     public Set<String> maybeShrinkInSyncStateSet() {
         final Set<String> currentSyncStateSet = getSyncStateSet();
         final HashSet<String> newSyncStateSet = new HashSet<>(currentSyncStateSet);
-        final long haMaxTimeSlaveNotCatchup = this.defaultMessageStore.getMessageStoreConfig().getHaMaxTimeSlaveNotCatchup();
+        final long haMaxTimeSlaveNotCatchup =
+            this.defaultMessageStore.getMessageStoreConfig().getHaMaxTimeSlaveNotCatchup();
         for (HAConnection haConnection : this.connectionList) {
             final AutoSwitchHAConnection connection = (AutoSwitchHAConnection) haConnection;
             final String slaveAddress = connection.getSlaveAddress();
             if (currentSyncStateSet.contains(slaveAddress)) {
-                if (connection.getSlaveAckOffset() < 0 || this.defaultMessageStore.getMaxPhyOffset() == connection.getSlaveAckOffset()) {
+                if (connection.getSlaveAckOffset() < 0 ||
+                    this.defaultMessageStore.getMaxPhyOffset() == connection.getSlaveAckOffset()) {
                     continue;
                 }
                 if ((System.currentTimeMillis() - connection.getLastCatchUpTimeMs()) > haMaxTimeSlaveNotCatchup) {
@@ -199,7 +343,7 @@ public class AutoSwitchHAService extends DefaultHAService {
         }
         final long confirmOffset = getConfirmOffset();
         if (slaveMaxOffset >= confirmOffset) {
-            final EpochEntry currentLeaderEpoch = this.epochCache.lastEntry();
+            final EpochEntry currentLeaderEpoch = this.epochCache.getLastEntry();
             if (slaveMaxOffset >= currentLeaderEpoch.getStartOffset()) {
                 currentSyncStateSet.add(slaveAddress);
                 // Notify the upper layer that syncStateSet changed.
@@ -243,76 +387,7 @@ public class AutoSwitchHAService extends DefaultHAService {
         this.localAddress = localAddress;
     }
 
-    /**
-     * Try to truncate incomplete msg transferred from master.
-     */
-    public long truncateInvalidMsg() {
-        long dispatchBehind = this.defaultMessageStore.dispatchBehindBytes();
-        if (dispatchBehind <= 0) {
-            LOGGER.info("Dispatch complete, skip truncate");
-            return -1;
-        }
-
-        long reputFromOffset = this.defaultMessageStore.getMaxPhyOffset() - dispatchBehind;
-
-        boolean doNext = true;
-        while (reputFromOffset < this.defaultMessageStore.getMaxPhyOffset() && doNext) {
-            SelectMappedBufferResult result = this.defaultMessageStore.getCommitLog().getData(reputFromOffset);
-            if (result == null) {
-                break;
-            }
-
-            try {
-                reputFromOffset = result.getStartOffset();
-
-                int readSize = 0;
-                while (readSize < result.getSize()) {
-                    DispatchRequest dispatchRequest = this.defaultMessageStore.getCommitLog().checkMessageAndReturnSize(result.getByteBuffer(), false, false);
-
-                    int size = dispatchRequest.getMsgSize();
-
-                    if (dispatchRequest.isSuccess()) {
-                        if (size > 0) {
-                            reputFromOffset += size;
-                            readSize += size;
-                        } else {
-                            reputFromOffset = this.defaultMessageStore.getCommitLog().rollNextFile(reputFromOffset);
-                            break;
-                        }
-                    } else {
-                        doNext = false;
-                        break;
-                    }
-                }
-            } finally {
-                result.release();
-            }
-        }
-
-        LOGGER.info("AutoRecoverHAClient truncate commitLog to {}", reputFromOffset);
-        this.defaultMessageStore.truncateDirtyFiles(reputFromOffset);
-        return reputFromOffset;
-    }
-
     public List<EpochEntry> getEpochEntries() {
         return this.epochCache.getAllEntries();
-    }
-
-    class AutoSwitchAcceptSocketService extends AcceptSocketService {
-
-        public AutoSwitchAcceptSocketService(int port) {
-            super(port);
-        }
-
-        @Override public String getServiceName() {
-            if (defaultMessageStore.getBrokerConfig().isInBrokerContainer()) {
-                return defaultMessageStore.getBrokerConfig().getLoggerIdentifier() + AcceptSocketService.class.getSimpleName();
-            }
-            return AutoSwitchAcceptSocketService.class.getSimpleName();
-        }
-
-        @Override protected HAConnection createConnection(SocketChannel sc) throws IOException {
-            return new AutoSwitchHAConnection(AutoSwitchHAService.this, sc, AutoSwitchHAService.this.epochCache);
-        }
     }
 }

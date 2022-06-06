@@ -22,7 +22,10 @@ import org.apache.rocketmq.common.MixAll;
 public class ControllerConfig {
 
     private String rocketmqHome = System.getProperty(MixAll.ROCKETMQ_HOME_PROPERTY, System.getenv(MixAll.ROCKETMQ_HOME_ENV));
-    private String configStorePath = System.getProperty("user.home") + File.separator + "controller" + File.separator + "controller.properties";
+
+    private String configStorePath = System.getProperty("user.home") + File.separator + "controller" + File.separator + "controller.conf";
+
+    private String controllerStorePath = System.getProperty("user.home") + File.separator + "DledgerController";
 
     /**
      * Is startup the controller in this name-srv
@@ -48,7 +51,6 @@ public class ControllerConfig {
     private String controllerDLegerPeers;
     private String controllerDLegerSelfId;
     private int mappedFileSize = 1024 * 1024 * 1024;
-    private String controllerStorePath = System.getProperty("user.home") + File.separator + "DledgerController";
 
     /**
      * Whether the controller can elect a master which is not in the syncStateSet.

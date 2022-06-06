@@ -158,6 +158,7 @@ public class InnerBrokerController extends BrokerController {
         return this.brokerConfig.getListenPort();
     }
 
+    @Override
     public BrokerOuterAPI getBrokerOuterAPI() {
         return brokerContainer.getBrokerOuterAPI();
     }
@@ -166,14 +167,17 @@ public class InnerBrokerController extends BrokerController {
         return this.brokerContainer;
     }
 
+    @Override
     public NettyServerConfig getNettyServerConfig() {
         return brokerContainer.getNettyServerConfig();
     }
 
+    @Override
     public NettyClientConfig getNettyClientConfig() {
         return brokerContainer.getNettyClientConfig();
     }
 
+    @Override
     public MessageStore getMessageStoreByBrokerName(String brokerName) {
         if (this.brokerConfig.getBrokerName().equals(brokerName)) {
             return this.getMessageStore();

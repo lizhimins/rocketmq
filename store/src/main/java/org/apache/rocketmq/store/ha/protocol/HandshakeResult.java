@@ -43,10 +43,6 @@ public enum HandshakeResult {
         this.value = value;
     }
 
-    public int getValue() {
-        return value;
-    }
-
     public static HandshakeResult valueOf(int code) {
         for (HandshakeResult tmp : HandshakeResult.values()) {
             if (tmp.getValue() == code) {
@@ -54,5 +50,9 @@ public enum HandshakeResult {
             }
         }
         return REJECT;
+    }
+
+    public int getValue() {
+        return value;
     }
 }

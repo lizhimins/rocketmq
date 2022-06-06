@@ -52,6 +52,7 @@ import org.apache.rocketmq.store.ha.autoswitch.AutoSwitchHAService;
  * syncStateSet, only master will start this timed task.
  */
 public class ReplicasManager {
+
     private static final InternalLogger LOGGER = InternalLoggerFactory.getLogger(LoggerName.BROKER_LOGGER_NAME);
 
     private final ScheduledExecutorService scheduledService;
@@ -77,8 +78,10 @@ public class ReplicasManager {
     public ReplicasManager(final BrokerController brokerController) {
         this.brokerController = brokerController;
         this.brokerOuterAPI = brokerController.getBrokerOuterAPI();
-        this.scheduledService = Executors.newScheduledThreadPool(3, new ThreadFactoryImpl("ReplicasManager_ScheduledService_", brokerController.getBrokerIdentity()));
-        this.executorService = Executors.newFixedThreadPool(3, new ThreadFactoryImpl("ReplicasManager_ExecutorService_", brokerController.getBrokerIdentity()));
+        this.scheduledService = Executors.newScheduledThreadPool(3,
+            new ThreadFactoryImpl("ReplicasManager_ScheduledService_", brokerController.getBrokerIdentity()));
+        this.executorService = Executors.newFixedThreadPool(3,
+            new ThreadFactoryImpl("ReplicasManager_ExecutorService_", brokerController.getBrokerIdentity()));
         this.haService = (AutoSwitchHAService) brokerController.getMessageStore().getHaService();
         this.brokerConfig = brokerController.getBrokerConfig();
         final BrokerConfig brokerConfig = brokerController.getBrokerConfig();
@@ -371,7 +374,9 @@ public class ReplicasManager {
 
     private void doReportSyncStateSetChanged(Set<String> newSyncStateSet) {
         try {
-            final SyncStateSet result = this.brokerOuterAPI.alterSyncStateSet(this.controllerLeaderAddress, this.brokerConfig.getBrokerName(), this.masterAddress, this.masterEpoch, newSyncStateSet, this.syncStateSetEpoch);
+            final SyncStateSet result = this.brokerOuterAPI.alterSyncStateSet(
+                this.controllerLeaderAddress, this.brokerConfig.getBrokerName(), this.masterAddress, this.masterEpoch,
+                newSyncStateSet, this.syncStateSetEpoch);
             if (result != null) {
                 changeSyncStateSet(result.getSyncStateSet(), result.getSyncStateSetEpoch());
             }

@@ -20,6 +20,7 @@ package org.apache.rocketmq.store.ha;
 import java.nio.channels.SocketChannel;
 
 public interface HAConnection {
+
     /**
      * Start HA Connection
      */

@@ -64,6 +64,7 @@ public class DefaultHAClient extends ServiceThread implements HAClient {
         this.flowMonitor = new FlowMonitor(defaultMessageStore.getMessageStoreConfig());
     }
 
+    @Override
     public void updateHaMasterAddress(final String newAddr) {
         String currentAddr = this.masterHaAddress.get();
         if (masterHaAddress.compareAndSet(currentAddr, newAddr)) {
@@ -71,6 +72,7 @@ public class DefaultHAClient extends ServiceThread implements HAClient {
         }
     }
 
+    @Override
     public void updateMasterAddress(final String newAddr) {
         String currentAddr = this.masterAddress.get();
         if (masterAddress.compareAndSet(currentAddr, newAddr)) {
@@ -78,10 +80,12 @@ public class DefaultHAClient extends ServiceThread implements HAClient {
         }
     }
 
+    @Override
     public String getHaMasterAddress() {
         return this.masterHaAddress.get();
     }
 
+    @Override
     public String getMasterAddress() {
         return this.masterAddress.get();
     }
@@ -228,6 +232,7 @@ public class DefaultHAClient extends ServiceThread implements HAClient {
         return result;
     }
 
+    @Override
     public void changeCurrentState(HAConnectionState currentState) {
         log.info("change state to {}", currentState);
         this.currentState = currentState;
@@ -254,6 +259,7 @@ public class DefaultHAClient extends ServiceThread implements HAClient {
         return this.socketChannel != null;
     }
 
+    @Override
     public void closeMaster() {
         if (null != this.socketChannel) {
             try {
@@ -352,10 +358,12 @@ public class DefaultHAClient extends ServiceThread implements HAClient {
         this.waitForRunning(1000 * 5);
     }
 
+    @Override
     public long getLastWriteTimestamp() {
         return this.lastWriteTimestamp;
     }
 
+    @Override
     public long getLastReadTimestamp() {
         return lastReadTimestamp;
     }

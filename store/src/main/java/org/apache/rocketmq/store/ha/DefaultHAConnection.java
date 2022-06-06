@@ -61,6 +61,7 @@ public class DefaultHAConnection implements HAConnection {
         this.flowMonitor = new FlowMonitor(haService.getDefaultMessageStore().getMessageStoreConfig());
     }
 
+    @Override
     public void start() {
         changeCurrentState(HAConnectionState.TRANSFER);
         this.flowMonitor.start();
@@ -68,6 +69,7 @@ public class DefaultHAConnection implements HAConnection {
         this.writeSocketService.start();
     }
 
+    @Override
     public void shutdown() {
         changeCurrentState(HAConnectionState.SHUTDOWN);
         this.writeSocketService.shutdown(true);
@@ -76,6 +78,7 @@ public class DefaultHAConnection implements HAConnection {
         this.close();
     }
 
+    @Override
     public void close() {
         if (this.socketChannel != null) {
             try {
@@ -86,6 +89,7 @@ public class DefaultHAConnection implements HAConnection {
         }
     }
 
+    @Override
     public SocketChannel getSocketChannel() {
         return socketChannel;
     }
@@ -107,10 +111,12 @@ public class DefaultHAConnection implements HAConnection {
         return slaveAckOffset;
     }
 
+    @Override
     public long getTransferredByteInSecond() {
         return this.flowMonitor.getTransferredByteInSecond();
     }
 
+    @Override
     public long getTransferFromWhere() {
         return writeSocketService.getNextTransferFromWhere();
     }
@@ -301,13 +307,15 @@ public class DefaultHAConnection implements HAConnection {
                             this.byteBufferHeader.flip();
 
                             this.lastWriteOver = this.transferData();
-                            if (!this.lastWriteOver)
+                            if (!this.lastWriteOver) {
                                 continue;
+                            }
                         }
                     } else {
                         this.lastWriteOver = this.transferData();
-                        if (!this.lastWriteOver)
+                        if (!this.lastWriteOver) {
                             continue;
+                        }
                     }
 
                     SelectMappedBufferResult selectResult =

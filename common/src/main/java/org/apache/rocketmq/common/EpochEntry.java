@@ -32,7 +32,7 @@ public class EpochEntry extends RemotingSerializable {
         this.endOffset = entry.getEndOffset();
     }
 
-    public EpochEntry(int epoch, long startOffset) {
+    public EpochEntry(long epoch, long startOffset) {
         this.epoch = epoch;
         this.startOffset = startOffset;
     }
