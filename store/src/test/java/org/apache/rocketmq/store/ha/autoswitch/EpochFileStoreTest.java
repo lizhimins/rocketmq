@@ -59,7 +59,7 @@ public class EpochFileStoreTest {
         this.epochStore = new EpochFileStore(path);
         assertTrue(this.epochStore.initStateFromFile());
 
-        EpochEntry entry = this.epochStore.getEpochEntry(2);
+        EpochEntry entry = this.epochStore.findEpochEntryByEpoch(2);
         assertEquals(entry.getEpoch(), 2);
         assertEquals(entry.getStartOffset(), 300);
         assertEquals(entry.getEndOffset(), 500);
@@ -71,7 +71,7 @@ public class EpochFileStoreTest {
         assertEquals(3, entryList.size());
 
         this.epochStore2.initStateFromEntries(entryList);
-        EpochEntry entry = this.epochStore.getEpochEntry(2);
+        EpochEntry entry = this.epochStore.findEpochEntryByEpoch(2);
         assertEquals(entry.getEpoch(), 2);
         assertEquals(entry.getStartOffset(), 300);
         assertEquals(entry.getEndOffset(), 500);
@@ -81,8 +81,8 @@ public class EpochFileStoreTest {
     @Test
     public void testTruncate() {
         this.epochStore.truncateSuffixByOffset(150);
-        assertNotNull(this.epochStore.getEpochEntry(1));
-        assertNull(this.epochStore.getEpochEntry(2));
+        assertNotNull(this.epochStore.findEpochEntryByEpoch(1));
+        assertNull(this.epochStore.findEpochEntryByEpoch(2));
     }
 
     @Test

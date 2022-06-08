@@ -15,7 +15,11 @@ public interface EpochStore {
 
     long getLastEpoch();
 
-    EpochEntry getEpochEntry(final long epoch);
+    EpochEntry findEpochEntryByEpoch(final long epoch);
+
+    EpochEntry findEpochEntryByOffset(final long offset);
+
+    EpochEntry findCeilingEntryByEpoch(final long epoch);
 
     List<EpochEntry> getAllEntries();
 

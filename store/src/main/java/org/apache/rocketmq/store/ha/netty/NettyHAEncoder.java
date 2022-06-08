@@ -26,10 +26,10 @@ public class NettyHAEncoder extends MessageToByteEncoder<HAMessage> {
         }
 
         this.lastWriteTimestamp = System.currentTimeMillis();
-        out.writeInt(message.getLength());
+        out.writeInt(message.getBodyLength());
         out.writeInt(message.getType().getValue());
         out.writeLong(message.getEpoch());
-        out.writeLong(System.currentTimeMillis());
-        out.writeBytes(message.getBody());
+        out.writeLong(this.lastWriteTimestamp);
+        out.writeBytes(message.getByteBuffer());
     }
 }

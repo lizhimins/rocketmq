@@ -73,7 +73,7 @@ public class EpochFileStore implements EpochStore {
         this.writeLock.lock();
         try {
             initEntries(entries);
-            flush();
+            flushCheckpoint();
         } finally {
             this.writeLock.unlock();
         }
@@ -104,7 +104,7 @@ public class EpochFileStore implements EpochStore {
                 lastEntry.setEndOffset(entry.getStartOffset());
             }
             this.epochMap.put(entry.getEpoch(), new EpochEntry(entry));
-            flush();
+            flushCheckpoint();
             return true;
         } finally {
             this.writeLock.unlock();
@@ -163,7 +163,7 @@ public class EpochFileStore implements EpochStore {
     }
 
     @Override
-    public EpochEntry getEpochEntry(final long epoch) {
+    public EpochEntry findEpochEntryByEpoch(final long epoch) {
         this.readLock.lock();
         try {
             if (this.epochMap.containsKey(epoch)) {
@@ -176,6 +176,7 @@ public class EpochFileStore implements EpochStore {
         }
     }
 
+    @Override
     public EpochEntry findEpochEntryByOffset(final long offset) {
         this.readLock.lock();
         try {
@@ -192,18 +193,19 @@ public class EpochFileStore implements EpochStore {
         }
     }
 
-    //public EpochEntry nextEntry(final int epoch) {
-    //    this.readLock.lock();
-    //    try {
-    //        final Map.Entry<Long, EpochEntry> entry = this.epochMap.ceilingEntry(epoch + 1L);
-    //        if (entry != null) {
-    //            return new EpochEntry(entry.getValue());
-    //        }
-    //        return null;
-    //    } finally {
-    //        this.readLock.unlock();
-    //    }
-    //}
+    @Override
+    public EpochEntry findCeilingEntryByEpoch(long epoch) {
+        this.readLock.lock();
+        try {
+            final Map.Entry<Long, EpochEntry> entry = this.epochMap.ceilingEntry(epoch + 1L);
+            if (entry != null) {
+                return new EpochEntry(entry.getValue());
+            }
+            return null;
+        } finally {
+            this.readLock.unlock();
+        }
+    }
 
     @Override
     public List<EpochEntry> getAllEntries() {
@@ -229,7 +231,7 @@ public class EpochFileStore implements EpochStore {
             long consistentOffset = -1;
             final Map<Long, EpochEntry> descendingMap = new TreeMap<>(this.epochMap).descendingMap();
             for (Map.Entry<Long, EpochEntry> curLocalEntry : descendingMap.entrySet()) {
-                final EpochEntry compareEntry = compareEpoch.getEpochEntry(curLocalEntry.getKey());
+                final EpochEntry compareEntry = compareEpoch.findEpochEntryByEpoch(curLocalEntry.getKey());
                 if (compareEntry != null &&
                     compareEntry.getStartOffset() == curLocalEntry.getValue().getStartOffset()) {
                     consistentOffset = Math.min(curLocalEntry.getValue().getEndOffset(), compareEntry.getEndOffset());
@@ -268,7 +270,7 @@ public class EpochFileStore implements EpochStore {
             if (entry != null) {
                 entry.setEndOffset(Long.MAX_VALUE);
             }
-            flush();
+            flushCheckpoint();
         } finally {
             this.writeLock.unlock();
         }
@@ -283,13 +285,13 @@ public class EpochFileStore implements EpochStore {
         this.writeLock.lock();
         try {
             this.epochMap.entrySet().removeIf(entry -> predict.test(entry.getValue()));
-            flush();
+            flushCheckpoint();
         } finally {
             this.writeLock.unlock();
         }
     }
 
-    private void flush() {
+    private void flushCheckpoint() {
         this.writeLock.lock();
         try {
             if (this.checkpoint != null) {

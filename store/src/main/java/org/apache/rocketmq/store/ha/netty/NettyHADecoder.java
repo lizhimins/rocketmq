@@ -3,6 +3,7 @@ package org.apache.rocketmq.store.ha.netty;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.LengthFieldBasedFrameDecoder;
+import java.nio.ByteBuffer;
 import org.apache.rocketmq.common.constant.LoggerName;
 import org.apache.rocketmq.logging.InternalLogger;
 import org.apache.rocketmq.logging.InternalLoggerFactory;
@@ -14,12 +15,10 @@ public class NettyHADecoder extends LengthFieldBasedFrameDecoder {
     private static final int FRAME_MAX_LENGTH =
         Integer.parseInt(System.getProperty("com.rocketmq.remoting.frameMaxLength", "16777216"));
 
-    private long firstReceiveEpoch = -1L;
-
     private long lastReadTimestamp = System.currentTimeMillis();
 
     public NettyHADecoder() {
-        super(FRAME_MAX_LENGTH, 0, 4, 16, 0);
+        super(FRAME_MAX_LENGTH, 0, 4, 24, 4);
     }
 
     public long getLastReadTimestamp() {
@@ -33,19 +32,10 @@ public class NettyHADecoder extends LengthFieldBasedFrameDecoder {
             return null;
         }
 
-        int bodyLength = frame.readInt();
         HAMessageType messageType = HAMessageType.valueOf(frame.readInt());
         long epoch = frame.readLong();
-        if (firstReceiveEpoch == -1) {
-            firstReceiveEpoch = epoch;
-        }
-
-        if (firstReceiveEpoch != epoch) {
-            log.error("epoch not match");
-        }
-
-        long timestamp = frame.readLong();
-        ByteBuf byteBuf = frame.readBytes(bodyLength);
-        return new HAMessage(messageType, timestamp, byteBuf);
+        this.lastReadTimestamp = frame.readLong();
+        ByteBuffer buffer = frame.nioBuffer();
+        return new HAMessage(messageType, epoch, buffer);
     }
 }

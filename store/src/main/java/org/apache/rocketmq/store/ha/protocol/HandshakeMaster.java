@@ -8,7 +8,7 @@ public class HandshakeMaster {
 
     private String brokerName;
 
-    private int brokerId;
+    private long brokerId;
 
     private int brokerAppVersion;
 
@@ -38,11 +38,11 @@ public class HandshakeMaster {
         this.brokerName = brokerName;
     }
 
-    public int getBrokerId() {
+    public long getBrokerId() {
         return brokerId;
     }
 
-    public void setBrokerId(int brokerId) {
+    public void setBrokerId(long brokerId) {
         this.brokerId = brokerId;
     }
 

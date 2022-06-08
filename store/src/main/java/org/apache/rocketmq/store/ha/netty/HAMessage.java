@@ -1,43 +1,31 @@
 package org.apache.rocketmq.store.ha.netty;
 
-import io.netty.buffer.ByteBuf;
+import java.nio.ByteBuffer;
 
 public class HAMessage {
 
-    // 消息长度
-    private int length;
-
-    // 消息类型
     private HAMessageType type;
 
     private long epoch;
 
-    // 消息体
-    private byte[] body;
+    private ByteBuffer byteBuffer;
 
-    private ByteBuf byteBuf;
-
-    public HAMessage() {
-    }
+    private int bodyLength;
 
     public HAMessage(HAMessageType type) {
         this.type = type;
     }
 
-    public HAMessage(HAMessageType type, byte[] body) {
+    public HAMessage(HAMessageType type, long epoch, byte[] bytes) {
         this.type = type;
-        this.length = body.length;
-        this.body = body;
+        this.epoch = epoch;
+        this.setBody(bytes);
     }
 
-    public HAMessage(HAMessageType type, long timestamp, byte[] body) {
+    public HAMessage(HAMessageType type, long epoch, ByteBuffer byteBuffer) {
         this.type = type;
-        this.body = body;
-    }
-
-    public HAMessage(HAMessageType type, long timestamp, ByteBuf byteBuf) {
-        this.type = type;
-        this.byteBuf = byteBuf;
+        this.epoch = epoch;
+        this.setBody(byteBuffer);
     }
 
     public HAMessageType getType() {
@@ -48,19 +36,6 @@ public class HAMessage {
         this.type = type;
     }
 
-    public int getLength() {
-        return length;
-    }
-
-    public byte[] getBody() {
-        return body;
-    }
-
-    public void setBody(byte[] body) {
-        this.body = body;
-        this.length = body.length;
-    }
-
     public long getEpoch() {
         return epoch;
     }
@@ -69,20 +44,22 @@ public class HAMessage {
         this.epoch = epoch;
     }
 
-    public ByteBuf getByteBuf() {
-
-        return byteBuf;
+    public ByteBuffer getByteBuffer() {
+        return byteBuffer;
     }
 
-    public void setByteBuf(ByteBuf byteBuf) {
-        this.byteBuf = byteBuf;
+    public void setBody(ByteBuffer byteBuffer) {
+        this.byteBuffer = byteBuffer;
+        this.bodyLength = byteBuffer.remaining();
     }
 
-    @Override
-    public String toString() {
-        return "HAMessage{" +
-            "length=" + length +
-            ", type=" + type +
-            '}';
+    public void setBody(byte[] bytes) {
+        this.byteBuffer = ByteBuffer.allocate(bytes.length);
+        this.byteBuffer.put(bytes);
+        this.bodyLength = this.byteBuffer.remaining();
+    }
+
+    public int getBodyLength() {
+        return bodyLength;
     }
 }

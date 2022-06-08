@@ -1,53 +1,39 @@
 package org.apache.rocketmq.store.ha.netty;
 
-import com.alibaba.fastjson.JSONObject;
-import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundHandlerAdapter;
-import io.netty.channel.ChannelPromise;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.List;
+import org.apache.rocketmq.common.constant.LoggerName;
+import org.apache.rocketmq.logging.InternalLogger;
+import org.apache.rocketmq.logging.InternalLoggerFactory;
+import org.apache.rocketmq.remoting.protocol.RemotingSerializable;
+import org.apache.rocketmq.store.ha.autoswitch.AutoSwitchHAClient;
 import org.apache.rocketmq.store.ha.protocol.HandshakeMaster;
 
-@ChannelHandler.Sharable
 public class NettyHAClientHandler extends ChannelInboundHandlerAdapter {
 
-    private final AtomicBoolean firstReceiveStatus = new AtomicBoolean(false);
-    private ChannelHandlerContext ctx;
-    private ChannelPromise channelPromise;
-    private HandshakeMaster handshakeMaster;
-    private final AtomicBoolean first = new AtomicBoolean(false);
+    private static final InternalLogger log = InternalLoggerFactory.getLogger(LoggerName.STORE_LOGGER_NAME);
 
-    @Override
-    public void channelActive(ChannelHandlerContext ctx) throws Exception {
-        super.channelActive(ctx);
-        this.ctx = ctx;
+    private final AutoSwitchHAClient nettyHAClient;
+
+    public NettyHAClientHandler(AutoSwitchHAClient nettyHAClient) {
+        this.nettyHAClient = nettyHAClient;
     }
 
     public void masterHandshake(HAMessage message) {
-        byte[] bytes = new byte[message.getByteBuf().readableBytes()];
-        message.getByteBuf().readBytes(bytes);
-        handshakeMaster = JSONObject.parseObject(bytes, HandshakeMaster.class);
-        channelPromise.setSuccess();
+        HandshakeMaster handshakeMaster = RemotingSerializable.decode(message.getByteBuffer().array(), HandshakeMaster.class);
+        nettyHAClient.masterHandshake(handshakeMaster);
     }
 
     public void returnEpoch(HAMessage message) {
-        byte[] bytes = new byte[message.getByteBuf().readableBytes()];
-        message.getByteBuf().readBytes(bytes);
-//            masterStatus = JSONObject.parseObject(bytes, EpochQuery.class);
-
-        // 更新备视角下主的状态，主要是更新 confirm offset 和 max offset
-        if (first.compareAndSet(false, true)) {
-            // System.out.println("receive");
-            channelPromise.setSuccess();
-        } else {
-            // 非第一次更新
-//                System.out.printf("receive master status, %s%n", masterStatus);
-        }
+        List entryList = RemotingSerializable.decode(message.getByteBuffer().array(), List.class);
+        nettyHAClient.doConsistencyRepairWithMaster(entryList);
     }
 
     public void pushData(HAMessage message) {
-
+        //long epoch = message.getByteBuf().readLong();
+        //long startOffset = message.getByteBuf().readLong();
+        //nettyHAClient.doPutCommitLog(epoch, startOffset, message.getByteBuf());
     }
 
     @Override
@@ -58,6 +44,11 @@ public class NettyHAClientHandler extends ChannelInboundHandlerAdapter {
         }
 
         HAMessage message = (HAMessage) msg;
+
+        if (nettyHAClient.validateConnectionEpoch(message.getEpoch())) {
+            System.out.println("epoch not match, connection epoch " + message.getEpoch());
+            log.error("epoch not match, connection epoch:{}", message.getEpoch());
+        }
 
         switch (message.getType()) {
             case MASTER_HANDSHAKE:
@@ -70,25 +61,8 @@ public class NettyHAClientHandler extends ChannelInboundHandlerAdapter {
                 pushData(message);
                 break;
             default:
-                break;
+                System.out.println("invalid message");
+                log.info("receive invalid message, ", message.getType());
         }
-    }
-
-    public synchronized ChannelPromise sendMessage(HAMessage message) {
-        while (ctx == null) {
-            try {
-                TimeUnit.MILLISECONDS.sleep(10);
-                System.out.println("waiting");
-            } catch (InterruptedException e) {
-                System.out.println("等待ChannelHandlerContext实例化过程中出错" + e);
-            }
-        }
-        channelPromise = ctx.newPromise();
-        ctx.writeAndFlush(message);
-        return channelPromise;
-    }
-
-    public HandshakeMaster getAddSlaveResponse() {
-        return handshakeMaster;
     }
 }

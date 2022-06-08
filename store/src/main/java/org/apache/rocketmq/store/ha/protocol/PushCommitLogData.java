@@ -1,12 +1,24 @@
 package org.apache.rocketmq.store.ha.protocol;
 
+import java.util.Arrays;
+
 public class PushCommitLogData {
+
+    private long epoch;
 
     private long startOffset;
 
     private int crc32 = 0;
 
     private byte[] content;
+
+    public long getEpoch() {
+        return epoch;
+    }
+
+    public void setEpoch(long epoch) {
+        this.epoch = epoch;
+    }
 
     public long getStartOffset() {
         return startOffset;
@@ -35,9 +47,10 @@ public class PushCommitLogData {
     @Override
     public String toString() {
         return "PushCommitLogData{" +
-            "commitLogStartOffset=" + startOffset +
+            "epoch=" + epoch +
+            ", startOffset=" + startOffset +
             ", crc32=" + crc32 +
-            ", commitLogContentSize=" + (content != null ? content.length : 0) +
+            ", content=" + Arrays.toString(content) +
             '}';
     }
 }

@@ -21,6 +21,7 @@ import java.io.File;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
+import java.net.UnknownHostException;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.Set;
@@ -43,6 +44,7 @@ import org.apache.rocketmq.store.config.MessageStoreConfig;
 import org.apache.rocketmq.store.logfile.MappedFile;
 import org.apache.rocketmq.store.stats.BrokerStatsManager;
 import org.junit.After;
+import org.junit.Before;
 import org.junit.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -51,13 +53,24 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 public class AutoSwitchHATest {
-    private final String StoreMessage = "Once, there was a chance for me!";
+
+    private static final String COMMIT_LOG = "commitlog";
+    private static final String CHECKPOINT_NAME = "epoch.ckpt";
+
+    private final BrokerStatsManager brokerStatsManager = new BrokerStatsManager("simpleTest", true);
+
+    private final String storePathRootParentDir = System.getProperty("user.home") + File.separator +
+        UUID.randomUUID().toString().replace("-", "");
+    private final String storePathRootDir = storePathRootParentDir + File.separator + "store";
+
+    private final String messageBodyString = "Once, there was a chance for me!";
     private final int defaultMappedFileSize = 1024 * 1024;
-    private int QUEUE_TOTAL = 100;
-    private AtomicInteger QueueId = new AtomicInteger(0);
-    private SocketAddress BornHost;
-    private SocketAddress StoreHost;
-    private byte[] MessageBody;
+
+    private int queueTotal = 16;
+    private AtomicInteger queueId;
+    private SocketAddress bornHost;
+    private SocketAddress storeHost;
+    private byte[] messageBody = messageBodyString.getBytes();
 
     private DefaultMessageStore messageStore1;
     private DefaultMessageStore messageStore2;
@@ -69,91 +82,94 @@ public class AutoSwitchHATest {
     private String store2HaAddress;
     private String store3HaAddress;
 
-    private BrokerStatsManager brokerStatsManager = new BrokerStatsManager("simpleTest", true);
-    private String storePathRootParentDir = System.getProperty("user.home") + File.separator +
-        UUID.randomUUID().toString().replace("-", "");
-    private String storePathRootDir = storePathRootParentDir + File.separator + "store";
+    @Before
+    public void init() throws UnknownHostException {
+        storeHost = new InetSocketAddress(InetAddress.getLocalHost(), 10911);
+        bornHost = new InetSocketAddress(InetAddress.getByName("127.0.0.1"), 0);
+    }
+
+    private MessageStoreConfig buildMessageStoreConfig(String brokerName, int mappedFileSize) {
+        MessageStoreConfig messageStoreConfig = new MessageStoreConfig();
+        messageStoreConfig.setBrokerRole(BrokerRole.SLAVE);
+
+        String storePath = storePathRootDir + File.separator + brokerName;
+        messageStoreConfig.setStorePathRootDir(storePath);
+        messageStoreConfig.setStorePathCommitLog(storePath + File.separator + COMMIT_LOG);
+        messageStoreConfig.setStorePathEpochFile(storePath + File.separator + CHECKPOINT_NAME);
+        messageStoreConfig.setHaListenPort(7000);
+        messageStoreConfig.setTotalReplicas(3);
+        messageStoreConfig.setInSyncReplicas(2);
+
+        messageStoreConfig.setMappedFileSizeCommitLog(mappedFileSize);
+        messageStoreConfig.setMappedFileSizeConsumeQueue(1024 * 1024);
+        messageStoreConfig.setMaxHashSlotNum(10000);
+        messageStoreConfig.setMaxIndexNum(100 * 100);
+        messageStoreConfig.setFlushDiskType(FlushDiskType.SYNC_FLUSH);
+        messageStoreConfig.setFlushIntervalConsumeQueue(1);
+
+        return messageStoreConfig;
+    }
 
     public void init(int mappedFileSize) throws Exception {
-        QUEUE_TOTAL = 1;
-        MessageBody = StoreMessage.getBytes();
-        StoreHost = new InetSocketAddress(InetAddress.getLocalHost(), 8123);
-        BornHost = new InetSocketAddress(InetAddress.getByName("127.0.0.1"), 0);
-        storeConfig1 = new MessageStoreConfig();
+        storeConfig1 = buildMessageStoreConfig("broker1", mappedFileSize);
         storeConfig1.setBrokerRole(BrokerRole.SYNC_MASTER);
-        storeConfig1.setStorePathRootDir(storePathRootDir + File.separator + "broker1");
-        storeConfig1.setStorePathCommitLog(storePathRootDir + File.separator + "broker1" + File.separator + "commitlog");
-        storeConfig1.setStorePathEpochFile(storePathRootDir + File.separator + "broker1" + File.separator + "EpochFileStore");
-        storeConfig1.setTotalReplicas(3);
-        storeConfig1.setInSyncReplicas(2);
-        buildMessageStoreConfig(storeConfig1, mappedFileSize);
-        this.store1HaAddress = "127.0.0.1:10912";
+        storeConfig1.setHaListenPort(7000);
+        this.store1HaAddress = "127.0.0.1:7000";
 
-        storeConfig2 = new MessageStoreConfig();
+        storeConfig2 = buildMessageStoreConfig("broker2", mappedFileSize);
         storeConfig2.setBrokerRole(BrokerRole.SLAVE);
-        storeConfig2.setStorePathRootDir(storePathRootDir + File.separator + "broker2");
-        storeConfig2.setStorePathCommitLog(storePathRootDir + File.separator + "broker2" + File.separator + "commitlog");
-        storeConfig2.setStorePathEpochFile(storePathRootDir + File.separator + "broker2" + File.separator + "EpochFileStore");
-        storeConfig2.setHaListenPort(10943);
-        storeConfig2.setTotalReplicas(3);
-        storeConfig2.setInSyncReplicas(2);
-        buildMessageStoreConfig(storeConfig2, mappedFileSize);
-        this.store2HaAddress = "127.0.0.1:10943";
+        storeConfig2.setHaListenPort(7001);
+        this.store2HaAddress = "127.0.0.1:7001";
+
+        storeConfig3 = buildMessageStoreConfig("broker3", mappedFileSize);
+        storeConfig3.setBrokerRole(BrokerRole.SLAVE);
+        storeConfig3.setHaListenPort(7002);
+        this.store3HaAddress = "127.0.0.1:7002";
 
         messageStore1 = buildMessageStore(storeConfig1, 0L);
         messageStore2 = buildMessageStore(storeConfig2, 1L);
-
-        storeConfig3 = new MessageStoreConfig();
-        storeConfig3.setBrokerRole(BrokerRole.SLAVE);
-        storeConfig3.setStorePathRootDir(storePathRootDir + File.separator + "broker3");
-        storeConfig3.setStorePathCommitLog(storePathRootDir + File.separator + "broker3" + File.separator + "commitlog");
-        storeConfig3.setStorePathEpochFile(storePathRootDir + File.separator + "broker3" + File.separator + "EpochFileStore");
-        storeConfig3.setHaListenPort(10980);
-        storeConfig3.setTotalReplicas(3);
-        storeConfig3.setInSyncReplicas(2);
-        buildMessageStoreConfig(storeConfig3, mappedFileSize);
         messageStore3 = buildMessageStore(storeConfig3, 3L);
-        this.store3HaAddress = "127.0.0.1:10980";
 
         assertTrue(messageStore1.load());
         assertTrue(messageStore2.load());
         assertTrue(messageStore3.load());
+
         messageStore1.start();
         messageStore2.start();
         messageStore3.start();
     }
 
     public void init(int mappedFileSize, boolean allAckInSyncStateSet) throws Exception {
-        QUEUE_TOTAL = 1;
-        MessageBody = StoreMessage.getBytes();
-        StoreHost = new InetSocketAddress(InetAddress.getLocalHost(), 8123);
-        BornHost = new InetSocketAddress(InetAddress.getByName("127.0.0.1"), 0);
-        storeConfig1 = new MessageStoreConfig();
-        storeConfig1.setBrokerRole(BrokerRole.SYNC_MASTER);
-        storeConfig1.setStorePathRootDir(storePathRootDir + File.separator + "broker1");
-        storeConfig1.setStorePathCommitLog(storePathRootDir + File.separator + "broker1" + File.separator + "commitlog");
-        storeConfig1.setStorePathEpochFile(storePathRootDir + File.separator + "broker1" + File.separator + "EpochFileStore");
-        storeConfig1.setAllAckInSyncStateSet(allAckInSyncStateSet);
-        buildMessageStoreConfig(storeConfig1, mappedFileSize);
-        this.store1HaAddress = "127.0.0.1:10912";
-
-        storeConfig2 = new MessageStoreConfig();
-        storeConfig2.setBrokerRole(BrokerRole.SLAVE);
-        storeConfig2.setStorePathRootDir(storePathRootDir + File.separator + "broker2");
-        storeConfig2.setStorePathCommitLog(storePathRootDir + File.separator + "broker2" + File.separator + "commitlog");
-        storeConfig2.setStorePathEpochFile(storePathRootDir + File.separator + "broker2" + File.separator + "EpochFileStore");
-        storeConfig2.setHaListenPort(10943);
-        storeConfig2.setAllAckInSyncStateSet(allAckInSyncStateSet);
-        buildMessageStoreConfig(storeConfig2, mappedFileSize);
-        this.store2HaAddress = "127.0.0.1:10943";
-
-        messageStore1 = buildMessageStore(storeConfig1, 0L);
-        messageStore2 = buildMessageStore(storeConfig2, 1L);
-
-        assertTrue(messageStore1.load());
-        assertTrue(messageStore2.load());
-        messageStore1.start();
-        messageStore2.start();
+        //queueTotal = 1;
+        //messageBody = messageBodyString.getBytes();
+        //storeHost = new InetSocketAddress(InetAddress.getLocalHost(), 8123);
+        //bornHost = new InetSocketAddress(InetAddress.getByName("127.0.0.1"), 0);
+        //storeConfig1 = new MessageStoreConfig();
+        //storeConfig1.setBrokerRole(BrokerRole.SYNC_MASTER);
+        //storeConfig1.setStorePathRootDir(storePathRootDir + File.separator + "broker1");
+        //storeConfig1.setStorePathCommitLog(storePathRootDir + File.separator + "broker1" + File.separator + "commitlog");
+        //storeConfig1.setStorePathEpochFile(storePathRootDir + File.separator + "broker1" + File.separator + "epoch.ckpt");
+        //storeConfig1.setAllAckInSyncStateSet(allAckInSyncStateSet);
+        //buildMessageStoreConfig(storeConfig1, mappedFileSize);
+        //this.store1HaAddress = "127.0.0.1:10912";
+        //
+        //storeConfig2 = new MessageStoreConfig();
+        //storeConfig2.setBrokerRole(BrokerRole.SLAVE);
+        //storeConfig2.setStorePathRootDir(storePathRootDir + File.separator + "broker2");
+        //storeConfig2.setStorePathCommitLog(storePathRootDir + File.separator + "broker2" + File.separator + "commitlog");
+        //storeConfig2.setStorePathEpochFile(storePathRootDir + File.separator + "broker2" + File.separator + "epoch.ckpt");
+        //storeConfig2.setHaListenPort(10943);
+        //storeConfig2.setAllAckInSyncStateSet(allAckInSyncStateSet);
+        //buildMessageStoreConfig(storeConfig2, mappedFileSize);
+        //this.store2HaAddress = "127.0.0.1:10943";
+        //
+        //messageStore1 = buildMessageStore(storeConfig1, 0L);
+        //messageStore2 = buildMessageStore(storeConfig2, 1L);
+        //
+        //assertTrue(messageStore1.load());
+        //assertTrue(messageStore2.load());
+        //messageStore1.start();
+        //messageStore2.start();
     }
 
     private void changeMasterAndPutMessage(DefaultMessageStore master, MessageStoreConfig masterConfig,
@@ -182,16 +198,35 @@ public class AutoSwitchHATest {
             if (!GetMessageStatus.FOUND.equals(result.getStatus())) {
                 System.out.println("Failed i :" + i);
             }
-            assertTrue(GetMessageStatus.FOUND.equals(result.getStatus()));
+            assertEquals(GetMessageStatus.FOUND, result.getStatus());
             result.release();
         }
+    }
+
+    @Test
+    public void startNettyTest() throws Exception {
+        init(defaultMappedFileSize);
+        ((AutoSwitchHAService) this.messageStore1.getHaService()).setLocalAddress("127.0.0.1:8000");
+        ((AutoSwitchHAService) this.messageStore1.getHaService()).setSyncStateSet(
+            new HashSet<>(Collections.singletonList("127.0.0.1:8000")));
+        ((AutoSwitchHAService) this.messageStore2.getHaService()).setLocalAddress("127.0.0.1:8010");
+
+        storeConfig1.setBrokerRole(BrokerRole.SYNC_MASTER);
+        storeConfig2.setBrokerRole(BrokerRole.SLAVE);
+
+        messageStore1.getHaService().changeToMaster(1);
+        messageStore2.getHaService().changeToSlave(store1HaAddress, 1, 2L);
+
+        Thread.sleep(6 * 100 * 1000);
+
     }
 
     @Test
     public void testAsyncLearnerBrokerRole() throws Exception {
         init(defaultMappedFileSize);
         ((AutoSwitchHAService) this.messageStore1.getHaService()).setLocalAddress("127.0.0.1:8000");
-        ((AutoSwitchHAService) this.messageStore1.getHaService()).setSyncStateSet(new HashSet<>(Collections.singletonList("127.0.0.1:8000")));
+        ((AutoSwitchHAService) this.messageStore1.getHaService()).setSyncStateSet(
+            new HashSet<>(Collections.singletonList("127.0.0.1:8000")));
         ((AutoSwitchHAService) this.messageStore2.getHaService()).setLocalAddress("127.0.0.1:8001");
 
         storeConfig1.setBrokerRole(BrokerRole.SYNC_MASTER);
@@ -227,7 +262,7 @@ public class AutoSwitchHATest {
             syncStateSet.set(newSyncStateSet);
         });
 
-        changeMasterAndPutMessage(this.messageStore1, this.storeConfig1, this.messageStore2, 2, this.storeConfig2, 1, store1HaAddress, 10);
+        //changeMasterAndPutMessage(this.messageStore1, this.storeConfig1, this.messageStore2, 2, this.storeConfig2, 1, store1HaAddress, 10);
         Thread.sleep(1000);
         checkMessage(this.messageStore2, 10, 0);
 
@@ -359,7 +394,6 @@ public class AutoSwitchHATest {
         checkMessage(messageStore1, 20, 0);
     }
 
-
     @Test
     public void testAddBrokerAndSyncFromLastFile() throws Exception {
         init(1700);
@@ -370,7 +404,6 @@ public class AutoSwitchHATest {
         checkMessage(this.messageStore2, 10, 0);
         changeMasterAndPutMessage(this.messageStore1, this.storeConfig1, this.messageStore2, 2, this.storeConfig2, 2, store1HaAddress, 10);
         checkMessage(this.messageStore2, 20, 0);
-
 
         // Step2: restart broker3
         messageStore3.shutdown();
@@ -387,7 +420,6 @@ public class AutoSwitchHATest {
         Thread.sleep(6000);
         checkMessage(messageStore3, 10, 10);
     }
-
 
     @After
     public void destroy() throws Exception {
@@ -416,26 +448,17 @@ public class AutoSwitchHATest {
         return new DefaultMessageStore(messageStoreConfig, brokerStatsManager, null, brokerConfig);
     }
 
-    private void buildMessageStoreConfig(MessageStoreConfig messageStoreConfig, int mappedFileSize) {
-        messageStoreConfig.setMappedFileSizeCommitLog(mappedFileSize);
-        messageStoreConfig.setMappedFileSizeConsumeQueue(1024 * 1024);
-        messageStoreConfig.setMaxHashSlotNum(10000);
-        messageStoreConfig.setMaxIndexNum(100 * 100);
-        messageStoreConfig.setFlushDiskType(FlushDiskType.SYNC_FLUSH);
-        messageStoreConfig.setFlushIntervalConsumeQueue(1);
-    }
-
     private MessageExtBrokerInner buildMessage() {
         MessageExtBrokerInner msg = new MessageExtBrokerInner();
         msg.setTopic("FooBar");
         msg.setTags("TAG1");
-        msg.setBody(MessageBody);
+        msg.setBody(messageBody);
         msg.setKeys(String.valueOf(System.currentTimeMillis()));
-        msg.setQueueId(Math.abs(QueueId.getAndIncrement()) % QUEUE_TOTAL);
+        msg.setQueueId(Math.abs(queueId.getAndIncrement()) % queueTotal);
         msg.setSysFlag(0);
         msg.setBornTimestamp(System.currentTimeMillis());
-        msg.setStoreHost(StoreHost);
-        msg.setBornHost(BornHost);
+        msg.setStoreHost(storeHost);
+        msg.setBornHost(bornHost);
         msg.setPropertiesString(MessageDecoder.messageProperties2String(msg.getProperties()));
         return msg;
     }

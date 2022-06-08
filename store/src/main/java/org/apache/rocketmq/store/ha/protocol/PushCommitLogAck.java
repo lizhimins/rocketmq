@@ -2,7 +2,7 @@ package org.apache.rocketmq.store.ha.protocol;
 
 public class PushCommitLogAck {
 
-    private long confirmOffset;
+    private long confirmOffset = 0L;
 
     private boolean isReadOnly = false;
 

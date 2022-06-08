@@ -2,24 +2,24 @@ package org.apache.rocketmq.store.ha.protocol;
 
 public class ConfirmTruncate {
 
-    private Long truncateCommitLogOffset;
+    private Long commitLogStartOffset;
 
-    public ConfirmTruncate(Long truncateCommitLogOffset) {
-        this.truncateCommitLogOffset = truncateCommitLogOffset;
+    public ConfirmTruncate(Long commitLogStartOffset) {
+        this.commitLogStartOffset = commitLogStartOffset;
     }
 
-    public Long getTruncateCommitLogOffset() {
-        return truncateCommitLogOffset;
+    public Long getCommitLogStartOffset() {
+        return commitLogStartOffset;
     }
 
-    public void setTruncateCommitLogOffset(Long truncateCommitLogOffset) {
-        this.truncateCommitLogOffset = truncateCommitLogOffset;
+    public void setCommitLogStartOffset(Long commitLogStartOffset) {
+        this.commitLogStartOffset = commitLogStartOffset;
     }
 
     @Override
     public String toString() {
         return "ConfirmTruncate{" +
-            "truncateCommitLogOffset=" + truncateCommitLogOffset +
+            "truncateCommitLogOffset=" + commitLogStartOffset +
             '}';
     }
 }
