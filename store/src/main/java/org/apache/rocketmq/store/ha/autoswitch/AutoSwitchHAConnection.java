@@ -21,15 +21,11 @@ import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelFutureListener;
 import java.nio.channels.SocketChannel;
-import java.util.Objects;
-import java.util.Queue;
-import java.util.concurrent.LinkedBlockingQueue;
 import org.apache.rocketmq.common.EpochEntry;
 import org.apache.rocketmq.common.ServiceThread;
 import org.apache.rocketmq.common.constant.LoggerName;
 import org.apache.rocketmq.logging.InternalLogger;
 import org.apache.rocketmq.logging.InternalLoggerFactory;
-import org.apache.rocketmq.remoting.protocol.RemotingSerializable;
 import org.apache.rocketmq.store.DefaultMessageStore;
 import org.apache.rocketmq.store.SelectMappedBufferResult;
 import org.apache.rocketmq.store.ha.FlowMonitor;
@@ -44,40 +40,38 @@ public class AutoSwitchHAConnection implements HAConnection {
     private static final InternalLogger LOGGER = InternalLoggerFactory.getLogger(LoggerName.STORE_LOGGER_NAME);
 
     private final AutoSwitchHAService haService;
-
     private final EpochStore epochCache;
-
-    // No need to put in queue
-    private final Queue<PushCommitLogData> pendingQueue = new LinkedBlockingQueue<PushCommitLogData>();
-
     private final Channel channel;
     private final FlowMonitor flowMonitor;
-    private long nextTransferFromWhere = -1;
-    private SelectMappedBufferResult selectMappedBufferResult;
-    private volatile long currentTransferOffset = 0;
-    private volatile long currentTransferEpoch = -1;
-    private volatile long currentTransferEpochEndOffset = 0;
+    private final NettyTransferService transferService;
 
-    private volatile HAConnectionState currentState = HAConnectionState.HANDSHAKE;
+    private volatile HAConnectionState currentState = HAConnectionState.READY;
+    private long currentTransferOffset = 0L;
+    private volatile EpochEntry currentTransferEpochEntry = null;
+    private SelectMappedBufferResult currentTransferBuffer;
 
     private volatile long slaveId = -1L;
-    private volatile long slaveRequestOffset = -1;
-    private volatile long slaveAckOffset = -1;
-    private volatile long slaveAckTimestamp = -1;
-
-    private volatile boolean slaveReadOnlyEnable = false;
+    private volatile String slaveAddress;
+    private volatile long slaveAckOffset = -1L;
+    private volatile long slaveAckTimestamp = 0L;
+    private volatile boolean slaveAsyncLearner = false;
 
     public AutoSwitchHAConnection(AutoSwitchHAService haService, Channel channel, EpochStore epochCache) {
         this.haService = haService;
-        this.epochCache = epochCache;
         this.channel = channel;
-        this.haService.getConnectionCount().incrementAndGet();
+        this.epochCache = epochCache;
+        this.transferService = new NettyTransferService();
         this.flowMonitor = new FlowMonitor(this.haService.getDefaultMessageStore().getMessageStoreConfig());
     }
 
     @Override
     public void start() {
-        changeCurrentState(HAConnectionState.HANDSHAKE);
+        changeCurrentState(HAConnectionState.READY);
+        try {
+            this.transferService.start();
+        } catch (Exception e) {
+            System.out.println(e);
+        }
         this.flowMonitor.start();
     }
 
@@ -90,7 +84,7 @@ public class AutoSwitchHAConnection implements HAConnection {
 
     @Override
     public void close() {
-
+        channel.close();
     }
 
     public void changeCurrentState(HAConnectionState connectionState) {
@@ -98,8 +92,20 @@ public class AutoSwitchHAConnection implements HAConnection {
         this.currentState = connectionState;
     }
 
-    public long getSlaveId() {
-        return slaveId;
+    public Channel getChannel() {
+        return channel;
+    }
+
+    public void setSlaveId(long slaveId) {
+        this.slaveId = slaveId;
+    }
+
+    public long getCurrentTransferOffset() {
+        return currentTransferOffset;
+    }
+
+    public void setCurrentTransferOffset(long currentTransferOffset) {
+        this.currentTransferOffset = currentTransferOffset;
     }
 
     public long getSlaveAckTimestamp() {
@@ -110,8 +116,24 @@ public class AutoSwitchHAConnection implements HAConnection {
         this.slaveAckTimestamp = slaveAckTimestamp;
     }
 
+    public long getSlaveId() {
+        return slaveId;
+    }
+
+    public boolean isSlaveAsyncLearner() {
+        return slaveAsyncLearner;
+    }
+
+    public void setSlaveAsyncLearner(boolean slaveAsyncLearner) {
+        this.slaveAsyncLearner = slaveAsyncLearner;
+    }
+
     public String getSlaveAddress() {
-        return "slaveAddress";
+        return slaveAddress;
+    }
+
+    public void setSlaveAddress(String slaveAddress) {
+        this.slaveAddress = slaveAddress;
     }
 
     @Override
@@ -126,12 +148,17 @@ public class AutoSwitchHAConnection implements HAConnection {
 
     @Override
     public String getClientAddress() {
-        return "clientAddress";
+        return channel.remoteAddress().toString();
     }
 
     @Override
     public long getSlaveAckOffset() {
         return slaveAckOffset;
+    }
+
+    public void updateSlaveTransferProgress(long slaveAckOffset) {
+        this.slaveAckOffset = slaveAckOffset;
+        this.slaveAckTimestamp = System.currentTimeMillis();
     }
 
     @Override
@@ -141,20 +168,22 @@ public class AutoSwitchHAConnection implements HAConnection {
 
     @Override
     public long getTransferFromWhere() {
-        return 0L;
+        return currentTransferOffset;
     }
 
-    public void sendEpochToSlave() {
-        HAMessage haMessage = new HAMessage(HAMessageType.RETURN_EPOCH, currentTransferEpoch,
-            Objects.requireNonNull(RemotingSerializable.encode(epochCache.getAllEntries())));
-        channel.writeAndFlush(haMessage);
+    public AutoSwitchHAService getHaService() {
+        return haService;
     }
 
     class NettyTransferService extends ServiceThread {
 
         @Override
         public String getServiceName() {
-            return null;
+            DefaultMessageStore defaultMessageStore = haService.getDefaultMessageStore();
+            if (defaultMessageStore.getBrokerConfig().isInBrokerContainer()) {
+                return defaultMessageStore.getBrokerConfig().getLoggerIdentifier() + this.getClass().getSimpleName();
+            }
+            return this.getClass().getSimpleName();
         }
 
         @Override
@@ -163,112 +192,130 @@ public class AutoSwitchHAConnection implements HAConnection {
             while (!this.isStopped()) {
                 try {
                     switch (currentState) {
+                        case READY:
                         case HANDSHAKE:
                             this.waitForRunning(10);
                             continue;
                         case TRANSFER:
                             this.pushCommitLogDataToSlave();
+                            this.waitForRunning(500);
+                            continue;
+                        case SHUTDOWN:
+                            // remove
+                            break;
                     }
                 } catch (Exception e) {
+                    e.printStackTrace();
                     LOGGER.error(this.getServiceName() + " service has exception.", e);
                     break;
                 }
             }
         }
 
-        public void pushCommitLogDataToSlave() {
-            if (-1 == slaveRequestOffset) {
-                this.waitForRunning(10);
+        public synchronized boolean pushCommitLogDataToSlave() {
+            if (-1 == currentTransferOffset) {
+                return false;
             }
 
-            if (-1 == nextTransferFromWhere) {
+            long phyMinOffset = haService.getDefaultMessageStore().getCommitLog().getMinOffset();
+            long phyMaxOffset = haService.getDefaultMessageStore().getCommitLog().getMaxOffset();
 
-                if (0 == slaveRequestOffset) {
-                    // We must ensure that the starting point of syncing log
-                    // must be the startOffset of a file (maybe the last file, or the minOffset)
-                    nextTransferFromWhere = haService.getDefaultMessageStore().getCommitLog().getMinOffset();
-                } else {
-                    nextTransferFromWhere = slaveRequestOffset;
-                }
+            //System.out.printf("phyMinOffset:%d, phyMaxOffset:%d%n", phyMinOffset, phyMaxOffset);
 
-                // Setup initial transferEpoch
-                EpochEntry epochEntry = epochCache.findEpochEntryByOffset(nextTransferFromWhere);
-                if (epochEntry == null) {
-                    LOGGER.error("Failed to find an epochEntry to match slaveRequestOffset {}", nextTransferFromWhere);
-                    waitForRunning(500);
-                    return;
+            // We must ensure that the starting point of syncing log
+            // must be the startOffset of a file (maybe the last file, or the minOffset)
+            if (currentTransferOffset < phyMinOffset) {
+                currentTransferOffset = phyMinOffset;
+            }
+
+            if (currentTransferOffset > phyMaxOffset) {
+                currentTransferOffset = phyMaxOffset;
+            }
+
+            // Correct transferEpoch
+            if (currentTransferEpochEntry == null) {
+                currentTransferEpochEntry = epochCache.findEpochEntryByOffset(currentTransferOffset);
+                if (currentTransferEpochEntry == null) {
+                    LOGGER.error("Failed to find an epochEntry to match slaveRequestOffset {}", currentTransferOffset);
+                    return false;
                 }
-                changeTransferEpochToNext(epochEntry);
-                LOGGER.info("Master transfer data to slave {}, from offset:{}, currentEpoch:{}",
-                    nextTransferFromWhere, epochEntry);
             }
 
             pushCommitLogDataToSlave0();
-        }
-
-        private void changeTransferEpochToNext(final EpochEntry entry) {
-            currentTransferEpoch = entry.getEpoch();
-            currentTransferEpochEndOffset = entry.getEndOffset();
-            if (entry.getEpoch() == epochCache.getLastEpoch()) {
-                // Use -1 to stand for Long.max
-                currentTransferEpochEndOffset = -1;
-            }
+            return true;
         }
 
         protected int getNextTransferDataSize() {
-            DefaultMessageStore messageStore = haService.getDefaultMessageStore();
-            if (currentTransferOffset >= messageStore.getMaxPhyOffset()) {
+            if (currentTransferBuffer == null || currentTransferBuffer.getSize() <= 0) {
                 return 0;
             }
-            return 0;
+            int size = currentTransferBuffer.getSize();
+            if (size > haService.getDefaultMessageStore().getMessageStoreConfig().getHaTransferBatchSize()) {
+                size = haService.getDefaultMessageStore().getMessageStoreConfig().getHaTransferBatchSize();
+            }
+            return size;
         }
 
         private void pushCommitLogDataToSlave0() {
-            int canTransferMaxBytes = flowMonitor.canTransferMaxByteNum();
+            currentTransferBuffer = haService.getDefaultMessageStore().getCommitLogData(currentTransferOffset);
+            if (currentTransferBuffer == null) {
+                waitForRunning(100);
+                return;
+            }
 
             int size = this.getNextTransferDataSize();
-            if (size > canTransferMaxBytes) {
-                if (System.currentTimeMillis() - slaveAckTimestamp > 1000) {
-                    LOGGER.warn("Trigger HA flow control, max transfer speed {}KB/s, current speed: {}KB/s",
-                        String.format("%.2f", flowMonitor.maxTransferByteInSecond() / 1024.0),
-                        String.format("%.2f", flowMonitor.getTransferredByteInSecond() / 1024.0));
-                    slaveAckTimestamp = System.currentTimeMillis();
-                }
-                size = canTransferMaxBytes;
-            }
             if (size <= 0) {
                 this.releaseData();
+                this.waitForRunning(100);
+                return;
             }
 
             // We must ensure that the transmitted logs are within the same epoch
-            // If currentEpochEndOffset == -1, means that currentTransferEpoch = last epoch, so the endOffset = Long.max
-            final long currentEpochEndOffset = currentTransferEpochEndOffset;
-            if (currentEpochEndOffset != -1 && nextTransferFromWhere + size > currentEpochEndOffset) {
-                final EpochEntry epochEntry = epochCache.findCeilingEntryByEpoch(currentTransferEpoch);
-                if (epochEntry == null) {
-                    LOGGER.error("Can't find a bigger epochEntry than epoch {}", currentTransferEpoch);
+            // currentTransferEpoch == last epoch && endOffset = Long.MAX_VALUE
+            final long currentEpochEndOffset = currentTransferEpochEntry.getEndOffset();
+            if (currentTransferOffset + size > currentEpochEndOffset) {
+                currentTransferEpochEntry = epochCache.findCeilingEntryByEpoch(currentTransferOffset);
+                if (currentTransferEpochEntry == null) {
+                    LOGGER.error("Can't find a bigger epochEntry than epoch {}", currentTransferOffset);
                     waitForRunning(100);
                     return;
                 }
-                size = (int) (currentEpochEndOffset - nextTransferFromWhere);
-                changeTransferEpochToNext(epochEntry);
+                size = (int) (currentEpochEndOffset - currentTransferOffset);
             }
-
-            currentTransferOffset = nextTransferFromWhere;
-            nextTransferFromWhere += size;
             doNettyTransferData();
+            currentTransferOffset += size;
         }
 
         private void doNettyTransferData() {
-            HAMessage haMessage = new HAMessage(HAMessageType.PUSH_DATA);
-            haMessage.setBody(selectMappedBufferResult.getByteBuffer());
-            ChannelFuture future = channel.writeAndFlush(selectMappedBufferResult.getByteBuffer());
-            future.addListener((ChannelFutureListener) future1 -> releaseData()).syncUninterruptibly();
+            HAMessage haMessage = new HAMessage(HAMessageType.PUSH_DATA, currentTransferEpochEntry.getEpoch());
+            PushCommitLogData pushCommitLogData = new PushCommitLogData();
+            pushCommitLogData.setEpoch(currentTransferEpochEntry.getEpoch());
+            pushCommitLogData.setStartOffset(currentTransferOffset);
+            haMessage.appendBody(pushCommitLogData.encode());
+            haMessage.appendBody(currentTransferBuffer.getByteBuffer());
+            ChannelFuture future = channel.writeAndFlush(haMessage);
+
+            System.out.println("transfer success, " + currentTransferBuffer.getSize());
+            future.addListener((ChannelFutureListener) future1 -> {
+                if (future1.isSuccess()) {
+                    LOGGER.info("transfer data, " + currentTransferBuffer.getSize());
+                } else {
+                    System.out.println("transfer error, " + currentTransferBuffer.getSize());
+                }
+                releaseData();
+            });
+
+            try {
+                future.sync();
+            } catch (InterruptedException e) {
+                LOGGER.error("Netty transfer data error", e);
+                waitForRunning(100);
+            }
         }
 
         protected void releaseData() {
-            selectMappedBufferResult.release();
-            selectMappedBufferResult = null;
+            currentTransferBuffer.release();
+            currentTransferBuffer = null;
         }
     }
 }

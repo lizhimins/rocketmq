@@ -10,6 +10,8 @@ public class HandshakeMaster {
 
     private long brokerId;
 
+    private String brokerAddr;
+
     private int brokerAppVersion;
 
     private int haProtocolVersion;
@@ -17,10 +19,6 @@ public class HandshakeMaster {
     private LanguageCode languageCode;
 
     private HandshakeResult handshakeResult;
-
-    private long commitLogMinOffset;
-
-    private long commitLogMaxOffset;
 
     public String getClusterName() {
         return clusterName;

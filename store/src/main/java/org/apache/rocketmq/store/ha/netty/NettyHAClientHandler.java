@@ -21,7 +21,7 @@ public class NettyHAClientHandler extends ChannelInboundHandlerAdapter {
     }
 
     public void masterHandshake(HAMessage message) {
-        HandshakeMaster handshakeMaster = RemotingSerializable.decode(message.getByteBuffer().array(), HandshakeMaster.class);
+        HandshakeMaster handshakeMaster = RemotingSerializable.decode(message.getBytes(), HandshakeMaster.class);
         nettyHAClient.masterHandshake(handshakeMaster);
     }
 
@@ -31,9 +31,12 @@ public class NettyHAClientHandler extends ChannelInboundHandlerAdapter {
     }
 
     public void pushData(HAMessage message) {
-        //long epoch = message.getByteBuf().readLong();
-        //long startOffset = message.getByteBuf().readLong();
-        //nettyHAClient.doPutCommitLog(epoch, startOffset, message.getByteBuf());
+        long epoch = message.getByteBuffer().getLong();
+        long startOffset = message.getByteBuffer().getLong();
+        System.out.printf("receive data, block start offset: %s, available payload size :%s%n",
+            startOffset, message.getByteBuffer().remaining());
+        nettyHAClient.doPutCommitLog(epoch, startOffset, message.getByteBuffer());
+        nettyHAClient.reportSlaveMaxOffset();
     }
 
     @Override
@@ -45,8 +48,8 @@ public class NettyHAClientHandler extends ChannelInboundHandlerAdapter {
 
         HAMessage message = (HAMessage) msg;
 
-        if (nettyHAClient.validateConnectionEpoch(message.getEpoch())) {
-            System.out.println("epoch not match, connection epoch " + message.getEpoch());
+        if (nettyHAClient.getCurrentMasterEpoch() != message.getEpoch()) {
+            System.out.println("client epoch not match, connection epoch " + message.getEpoch());
             log.error("epoch not match, connection epoch:{}", message.getEpoch());
         }
 

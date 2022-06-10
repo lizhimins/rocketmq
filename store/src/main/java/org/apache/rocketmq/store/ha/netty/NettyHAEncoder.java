@@ -4,6 +4,7 @@ import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.MessageToByteEncoder;
+import java.nio.ByteBuffer;
 import org.apache.rocketmq.common.constant.LoggerName;
 import org.apache.rocketmq.logging.InternalLogger;
 import org.apache.rocketmq.logging.InternalLoggerFactory;
@@ -30,6 +31,10 @@ public class NettyHAEncoder extends MessageToByteEncoder<HAMessage> {
         out.writeInt(message.getType().getValue());
         out.writeLong(message.getEpoch());
         out.writeLong(this.lastWriteTimestamp);
-        out.writeBytes(message.getByteBuffer());
+        if (message.getBodyLength() > 0) {
+            for (ByteBuffer byteBuffer : message.getByteBufferList()) {
+                out.writeBytes(byteBuffer);
+            }
+        }
     }
 }

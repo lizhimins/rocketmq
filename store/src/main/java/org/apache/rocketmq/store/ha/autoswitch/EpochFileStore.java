@@ -111,35 +111,6 @@ public class EpochFileStore implements EpochStore {
         }
     }
 
-    ///**
-    // * Set endOffset for lastEpochEntry.
-    // */
-    //public void setLastEpochEntryEndOffset(final long endOffset) {
-    //    this.writeLock.lock();
-    //    try {
-    //        if (!this.epochMap.isEmpty()) {
-    //            final EpochEntry lastEntry = this.epochMap.lastEntry().getValue();
-    //            if (lastEntry.getStartOffset() <= endOffset) {
-    //                lastEntry.setEndOffset(endOffset);
-    //            }
-    //        }
-    //    } finally {
-    //        this.writeLock.unlock();
-    //    }
-    //}
-
-    //public EpochEntry firstEntry() {
-    //    this.readLock.lock();
-    //    try {
-    //        if (this.epochMap.isEmpty()) {
-    //            return null;
-    //        }
-    //        return new EpochEntry(this.epochMap.firstEntry().getValue());
-    //    } finally {
-    //        this.readLock.unlock();
-    //    }
-    //}
-
     @Override
     public EpochEntry getLastEntry() {
         this.readLock.lock();

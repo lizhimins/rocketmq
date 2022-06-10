@@ -18,8 +18,6 @@
 package org.apache.rocketmq.store.ha.autoswitch;
 
 import io.netty.bootstrap.Bootstrap;
-import io.netty.buffer.ByteBuf;
-import io.netty.buffer.PooledByteBufAllocator;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelFutureListener;
@@ -33,8 +31,8 @@ import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioSocketChannel;
 import java.io.IOException;
 import java.net.SocketAddress;
+import java.nio.ByteBuffer;
 import java.util.List;
-import java.util.Objects;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import org.apache.commons.lang3.StringUtils;
@@ -97,7 +95,6 @@ public class AutoSwitchHAClient extends ServiceThread implements HAClient {
     private final NettyHAEncoder nettyHAEncoder = new NettyHAEncoder();
     private final NettyHADecoder nettyHADecoder = new NettyHADecoder();
     private final NettyHAClientHandler clientHandler = new NettyHAClientHandler(this);
-    private Channel channel;
 
     public AutoSwitchHAClient(DefaultMessageStore defaultMessageStore, EpochStore epochCache) throws IOException {
         this.messageStore = defaultMessageStore;
@@ -110,9 +107,9 @@ public class AutoSwitchHAClient extends ServiceThread implements HAClient {
         if (this.flowMonitor == null) {
             this.flowMonitor = new FlowMonitor(this.messageStore.getMessageStoreConfig());
         }
-        this.currentReceivedEpoch = -1;
-        this.currentReportedOffset = 0;
-        this.confirmOffset = -1;
+        this.currentReceivedEpoch = -1L;
+        this.currentReportedOffset = 0L;
+        this.confirmOffset = -1L;
         changeCurrentState(HAConnectionState.READY);
     }
 
@@ -132,11 +129,11 @@ public class AutoSwitchHAClient extends ServiceThread implements HAClient {
         }
     }
 
-    public boolean validateConnectionEpoch(long epoch) {
-        return currentMasterEpoch != epoch;
+    public long getCurrentMasterEpoch() {
+        return currentMasterEpoch;
     }
 
-    public void updateCurrentMasterEpoch(long currentMasterEpoch) {
+    public void setCurrentMasterEpoch(long currentMasterEpoch) {
         this.currentMasterEpoch = currentMasterEpoch;
     }
 
@@ -224,19 +221,17 @@ public class AutoSwitchHAClient extends ServiceThread implements HAClient {
         handshakeSlave.setClusterName(brokerConfig.getBrokerClusterName());
         handshakeSlave.setBrokerName(brokerConfig.getBrokerName());
         handshakeSlave.setBrokerId(brokerConfig.getBrokerId());
+        handshakeSlave.setBrokerAddr(((AutoSwitchHAService) messageStore.getHaService()).getLocalAddress());
         handshakeSlave.setBrokerAppVersion(MQVersion.CURRENT_VERSION);
         handshakeSlave.setLanguageCode(LanguageCode.JAVA);
         handshakeSlave.setHaProtocolVersion(2);
 
         HAMessage haMessage = new HAMessage(HAMessageType.SLAVE_HANDSHAKE, currentMasterEpoch,
-            Objects.requireNonNull(RemotingSerializable.encode(handshakeSlave))
-        );
-
-        ByteBuf byteBuf = new PooledByteBufAllocator().heapBuffer();
+            RemotingSerializable.encode(handshakeSlave));
         channel.writeAndFlush(haMessage);
     }
 
-    private void reportSlaveMaxOffset() {
+    public void reportSlaveMaxOffset() {
         final long maxPhyOffset = this.messageStore.getMaxPhyOffset();
         if (maxPhyOffset > this.currentReportedOffset) {
             this.currentReportedOffset = maxPhyOffset;
@@ -266,12 +261,11 @@ public class AutoSwitchHAClient extends ServiceThread implements HAClient {
         if (future != null && future.channel() != null && future.channel().isActive()) {
             return;
         }
-
         future = bootstrap.connect(socketAddress);
         future.addListener((ChannelFutureListener) future -> {
             if (future.isSuccess()) {
-                System.out.println("connect to server successfully! " + socketAddress.toString());
-                LOGGER.info("connect to server successfully!");
+                System.out.println("HAClient connect to server successfully! " + socketAddress.toString());
+                LOGGER.info("HAClient connect to server successfully!");
             } else {
                 System.out.println("Failed to connect to server, try connect after 1000 ms");
                 LOGGER.info("Failed to connect to server, try connect after 1000 ms");
@@ -287,55 +281,69 @@ public class AutoSwitchHAClient extends ServiceThread implements HAClient {
 
         try {
             future.sync();
-        } catch (InterruptedException e1) {
-            throw new RuntimeException("HAClient start server InterruptedException", e1);
+        } catch (InterruptedException e) {
+            throw new RuntimeException("HAClient start server InterruptedException", e);
         }
     }
 
-    public boolean tryConnectToMaster() {
+    public boolean tryConnectToMaster() throws InterruptedException {
         try {
             String addr = this.masterHaAddress.get();
             if (StringUtils.isNotEmpty(addr)) {
                 SocketAddress socketAddress = RemotingUtil.string2SocketAddress(addr);
                 doNettyConnect(socketAddress);
                 changeCurrentState(HAConnectionState.READY);
-
                 Channel channel = future.channel();
                 channelPromise = new DefaultChannelPromise(channel);
                 sendHandshakeSlave(channel);
                 channelPromise.await(5000);
-                System.out.println("not receive response");
-                return true;
+                if (channelPromise.isSuccess()) {
+                    changeCurrentState(HAConnectionState.HANDSHAKE);
+                    //System.out.println("client change to handshake");
+                }
+                return channelPromise.isSuccess();
             }
         } catch (InterruptedException e) {
-            LOGGER.error("Failed connect to master, masterAddr:{}", masterHaAddress.get(), e);
-            e.printStackTrace();
+            System.out.println("HAClient send handshake but not receive response" + e);
+            LOGGER.error("HAClient send handshake but not receive response, masterAddr:{}", masterHaAddress.get(), e);
+            future.channel().close().sync();
         }
         return false;
     }
 
     private boolean transferFromMaster() throws IOException {
-        if (isTimeToReportOffset()) {
-            LOGGER.info("Slave report current offset {}", this.currentReportedOffset);
-            this.sendPushCommitLogAck(this.currentReportedOffset);
-        }
+        //if (isTimeToReportOffset()) {
+        LOGGER.info("Slave report current offset {}", this.currentReportedOffset);
+        this.sendPushCommitLogAck(this.currentReportedOffset);
+        //}
         return true;
     }
 
     public void masterHandshake(HandshakeMaster handshakeMaster) {
         if (handshakeMaster != null
             && HandshakeResult.ACCEPT.equals(handshakeMaster.getHandshakeResult())) {
-            changeCurrentState(HAConnectionState.HANDSHAKE);
-        } else {
-            this.waitForRunning(5000);
+            channelPromise.setSuccess();
         }
-        channelPromise.setSuccess();
+        LOGGER.error("Master reject build connection, {}", handshakeMaster);
+        channelPromise.setFailure(new Exception("Master reject build connection"));
     }
 
-    private void queryMasterEpoch() {
-        HAMessage haMessage = new HAMessage(HAMessageType.QUERY_EPOCH);
-        haMessage.setEpoch(epochCache.getLastEpoch());
-        channel.writeAndFlush(haMessage);
+    private boolean queryMasterEpoch() throws InterruptedException {
+        try {
+            HAMessage haMessage = new HAMessage(HAMessageType.QUERY_EPOCH, currentMasterEpoch);
+            channelPromise = new DefaultChannelPromise(future.channel());
+            future.channel().writeAndFlush(haMessage);
+            channelPromise.await(5000);
+            if (channelPromise.isSuccess()) {
+                //System.out.println("client change to transfer");
+                changeCurrentState(HAConnectionState.TRANSFER);
+            }
+            return channelPromise.isSuccess();
+        } catch (InterruptedException e) {
+            System.out.println("query epoch failed");
+            future.channel().close().sync();
+        }
+        return false;
     }
 
     public void doConsistencyRepairWithMaster(List<EpochEntry> entryList) {
@@ -349,20 +357,18 @@ public class AutoSwitchHAClient extends ServiceThread implements HAClient {
 
     private void sendConfirmTruncateToMaster(long startOffset) {
         ConfirmTruncate confirmTruncate = new ConfirmTruncate(startOffset);
-        HAMessage haMessage = new HAMessage(HAMessageType.CONFIRM_TRUNCATE);
-        haMessage.setEpoch(epochCache.getLastEpoch());
-        haMessage.setBody(Objects.requireNonNull(RemotingSerializable.encode(confirmTruncate)));
-        channel.writeAndFlush(haMessage);
+        HAMessage haMessage = new HAMessage(HAMessageType.CONFIRM_TRUNCATE, currentMasterEpoch,
+            RemotingSerializable.encode(confirmTruncate));
+        future.channel().writeAndFlush(haMessage);
     }
 
-    private void sendPushCommitLogAck(final long offsetToReport) {
+    private synchronized void sendPushCommitLogAck(final long offsetToReport) {
         PushCommitLogAck pushCommitLogAck = new PushCommitLogAck();
         pushCommitLogAck.setConfirmOffset(offsetToReport);
-        pushCommitLogAck.setReadOnly(messageStore.getBrokerConfig().isSlaveReadOnlyEnable());
-        HAMessage haMessage = new HAMessage(HAMessageType.PUSH_ACK);
-        haMessage.setEpoch(epochCache.getLastEpoch());
-        haMessage.setBody(Objects.requireNonNull(RemotingSerializable.encode(pushCommitLogAck)));
-        channel.writeAndFlush(haMessage);
+        pushCommitLogAck.setReadOnly(messageStore.getMessageStoreConfig().isAsyncLearner());
+        HAMessage haMessage = new HAMessage(HAMessageType.PUSH_ACK, currentMasterEpoch,
+            RemotingSerializable.encode(pushCommitLogAck));
+        future.channel().writeAndFlush(haMessage);
     }
 
     @Override
@@ -379,15 +385,18 @@ public class AutoSwitchHAClient extends ServiceThread implements HAClient {
                         }
                         continue;
                     case HANDSHAKE:
-                        queryMasterEpoch();
+                        if (!queryMasterEpoch()) {
+                            this.waitForRunning(1000);
+                        }
                         continue;
                     case TRANSFER:
-                        // do flow control and monitor
+                        // only do flow control and monitor
                         if (!transferFromMaster()) {
                             closeMasterAndWait();
-                            continue;
+                            break;
                         }
-                        break;
+                        this.waitForRunning(1000);
+                        continue;
                     case SHUTDOWN:
                         return;
                     case SUSPEND:
@@ -455,30 +464,23 @@ public class AutoSwitchHAClient extends ServiceThread implements HAClient {
         return true;
     }
 
-    public void doPutCommitLog(long currentReceivedEpoch, long masterOffset, ByteBuf byteBuf) {
-
+    public void doPutCommitLog(long currentBlockEpoch, long masterOffset, ByteBuffer byteBuffer) {
         long slavePhyOffset = this.messageStore.getMaxPhyOffset();
-
-        if (slavePhyOffset != 0) {
-            //if (slavePhyOffset != masterOffset) {
-            //    LOGGER.error("master pushed offset not equal the max phy offset in slave, SLAVE: "
-            //        + slavePhyOffset + " MASTER: " + masterOffset);
-            //    return false;
-            //}
+        if (slavePhyOffset != masterOffset) {
+            System.out.printf("error %d %d%n", slavePhyOffset, masterOffset);
+            return;
         }
 
-        // If epoch changed
-        if (currentMasterEpoch != this.currentReceivedEpoch) {
+        // If epoch changed to bigger
+        if (currentBlockEpoch > this.currentReceivedEpoch) {
             this.epochCache.tryAppendEpochEntry(new EpochEntry(currentMasterEpoch, masterOffset));
         }
 
-        this.confirmOffset = Math.min(confirmOffset, messageStore.getMaxPhyOffset());
-
-        if (byteBuf.readableBytes() > 0) {
+        if (byteBuffer.hasRemaining()) {
             this.messageStore.appendToCommitLog(
-                masterOffset, byteBuf.array(), byteBuf.readerIndex(), byteBuf.readableBytes());
+                masterOffset, byteBuffer.array(), 16, byteBuffer.remaining());
         }
 
-        reportSlaveMaxOffset();
+        this.confirmOffset = Math.min(confirmOffset, messageStore.getMaxPhyOffset());
     }
 }

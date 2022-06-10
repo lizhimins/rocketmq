@@ -1,16 +1,12 @@
 package org.apache.rocketmq.store.ha.protocol;
 
-import java.util.Arrays;
+import java.nio.ByteBuffer;
 
 public class PushCommitLogData {
 
     private long epoch;
 
     private long startOffset;
-
-    private int crc32 = 0;
-
-    private byte[] content;
 
     public long getEpoch() {
         return epoch;
@@ -28,20 +24,12 @@ public class PushCommitLogData {
         this.startOffset = startOffset;
     }
 
-    public int getCrc32() {
-        return crc32;
-    }
-
-    public void setCrc32(int crc32) {
-        this.crc32 = crc32;
-    }
-
-    public byte[] getContent() {
-        return content;
-    }
-
-    public void setContent(byte[] content) {
-        this.content = content;
+    public ByteBuffer encode() {
+        ByteBuffer byteBuffer = ByteBuffer.allocate(16);
+        byteBuffer.putLong(epoch);
+        byteBuffer.putLong(startOffset);
+        byteBuffer.flip();
+        return byteBuffer;
     }
 
     @Override
@@ -49,8 +37,6 @@ public class PushCommitLogData {
         return "PushCommitLogData{" +
             "epoch=" + epoch +
             ", startOffset=" + startOffset +
-            ", crc32=" + crc32 +
-            ", content=" + Arrays.toString(content) +
             '}';
     }
 }

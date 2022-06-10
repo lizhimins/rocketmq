@@ -358,15 +358,11 @@ public class ReplicasManager {
      */
     private void schedulingCheckSyncStateSet() {
         this.checkSyncStateSetTaskFuture = this.scheduledService.scheduleAtFixedRate(() -> {
-            final Set<String> newSyncStateSet = this.haService.tryShrinkInSyncStateSet();
-            newSyncStateSet.add(this.localAddress);
+            final Set<String> newSyncStateSet = this.haService.getSyncStateSet();
+            // Check if syncStateSet changed
             synchronized (this) {
-                if (this.syncStateSet != null) {
-                    // Check if syncStateSet changed
-                    if (this.syncStateSet.size() == newSyncStateSet.size()
-                        && this.syncStateSet.containsAll(newSyncStateSet)) {
-                        return;
-                    }
+                if (!newSyncStateSet.equals(this.syncStateSet)) {
+                    this.syncStateSet = newSyncStateSet;
                 }
             }
             doReportSyncStateSetChanged(newSyncStateSet);

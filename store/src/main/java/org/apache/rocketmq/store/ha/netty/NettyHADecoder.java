@@ -18,7 +18,7 @@ public class NettyHADecoder extends LengthFieldBasedFrameDecoder {
     private long lastReadTimestamp = System.currentTimeMillis();
 
     public NettyHADecoder() {
-        super(FRAME_MAX_LENGTH, 0, 4, 24, 4);
+        super(FRAME_MAX_LENGTH, 0, 4, 20, 0);
     }
 
     public long getLastReadTimestamp() {
@@ -31,11 +31,24 @@ public class NettyHADecoder extends LengthFieldBasedFrameDecoder {
         if (frame == null) {
             return null;
         }
-
+        int bodyLength = frame.readInt();
         HAMessageType messageType = HAMessageType.valueOf(frame.readInt());
         long epoch = frame.readLong();
         this.lastReadTimestamp = frame.readLong();
-        ByteBuffer buffer = frame.nioBuffer();
-        return new HAMessage(messageType, epoch, buffer);
+
+        // if direct byte buffer, return underlying nioBuffer.
+        // otherwise copy to a byte array and wrap it.
+        //ByteBuffer byteBuffer;
+        //if (frame.isDirect()) {
+        //    byteBuffer = frame.nioBuffer();
+        //} else {
+        //    final byte[] out = new byte[frame.readableBytes()];
+        //    frame.getBytes(frame.readerIndex(), out, 0, bodyLength);
+        //    byteBuffer = ByteBuffer.wrap(out);
+        //}
+
+        byte[] body = new byte[bodyLength];
+        frame.readBytes(body);
+        return new HAMessage(messageType, epoch, body);
     }
 }

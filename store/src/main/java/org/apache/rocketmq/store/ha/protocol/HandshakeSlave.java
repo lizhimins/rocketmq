@@ -10,6 +10,8 @@ public class HandshakeSlave {
 
     private long brokerId;
 
+    private String brokerAddr;
+
     private int brokerAppVersion;
 
     private int haProtocolVersion;
@@ -38,6 +40,14 @@ public class HandshakeSlave {
 
     public void setBrokerId(long brokerId) {
         this.brokerId = brokerId;
+    }
+
+    public String getBrokerAddr() {
+        return brokerAddr;
+    }
+
+    public void setBrokerAddr(String brokerAddr) {
+        this.brokerAddr = brokerAddr;
     }
 
     public int getBrokerAppVersion() {

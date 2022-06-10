@@ -132,7 +132,6 @@ public class BrokerConfig extends BrokerIdentity {
     private int sendHeartbeatTimeoutMillis = 1000;
 
     private boolean slaveReadEnable = false;
-    private boolean slaveReadOnlyEnable = false;
 
     private boolean disableConsumeIfConsumerReadSlowly = false;
     private long consumerFallbehindThreshold = 1024L * 1024 * 1024 * 16;
@@ -484,14 +483,6 @@ public class BrokerConfig extends BrokerIdentity {
 
     public void setSlaveReadEnable(final boolean slaveReadEnable) {
         this.slaveReadEnable = slaveReadEnable;
-    }
-
-    public boolean isSlaveReadOnlyEnable() {
-        return slaveReadOnlyEnable;
-    }
-
-    public void setSlaveReadOnlyEnable(boolean slaveReadOnlyEnable) {
-        this.slaveReadOnlyEnable = slaveReadOnlyEnable;
     }
 
     public int getRegisterBrokerTimeoutMills() {
