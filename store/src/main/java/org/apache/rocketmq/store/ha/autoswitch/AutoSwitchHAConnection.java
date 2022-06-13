@@ -21,6 +21,7 @@ import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelFutureListener;
 import java.nio.channels.SocketChannel;
+import java.util.Date;
 import org.apache.rocketmq.common.EpochEntry;
 import org.apache.rocketmq.common.ServiceThread;
 import org.apache.rocketmq.common.constant.LoggerName;
@@ -198,7 +199,7 @@ public class AutoSwitchHAConnection implements HAConnection {
                             continue;
                         case TRANSFER:
                             this.pushCommitLogDataToSlave();
-                            this.waitForRunning(500);
+                            this.waitForRunning(10);
                             continue;
                         case SHUTDOWN:
                             // remove
@@ -220,7 +221,8 @@ public class AutoSwitchHAConnection implements HAConnection {
             long phyMinOffset = haService.getDefaultMessageStore().getCommitLog().getMinOffset();
             long phyMaxOffset = haService.getDefaultMessageStore().getCommitLog().getMaxOffset();
 
-            //System.out.printf("phyMinOffset:%d, phyMaxOffset:%d%n", phyMinOffset, phyMaxOffset);
+            //System.out.printf(new Date() + " currentTransferOffset: %d, phyMinOffset:%d, phyMaxOffset:%d%n",
+            //    currentTransferOffset, phyMinOffset, phyMaxOffset);
 
             // We must ensure that the starting point of syncing log
             // must be the startOffset of a file (maybe the last file, or the minOffset)
@@ -295,10 +297,10 @@ public class AutoSwitchHAConnection implements HAConnection {
             haMessage.appendBody(currentTransferBuffer.getByteBuffer());
             ChannelFuture future = channel.writeAndFlush(haMessage);
 
-            System.out.println("transfer success, " + currentTransferBuffer.getSize());
             future.addListener((ChannelFutureListener) future1 -> {
                 if (future1.isSuccess()) {
                     LOGGER.info("transfer data, " + currentTransferBuffer.getSize());
+                    //System.out.println(new Date() +" transfer success, " + currentTransferBuffer.getSize());
                 } else {
                     System.out.println("transfer error, " + currentTransferBuffer.getSize());
                 }

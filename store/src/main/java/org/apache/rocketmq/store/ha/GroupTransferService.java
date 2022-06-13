@@ -18,6 +18,7 @@
 package org.apache.rocketmq.store.ha;
 
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.List;
 import java.util.Set;
 import org.apache.rocketmq.common.ServiceThread;
@@ -58,6 +59,7 @@ public class GroupTransferService extends ServiceThread {
     }
 
     public void notifyTransferSome() {
+        //System.out.printf("read: %d, write: %d%n", requestsRead.size(), requestsWrite.size());
         this.notifyTransferObject.wakeup();
     }
 
@@ -142,7 +144,7 @@ public class GroupTransferService extends ServiceThread {
 
         while (!this.isStopped()) {
             try {
-                this.waitForRunning(10);
+                this.waitForRunning(500);
                 this.doWaitTransfer();
             } catch (Exception e) {
                 log.warn(this.getServiceName() + " service has exception. ", e);

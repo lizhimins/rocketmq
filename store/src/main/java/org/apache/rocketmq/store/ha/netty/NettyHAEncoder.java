@@ -1,6 +1,7 @@
 package org.apache.rocketmq.store.ha.netty;
 
 import io.netty.buffer.ByteBuf;
+import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.MessageToByteEncoder;
@@ -27,6 +28,12 @@ public class NettyHAEncoder extends MessageToByteEncoder<HAMessage> {
         }
 
         this.lastWriteTimestamp = System.currentTimeMillis();
+
+        Channel channel = ctx.channel();
+        while (!channel.isActive() || !channel.isWritable()) {
+            this.wait(10);
+        }
+
         out.writeInt(message.getBodyLength());
         out.writeInt(message.getType().getValue());
         out.writeLong(message.getEpoch());

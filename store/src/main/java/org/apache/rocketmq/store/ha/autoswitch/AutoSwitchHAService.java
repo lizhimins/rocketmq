@@ -119,6 +119,7 @@ public class AutoSwitchHAService implements HAService {
 
     @Override
     public void start() throws Exception {
+        this.groupTransferService.start();
         startNettyServer(defaultMessageStore.getMessageStoreConfig().getHaListenPort());
         this.scheduledService.scheduleAtFixedRate(() -> {
             this.setSyncStateSet(this.buildShrinkInSyncStateSet());
@@ -130,14 +131,13 @@ public class AutoSwitchHAService implements HAService {
         if (this.haClient != null) {
             this.haClient.shutdown();
         }
+        executorService.shutdown();
+        scheduledService.shutdown();
         bossGroup.shutdownGracefully();
         workerGroup.shutdownGracefully();
-        this.executorService.shutdown();
     }
 
     public void startNettyServer(int port) {
-        EventLoopGroup bossGroup = new NioEventLoopGroup();
-        EventLoopGroup workerGroup = new NioEventLoopGroup();
         NettyHAServerHandler serverHandler = new NettyHAServerHandler(this);
 
         ServerBootstrap bootstrap = new ServerBootstrap();
@@ -269,7 +269,7 @@ public class AutoSwitchHAService implements HAService {
 
     @Override
     public AtomicLong getPush2SlaveMaxOffset() {
-        return null;
+        return new AtomicLong(this.confirmOffset);
     }
 
     @Override
@@ -303,7 +303,12 @@ public class AutoSwitchHAService implements HAService {
 
     @Override
     public int inSyncSlaveNums(long masterPutWhere) {
-        return 0;
+        return syncStateSet.size();
+    }
+
+    protected boolean isInSyncSlave(final long masterPutWhere, HAConnection conn) {
+        return masterPutWhere - conn.getSlaveAckOffset() <
+            this.defaultMessageStore.getMessageStoreConfig().getHaMaxGapNotInSync();
     }
 
     @Override
@@ -378,7 +383,7 @@ public class AutoSwitchHAService implements HAService {
             currentSyncStateSet.add(brokerAddr);
             setSyncStateSet(currentSyncStateSet);
             notifySyncStateSetChanged(currentSyncStateSet);
-            System.out.printf("expand in sync state set %s%n", brokerAddr);
+            System.out.printf("expand in sync state set %s%n", currentSyncStateSet);
         }
     }
 
@@ -397,7 +402,7 @@ public class AutoSwitchHAService implements HAService {
     }
 
     public synchronized void setSyncStateSet(final Set<String> syncStateSet) {
-        this.syncStateSet= new CopyOnWriteArraySet<>(syncStateSet);
+        this.syncStateSet = new CopyOnWriteArraySet<>(syncStateSet);
     }
 
     public synchronized Set<String> getSyncStateSet() {
@@ -472,6 +477,7 @@ public class AutoSwitchHAService implements HAService {
     }
 
     public void notifyTransferSome(final long offset) {
+        this.confirmOffset = offset;
         this.groupTransferService.notifyTransferSome();
     }
 
@@ -482,6 +488,7 @@ public class AutoSwitchHAService implements HAService {
             haConnection.setSlaveAsyncLearner(pushCommitLogAck.isReadOnly());
             haConnection.updateSlaveTransferProgress(offset);
             tryExpandInSyncStateSet(haConnection, offset);
+            notifyTransferSome(offset);
         }
     }
 
@@ -497,8 +504,10 @@ public class AutoSwitchHAService implements HAService {
         this.connectionMap.put(channel, conn);
     }
 
-    public void removeConnection(final HAConnection conn) {
-        this.haConnectionStateNotificationService.checkConnectionStateAndNotify(conn);
-        this.connectionMap.remove(((AutoSwitchHAConnection) conn).getChannel());
+    public void removeConnection(Channel channel) {
+        HAConnection haConnection = this.connectionMap.get(channel);
+        //this.haConnectionStateNotificationService.checkConnectionStateAndNotify(haConnection);
+        haConnection.shutdown();
+        this.connectionMap.remove(channel);
     }
 }

@@ -3,7 +3,7 @@ package org.apache.rocketmq.store.ha.netty;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
-import io.netty.util.AttributeKey;
+import java.util.Date;
 import org.apache.rocketmq.common.constant.LoggerName;
 import org.apache.rocketmq.logging.InternalLogger;
 import org.apache.rocketmq.logging.InternalLoggerFactory;
@@ -52,7 +52,14 @@ public class NettyHAServerHandler extends SimpleChannelInboundHandler<HAMessage>
 
     public void pushCommitLogAck(HAMessage message, Channel channel) {
         PushCommitLogAck pushCommitLogAck = RemotingSerializable.decode(message.getBytes(), PushCommitLogAck.class);
+        System.out.println(new Date() + " slave broker ack: " + pushCommitLogAck.getConfirmOffset());
         nettyHAService.pushCommitLogDataAck(channel, pushCommitLogAck);
+    }
+
+    @Override
+    public void channelUnregistered(ChannelHandlerContext ctx) throws Exception {
+        nettyHAService.removeConnection(ctx.channel());
+        super.channelUnregistered(ctx);
     }
 
     @Override
@@ -67,6 +74,7 @@ public class NettyHAServerHandler extends SimpleChannelInboundHandler<HAMessage>
             return;
         }
 
+        //System.out.println(message.getType());
         Channel channel = ctx.channel();
         switch (message.getType()) {
             case SLAVE_HANDSHAKE:

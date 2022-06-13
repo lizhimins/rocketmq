@@ -193,8 +193,8 @@ public class AutoSwitchHAClient extends ServiceThread implements HAClient {
     @Override
     public void closeMaster() {
         // close channel
+        this.future.channel().close();
         LOGGER.info("AutoSwitchHAClient close connection with master {}", this.masterHaAddress.get());
-        this.changeCurrentState(HAConnectionState.READY);
     }
 
     @Override
@@ -231,9 +231,9 @@ public class AutoSwitchHAClient extends ServiceThread implements HAClient {
         channel.writeAndFlush(haMessage);
     }
 
-    public void reportSlaveMaxOffset() {
+    public synchronized void reportSlaveMaxOffset() {
         final long maxPhyOffset = this.messageStore.getMaxPhyOffset();
-        if (maxPhyOffset > this.currentReportedOffset) {
+        if (this.currentReportedOffset < maxPhyOffset) {
             this.currentReportedOffset = maxPhyOffset;
             this.sendPushCommitLogAck(this.currentReportedOffset);
         }
@@ -267,7 +267,7 @@ public class AutoSwitchHAClient extends ServiceThread implements HAClient {
                 System.out.println("HAClient connect to server successfully! " + socketAddress.toString());
                 LOGGER.info("HAClient connect to server successfully!");
             } else {
-                System.out.println("Failed to connect to server, try connect after 1000 ms");
+                System.out.println("Failed to connect to server, try connect after 1000 ms" + socketAddress.toString());
                 LOGGER.info("Failed to connect to server, try connect after 1000 ms");
                 future.channel().eventLoop().schedule(() -> {
                     try {
@@ -313,8 +313,8 @@ public class AutoSwitchHAClient extends ServiceThread implements HAClient {
 
     private boolean transferFromMaster() throws IOException {
         //if (isTimeToReportOffset()) {
-        LOGGER.info("Slave report current offset {}", this.currentReportedOffset);
-        this.sendPushCommitLogAck(this.currentReportedOffset);
+            LOGGER.info("timer report slave offset: {}", this.currentReportedOffset);
+            this.sendPushCommitLogAck(this.currentReportedOffset);
         //}
         return true;
     }
@@ -362,7 +362,7 @@ public class AutoSwitchHAClient extends ServiceThread implements HAClient {
         future.channel().writeAndFlush(haMessage);
     }
 
-    private synchronized void sendPushCommitLogAck(final long offsetToReport) {
+    public synchronized void sendPushCommitLogAck(final long offsetToReport) {
         PushCommitLogAck pushCommitLogAck = new PushCommitLogAck();
         pushCommitLogAck.setConfirmOffset(offsetToReport);
         pushCommitLogAck.setReadOnly(messageStore.getMessageStoreConfig().isAsyncLearner());
@@ -467,12 +467,13 @@ public class AutoSwitchHAClient extends ServiceThread implements HAClient {
     public void doPutCommitLog(long currentBlockEpoch, long masterOffset, ByteBuffer byteBuffer) {
         long slavePhyOffset = this.messageStore.getMaxPhyOffset();
         if (slavePhyOffset != masterOffset) {
-            System.out.printf("error %d %d%n", slavePhyOffset, masterOffset);
+            System.out.printf("Put commitLog error, slave: %d, master offset: %d%n", slavePhyOffset, masterOffset);
             return;
         }
 
-        // If epoch changed to bigger
-        if (currentBlockEpoch > this.currentReceivedEpoch) {
+        // If epoch changed to bigger, last epoch record would be terminated
+        if (this.currentReceivedEpoch < currentBlockEpoch) {
+            this.currentReceivedEpoch = currentBlockEpoch;
             this.epochCache.tryAppendEpochEntry(new EpochEntry(currentMasterEpoch, masterOffset));
         }
 
@@ -480,7 +481,7 @@ public class AutoSwitchHAClient extends ServiceThread implements HAClient {
             this.messageStore.appendToCommitLog(
                 masterOffset, byteBuffer.array(), 16, byteBuffer.remaining());
         }
-
         this.confirmOffset = Math.min(confirmOffset, messageStore.getMaxPhyOffset());
+        this.reportSlaveMaxOffset();
     }
 }

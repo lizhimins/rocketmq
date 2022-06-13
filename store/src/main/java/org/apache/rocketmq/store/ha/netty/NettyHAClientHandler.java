@@ -33,10 +33,10 @@ public class NettyHAClientHandler extends ChannelInboundHandlerAdapter {
     public void pushData(HAMessage message) {
         long epoch = message.getByteBuffer().getLong();
         long startOffset = message.getByteBuffer().getLong();
-        System.out.printf("receive data, block start offset: %s, available payload size :%s%n",
+        System.out.printf("receive data, block start offset: %s, available payload size: %s%n",
             startOffset, message.getByteBuffer().remaining());
         nettyHAClient.doPutCommitLog(epoch, startOffset, message.getByteBuffer());
-        nettyHAClient.reportSlaveMaxOffset();
+        nettyHAClient.sendPushCommitLogAck(startOffset + message.getByteBuffer().limit() - 16);
     }
 
     @Override
@@ -53,6 +53,7 @@ public class NettyHAClientHandler extends ChannelInboundHandlerAdapter {
             log.error("epoch not match, connection epoch:{}", message.getEpoch());
         }
 
+        System.out.println(message.getType());
         switch (message.getType()) {
             case MASTER_HANDSHAKE:
                 masterHandshake(message);
