@@ -85,6 +85,11 @@ public class AutoSwitchHAConnection implements HAConnection {
 
     @Override
     public void close() {
+        try {
+            channel.disconnect().sync();
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
         channel.close();
     }
 

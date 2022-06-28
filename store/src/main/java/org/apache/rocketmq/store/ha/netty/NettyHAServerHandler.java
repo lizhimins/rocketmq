@@ -3,7 +3,10 @@ package org.apache.rocketmq.store.ha.netty;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
+import java.nio.ByteBuffer;
 import java.util.Date;
+import java.util.List;
+import org.apache.rocketmq.common.EpochEntry;
 import org.apache.rocketmq.common.constant.LoggerName;
 import org.apache.rocketmq.logging.InternalLogger;
 import org.apache.rocketmq.logging.InternalLoggerFactory;
@@ -36,9 +39,15 @@ public class NettyHAServerHandler extends SimpleChannelInboundHandler<HAMessage>
     }
 
     public void responseEpochList(Channel channel) {
-        HAMessage replyMessage = new HAMessage(
-            HAMessageType.RETURN_EPOCH, nettyHAService.getCurrentMasterEpoch(),
-            RemotingSerializable.encode(nettyHAService.getEpochEntries()));
+        List<EpochEntry> entries = nettyHAService.getEpochEntries();
+        ByteBuffer byteBuffer = ByteBuffer.allocate(3 * 8 * entries.size());
+        for (EpochEntry entry : entries) {
+            byteBuffer.putLong(entry.getEpoch()).putLong(entry.getStartOffset()).putLong(entry.getEndOffset());
+        }
+        byteBuffer.flip();
+        HAMessage replyMessage = new HAMessage(HAMessageType.RETURN_EPOCH,
+            nettyHAService.getCurrentMasterEpoch(), byteBuffer);
+        System.out.println("handler: " + entries + " size: " + entries.size());
         channel.writeAndFlush(replyMessage);
     }
 
@@ -52,7 +61,7 @@ public class NettyHAServerHandler extends SimpleChannelInboundHandler<HAMessage>
 
     public void pushCommitLogAck(HAMessage message, Channel channel) {
         PushCommitLogAck pushCommitLogAck = RemotingSerializable.decode(message.getBytes(), PushCommitLogAck.class);
-        System.out.println(new Date() + " slave broker ack: " + pushCommitLogAck.getConfirmOffset());
+        System.out.println(new Date() + "broker confirm receive offset: " + pushCommitLogAck.getConfirmOffset());
         nettyHAService.pushCommitLogDataAck(channel, pushCommitLogAck);
     }
 
@@ -74,7 +83,9 @@ public class NettyHAServerHandler extends SimpleChannelInboundHandler<HAMessage>
             return;
         }
 
-        //System.out.println(message.getType());
+        if (!message.getType().equals(HAMessageType.PUSH_ACK)) {
+            System.out.println(message.getType());
+        }
         Channel channel = ctx.channel();
         switch (message.getType()) {
             case SLAVE_HANDSHAKE:

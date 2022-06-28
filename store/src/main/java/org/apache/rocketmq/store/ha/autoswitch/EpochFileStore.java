@@ -95,6 +95,7 @@ public class EpochFileStore implements EpochStore {
     public boolean tryAppendEpochEntry(final EpochEntry entry) {
         this.writeLock.lock();
         try {
+            System.out.println("append entry: " + entry.toString());
             if (!this.epochMap.isEmpty()) {
                 final EpochEntry lastEntry = this.epochMap.lastEntry().getValue();
                 if (lastEntry.getEpoch() >= entry.getEpoch() || lastEntry.getStartOffset() >= entry.getStartOffset()) {
@@ -229,7 +230,7 @@ public class EpochFileStore implements EpochStore {
      */
     @Override
     public void truncateSuffixByOffset(final long truncateOffset) {
-        Predicate<EpochEntry> predict = (entry) -> entry.getStartOffset() >= truncateOffset;
+        Predicate<EpochEntry> predict = (entry) -> entry.getStartOffset() > truncateOffset;
         doTruncateSuffix(predict);
     }
 

@@ -2,7 +2,9 @@ package org.apache.rocketmq.store.ha.netty;
 
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundHandlerAdapter;
+import java.util.ArrayList;
 import java.util.List;
+import org.apache.rocketmq.common.EpochEntry;
 import org.apache.rocketmq.common.constant.LoggerName;
 import org.apache.rocketmq.logging.InternalLogger;
 import org.apache.rocketmq.logging.InternalLoggerFactory;
@@ -26,7 +28,19 @@ public class NettyHAClientHandler extends ChannelInboundHandlerAdapter {
     }
 
     public void returnEpoch(HAMessage message) {
-        List entryList = RemotingSerializable.decode(message.getByteBuffer().array(), List.class);
+        int remaining = message.getByteBuffer().remaining();
+        if (remaining % (3 * 8) != 0) {
+            throw new RuntimeException();
+        }
+        int size = remaining / 24;
+        List<EpochEntry> entryList = new ArrayList<>(size);
+        for (int i = 0; i < size; i++) {
+            EpochEntry entry = new EpochEntry();
+            entry.setEpoch(message.getByteBuffer().getLong());
+            entry.setStartOffset(message.getByteBuffer().getLong());
+            entry.setEndOffset(message.getByteBuffer().getLong());
+            entryList.add(entry);
+        }
         nettyHAClient.doConsistencyRepairWithMaster(entryList);
     }
 

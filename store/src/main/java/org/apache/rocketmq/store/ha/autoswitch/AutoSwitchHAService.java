@@ -98,6 +98,7 @@ public class AutoSwitchHAService implements HAService {
     private CopyOnWriteArraySet<String> syncStateSet = new CopyOnWriteArraySet<>();
     private HAConnectionStateNotificationService haConnectionStateNotificationService;
 
+    private ChannelFuture future;
     private EpochStore epochCache;
     private long currentMasterEpoch = -1L;
     private long confirmOffset = -1L;
@@ -133,6 +134,16 @@ public class AutoSwitchHAService implements HAService {
         }
         executorService.shutdown();
         scheduledService.shutdown();
+
+        // Wait until the server socket is closed.
+        // In this example, this does not happen, but you can do that to gracefully
+        // shut down your server.
+        //try {
+        //    future.channel().closeFuture().sync();
+        //} catch (InterruptedException e) {
+        //    e.printStackTrace();
+        //}
+        //
         bossGroup.shutdownGracefully();
         workerGroup.shutdownGracefully();
     }
@@ -156,7 +167,7 @@ public class AutoSwitchHAService implements HAService {
                 }
             });
 
-        ChannelFuture future = bootstrap.bind(port).addListener((ChannelFutureListener) future1 -> {
+        future = bootstrap.bind(port).addListener((ChannelFutureListener) future1 -> {
             if (future1.isSuccess()) {
                 LOGGER.info("Netty HAService start listen at " + port);
                 System.out.println("Netty HAService start listen at " + port);
@@ -190,6 +201,7 @@ public class AutoSwitchHAService implements HAService {
         final Set<String> syncStateSet = getSyncStateSet();
         for (HAConnection haConnection : this.connectionMap.values()) {
             String clientAddress = haConnection.getClientAddress();
+            haConnection.shutdown();
             syncStateSet.remove(clientAddress);
         }
         notifySyncStateSetChanged(syncStateSet);
@@ -501,6 +513,7 @@ public class AutoSwitchHAService implements HAService {
     }
 
     public void addConnection(Channel channel, final HAConnection conn) {
+        System.out.println("add connection: " + conn.getClientAddress() + " now: " + (connectionMap.size() + 1));
         this.connectionMap.put(channel, conn);
     }
 
