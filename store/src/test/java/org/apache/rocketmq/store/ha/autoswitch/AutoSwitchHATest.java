@@ -28,6 +28,7 @@ import java.util.HashSet;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.Callable;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.apache.rocketmq.common.BrokerConfig;
 import org.apache.rocketmq.common.MixAll;
@@ -275,77 +276,50 @@ public class AutoSwitchHATest {
     }
 
     @Test
-    public void testChangeRoleManyTimes2() throws Exception {
-        // Step1, change store1 to master, store2 to follower
+    public void testMasterRoleNotChange() throws Exception {
         initMessageStore(DEFAULT_MAPPED_FILE_SIZE);
+        int messageCount = 10;
+
+        // Step1, change store1 to master, store2 to follower
         changeMasterAndPutMessage(1, this.messageStore1, "127.0.0.1:7000",
-            this.messageStore2, 1, 10);
-
-        System.out.println("============================123");
+            this.messageStore2, 1, messageCount);
         await().pollInterval(Duration.ofSeconds(1)).atMost(Duration.ofSeconds(30)).until(
-            () -> 10 == getMessageCount(messageStore2));
+            () -> messageCount == getMessageCount(messageStore2));
 
-        System.out.println("============================234");
+        // Step2, role not change
         changeMasterAndPutMessage(2, this.messageStore1, "127.0.0.1:7000",
-            this.messageStore2, 1, 10);
-
-        System.out.println("============================345");
-        await().pollInterval(Duration.ofSeconds(1)).atMost(Duration.ofSeconds(30)).until(new Callable<Boolean>() {
-            @Override
-            public Boolean call() throws Exception {
-                System.out.println("connection count: " + messageStore1.getHaService().getConnectionCount());
-                System.out.println(getMessageCount(messageStore1) + " " + getMessageCount(messageStore2));
-                return false;
-            }
-        });
+            this.messageStore2, 1, messageCount);
+        await().pollInterval(Duration.ofSeconds(1)).atMost(Duration.ofSeconds(30)).until(
+            () -> messageCount * 2 == getMessageCount(messageStore2));
     }
 
     @Test
     public void testChangeRoleManyTimes() throws Exception {
-        // Step1, change store1 to master, store2 to follower
         initMessageStore(DEFAULT_MAPPED_FILE_SIZE);
+        int messageCount = 10;
+
+        // Step1, change store1 to master, store2 to follower
         changeMasterAndPutMessage(1, this.messageStore1, "127.0.0.1:7000",
-            this.messageStore2, 1, 10);
+            this.messageStore2, 1, messageCount);
         await().pollInterval(Duration.ofSeconds(1)).atMost(Duration.ofSeconds(30)).until(
-            () -> 10 == getMessageCount(messageStore2));
+            () -> messageCount == getMessageCount(messageStore2));
 
         // Step2, change store2 to master, epoch = 2
         changeMasterAndPutMessage(2, this.messageStore2, "127.0.0.1:7001",
-            this.messageStore1, 1, 10);
+            this.messageStore1, 1, messageCount);
         await().pollInterval(Duration.ofSeconds(1)).atMost(Duration.ofSeconds(30)).until(
-            () -> 20 == getMessageCount(messageStore1));
+            () -> messageCount * 2 == getMessageCount(messageStore1));
 
-        System.out.println("==========================================33");
         // Step3, change store1 to master, epoch = 3
         changeMasterAndPutMessage(3, this.messageStore1, "127.0.0.1:7000",
-            this.messageStore2, 1, 10);
-
-        await().pollInterval(Duration.ofSeconds(1)).atMost(Duration.ofSeconds(30)).until(new Callable<Boolean>() {
-            @Override
-            public Boolean call() throws Exception {
-                printMasterHaAddress(messageStore2);
-                return true;
-            }
-        });
-
-        messageStore2.getHaService().updateHaMasterAddress("127.0.0.1:7000");
-        await().pollInterval(Duration.ofSeconds(1)).atMost(Duration.ofSeconds(30)).until(new Callable<Boolean>() {
-            @Override
-            public Boolean call() throws Exception {
-                System.out.println("connection count: " + messageStore1.getHaService().getConnectionCount());
-                System.out.println(getMessageCount(messageStore1) + " " + getMessageCount(messageStore2));
-                return false;
-            }
-        });
+            this.messageStore2, 1, messageCount);
+        await().pollInterval(Duration.ofSeconds(1)).atMost(Duration.ofSeconds(30)).until(
+            () -> messageCount * 3 == getMessageCount(messageStore2));
     }
 
-    private void printMasterHaAddress(DefaultMessageStore defaultMessageStore) {
-        System.out.println("address: " + defaultMessageStore.getMessageStoreConfig().getHaMasterAddress());
-    }
 
     @Test
-    public void testAddBroker() throws Exception {
-        // Step1: broker1 as leader, broker2 as follower
+    public void testDynamicAddBroker() throws Exception {
         initMessageStore(DEFAULT_MAPPED_FILE_SIZE);
 
         int messageCount = 10;
@@ -362,6 +336,10 @@ public class AutoSwitchHATest {
         System.out.println("==========================================33");
         await().atMost(Duration.ofSeconds(30)).until(
             () -> messageCount == getMessageCount(messageStore3));
+    }
+
+    private void printMasterHaAddress(DefaultMessageStore defaultMessageStore) {
+        System.out.println("address: " + defaultMessageStore.getMessageStoreConfig().getHaMasterAddress());
     }
 
     //@Test

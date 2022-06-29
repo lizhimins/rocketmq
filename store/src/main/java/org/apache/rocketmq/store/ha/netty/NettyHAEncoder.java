@@ -29,10 +29,10 @@ public class NettyHAEncoder extends MessageToByteEncoder<HAMessage> {
 
         this.lastWriteTimestamp = System.currentTimeMillis();
 
-        Channel channel = ctx.channel();
-        while (!channel.isActive() || !channel.isWritable()) {
-            this.wait(10);
-        }
+        //Channel channel = ctx.channel();
+        //while (!channel.isActive() || !channel.isWritable()) {
+        //    this.wait(10);
+        //}
 
         out.writeInt(message.getBodyLength());
         out.writeInt(message.getType().getValue());

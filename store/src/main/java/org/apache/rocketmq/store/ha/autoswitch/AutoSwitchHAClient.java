@@ -33,7 +33,6 @@ import java.io.IOException;
 import java.net.SocketAddress;
 import java.nio.ByteBuffer;
 import java.util.List;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.rocketmq.common.BrokerConfig;
@@ -77,38 +76,39 @@ public class AutoSwitchHAClient extends ServiceThread implements HAClient {
     private final EpochStore epochCache;
     private FlowMonitor flowMonitor;
 
+    private long lastReadTimestamp;
+    private long lastWriteTimestamp;
+
     /**
      * Confirm offset = min(localMaxOffset, master confirm offset).
      */
-    private long confirmOffset;
-    private long currentMasterEpoch;
-    private long currentReceivedEpoch;
-    private long currentReportedOffset;
-    private volatile HAConnectionState currentState;
+    private volatile long currentMasterEpoch = -1L;
+    private volatile long currentReceivedEpoch = -1L;
+    private volatile long currentConfirmOffset = -1L;
+    private volatile long currentReportedOffset = -1L;
+    private volatile HAConnectionState currentState = HAConnectionState.SHUTDOWN;
 
     public EventLoopGroup workerGroup;
     public Bootstrap bootstrap;
     private ChannelFuture future;
     private ChannelPromise channelPromise;
 
-    private final NettyHAEncoder nettyHAEncoder = new NettyHAEncoder();
-    private final NettyHADecoder nettyHADecoder = new NettyHADecoder();
-    private final NettyHAClientHandler clientHandler = new NettyHAClientHandler(this);
-
-    public AutoSwitchHAClient(DefaultMessageStore defaultMessageStore, EpochStore epochCache) throws IOException {
+    public AutoSwitchHAClient(DefaultMessageStore defaultMessageStore, EpochStore epochCache) {
         this.messageStore = defaultMessageStore;
         this.epochCache = epochCache;
-        startNettyClient();
-        init();
     }
 
     public void init() throws IOException {
         if (this.flowMonitor == null) {
             this.flowMonitor = new FlowMonitor(this.messageStore.getMessageStoreConfig());
         }
+
+        this.currentMasterEpoch = -1L;
         this.currentReceivedEpoch = -1L;
-        this.currentReportedOffset = 0L;
-        this.confirmOffset = -1L;
+        this.currentConfirmOffset = -1L;
+        this.currentReportedOffset = -1L;
+
+        startNettyClient();
         changeCurrentState(HAConnectionState.READY);
     }
 
@@ -165,12 +165,12 @@ public class AutoSwitchHAClient extends ServiceThread implements HAClient {
 
     @Override
     public long getLastReadTimestamp() {
-        return this.nettyHADecoder.getLastReadTimestamp();
+        return this.getLastReadTimestamp();
     }
 
     @Override
     public long getLastWriteTimestamp() {
-        return this.nettyHAEncoder.getLastWriteTimestamp();
+        return this.getLastWriteTimestamp();
     }
 
     @Override
@@ -217,7 +217,7 @@ public class AutoSwitchHAClient extends ServiceThread implements HAClient {
     }
 
     private boolean isTimeToReportOffset() {
-        long interval = this.messageStore.now() - this.nettyHAEncoder.getLastWriteTimestamp();
+        long interval = this.messageStore.now() - this.lastWriteTimestamp;
         return interval > this.messageStore.getMessageStoreConfig().getHaSendHeartbeatInterval();
     }
 
@@ -232,6 +232,7 @@ public class AutoSwitchHAClient extends ServiceThread implements HAClient {
         handshakeSlave.setLanguageCode(LanguageCode.JAVA);
         handshakeSlave.setHaProtocolVersion(2);
 
+        //System.out.println("hand shake: " + handshakeSlave);
         HAMessage haMessage = new HAMessage(HAMessageType.SLAVE_HANDSHAKE, currentMasterEpoch,
             RemotingSerializable.encode(handshakeSlave));
         channel.writeAndFlush(haMessage);
@@ -246,6 +247,7 @@ public class AutoSwitchHAClient extends ServiceThread implements HAClient {
     }
 
     public void startNettyClient() {
+        AutoSwitchHAClient haClient = this;
         workerGroup = new NioEventLoopGroup();
         bootstrap = new Bootstrap();
         bootstrap.group(workerGroup)
@@ -256,9 +258,9 @@ public class AutoSwitchHAClient extends ServiceThread implements HAClient {
             .handler(new ChannelInitializer<SocketChannel>() {
                 @Override
                 public void initChannel(SocketChannel ch) throws Exception {
-                    ch.pipeline().addLast("decoder", nettyHADecoder);
-                    ch.pipeline().addLast("encoder", nettyHAEncoder);
-                    ch.pipeline().addLast(clientHandler);
+                    ch.pipeline().addLast("decoder", new NettyHADecoder());
+                    ch.pipeline().addLast("encoder", new NettyHAEncoder());
+                    ch.pipeline().addLast(new NettyHAClientHandler(haClient));
                 }
             });
     }
@@ -273,10 +275,9 @@ public class AutoSwitchHAClient extends ServiceThread implements HAClient {
         }
 
         SocketAddress socketAddress = RemotingUtil.string2SocketAddress(this.masterHaAddress.get());
-        future = bootstrap.connect(socketAddress);
-        future.addListener((ChannelFutureListener) future -> {
+        future = bootstrap.connect(socketAddress).addListener((ChannelFutureListener) future -> {
             if (future.isSuccess()) {
-                System.out.println("HAClient connect to server successfully! " + socketAddress);
+                System.out.println("HAClient connect to server successfully! " + socketAddress + " " + future.channel().id());
                 LOGGER.info("HAClient connect to server successfully!");
             } else {
                 System.out.println("remote: " + future.channel().remoteAddress() + ", local: " + future.channel().localAddress() + " " + future.cause().toString());
@@ -305,14 +306,15 @@ public class AutoSwitchHAClient extends ServiceThread implements HAClient {
             String address = this.masterHaAddress.get();
             if (StringUtils.isNotEmpty(address)) {
                 doNettyConnect();
-                changeCurrentState(HAConnectionState.READY);
                 Channel channel = future.channel();
                 channelPromise = new DefaultChannelPromise(channel);
                 sendHandshakeSlave(channel);
                 channelPromise.await(5000);
                 if (channelPromise.isSuccess()) {
                     changeCurrentState(HAConnectionState.HANDSHAKE);
-                    //System.out.println("client change to handshake");
+                    System.out.println("client receive handshake signal and change to handshake");
+                } else {
+                    System.out.println("client not receive handshake signal");
                 }
                 return channelPromise.isSuccess();
             }
@@ -416,7 +418,7 @@ public class AutoSwitchHAClient extends ServiceThread implements HAClient {
                         waitForRunning(1000);
                         continue;
                 }
-                long interval = this.messageStore.now() - this.nettyHADecoder.getLastReadTimestamp();
+                long interval = this.messageStore.now() - this.lastReadTimestamp;
                 if (interval > this.messageStore.getMessageStoreConfig().getHaHousekeepingInterval()) {
                     LOGGER.warn("NettyHAClient housekeeping, found this connection {} expired, interval={}",
                         this.masterHaAddress, interval);
@@ -498,7 +500,7 @@ public class AutoSwitchHAClient extends ServiceThread implements HAClient {
             this.messageStore.appendToCommitLog(
                 masterOffset, byteBuffer.array(), 16, byteBuffer.remaining());
         }
-        this.confirmOffset = Math.min(confirmOffset, messageStore.getMaxPhyOffset());
+        this.currentConfirmOffset = Math.min(currentConfirmOffset, messageStore.getMaxPhyOffset());
         this.reportSlaveMaxOffset();
     }
 }

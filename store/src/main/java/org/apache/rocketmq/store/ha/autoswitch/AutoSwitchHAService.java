@@ -23,7 +23,6 @@ import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelInitializer;
 import io.netty.channel.ChannelOption;
-import io.netty.channel.ChannelPipeline;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.SocketChannel;
@@ -90,7 +89,7 @@ public class AutoSwitchHAService implements HAService {
     private final List<Consumer<Set<String>>> syncStateSetChangedListeners = new ArrayList<>();
     private final WaitNotifyObject waitNotifyObject = new WaitNotifyObject();
     private final TruncateStrategy truncateStrategy = new MoveAndDiscardTruncateStrategy();
-    private final EventLoopGroup bossGroup = new NioEventLoopGroup();
+    private final EventLoopGroup bossGroup = new NioEventLoopGroup(2);
     private final EventLoopGroup workerGroup = new NioEventLoopGroup(2);
 
     private DefaultMessageStore defaultMessageStore;
@@ -149,21 +148,20 @@ public class AutoSwitchHAService implements HAService {
     }
 
     public void startNettyServer(int port) {
-        NettyHAServerHandler serverHandler = new NettyHAServerHandler(this);
-
+        AutoSwitchHAService haService = this;
         ServerBootstrap bootstrap = new ServerBootstrap();
         bootstrap.group(bossGroup, workerGroup).channel(NioServerSocketChannel.class)
             .option(ChannelOption.SO_BACKLOG, 128)
             .childOption(ChannelOption.SO_KEEPALIVE, true)
             .childOption(ChannelOption.SO_SNDBUF, WRITE_MAX_BUFFER_SIZE)
             .childOption(ChannelOption.SO_RCVBUF, READ_MAX_BUFFER_SIZE)
-            .childHandler(new ChannelInitializer<io.netty.channel.socket.SocketChannel>() {
+            .childHandler(new ChannelInitializer<SocketChannel>() {
                 @Override
                 protected void initChannel(SocketChannel channel) {
-                    ChannelPipeline pipeline = channel.pipeline();
-                    pipeline.addLast("decoder", new NettyHADecoder());
-                    pipeline.addLast("encoder", new NettyHAEncoder());
-                    pipeline.addLast("serverHandler", serverHandler);
+                    channel.pipeline()
+                        .addLast("decoder", new NettyHADecoder())
+                        .addLast("encoder", new NettyHAEncoder())
+                        .addLast(new NettyHAServerHandler(haService));
                 }
             });
 
@@ -171,6 +169,8 @@ public class AutoSwitchHAService implements HAService {
             if (future1.isSuccess()) {
                 LOGGER.info("Netty HAService start listen at " + port);
                 System.out.println("Netty HAService start listen at " + port);
+            } else {
+                System.out.println("start failed");
             }
         });
 
@@ -211,6 +211,7 @@ public class AutoSwitchHAService implements HAService {
     public boolean changeToMaster(int masterEpoch) {
         // Not allow elect unclean master
         if (masterEpoch < this.epochCache.getLastEpoch()) {
+            System.out.println("failed");
             LOGGER.error("Broker change to master failed, not allow elect unclean master, oldEpoch:{}, newEpoch:{}",
                 masterEpoch, this.epochCache.getLastEpoch());
             return false;
@@ -250,11 +251,17 @@ public class AutoSwitchHAService implements HAService {
     public boolean changeToSlave(String newMasterAddr, int newMasterEpoch, Long slaveId) {
         try {
             destroyConnections();
-            if (this.haClient == null) {
-                this.haClient = new AutoSwitchHAClient(defaultMessageStore, this.epochCache);
-            } else {
+            //if (this.haClient == null) {
+            //    this.haClient = new AutoSwitchHAClient(defaultMessageStore, this.epochCache);
+            //} else {
+            //    this.haClient.shutdown();
+            //}
+
+            if (this.haClient != null) {
                 this.haClient.shutdown();
             }
+
+            this.haClient = new AutoSwitchHAClient(defaultMessageStore, this.epochCache);
             this.haClient.init();
             this.haClient.updateSlaveId(slaveId);
             this.haClient.updateHaMasterAddress(newMasterAddr);

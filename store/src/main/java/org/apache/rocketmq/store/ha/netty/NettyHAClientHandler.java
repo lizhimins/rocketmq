@@ -9,6 +9,7 @@ import org.apache.rocketmq.common.constant.LoggerName;
 import org.apache.rocketmq.logging.InternalLogger;
 import org.apache.rocketmq.logging.InternalLoggerFactory;
 import org.apache.rocketmq.remoting.protocol.RemotingSerializable;
+import org.apache.rocketmq.store.ha.HAConnectionState;
 import org.apache.rocketmq.store.ha.autoswitch.AutoSwitchHAClient;
 import org.apache.rocketmq.store.ha.protocol.HandshakeMaster;
 
@@ -17,6 +18,13 @@ public class NettyHAClientHandler extends ChannelInboundHandlerAdapter {
     private static final InternalLogger log = InternalLoggerFactory.getLogger(LoggerName.STORE_LOGGER_NAME);
 
     private final AutoSwitchHAClient nettyHAClient;
+
+    @Override
+    public void channelUnregistered(ChannelHandlerContext ctx) throws Exception {
+        System.out.println("关闭 channel 2");
+        nettyHAClient.changeCurrentState(HAConnectionState.READY);
+        super.channelUnregistered(ctx);
+    }
 
     public NettyHAClientHandler(AutoSwitchHAClient nettyHAClient) {
         this.nettyHAClient = nettyHAClient;

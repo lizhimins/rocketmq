@@ -1,8 +1,11 @@
 package org.apache.rocketmq.store.ha.netty;
 
 import io.netty.channel.Channel;
+import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
+import io.netty.channel.ChannelInitializer;
 import io.netty.channel.SimpleChannelInboundHandler;
+import io.netty.channel.socket.SocketChannel;
 import java.nio.ByteBuffer;
 import java.util.Date;
 import java.util.List;
@@ -10,6 +13,7 @@ import org.apache.rocketmq.common.EpochEntry;
 import org.apache.rocketmq.common.constant.LoggerName;
 import org.apache.rocketmq.logging.InternalLogger;
 import org.apache.rocketmq.logging.InternalLoggerFactory;
+import org.apache.rocketmq.remoting.common.RemotingUtil;
 import org.apache.rocketmq.remoting.protocol.RemotingSerializable;
 import org.apache.rocketmq.store.ha.autoswitch.AutoSwitchHAService;
 import org.apache.rocketmq.store.ha.protocol.ConfirmTruncate;
@@ -24,8 +28,8 @@ public class NettyHAServerHandler extends SimpleChannelInboundHandler<HAMessage>
 
     private final AutoSwitchHAService nettyHAService;
 
-    public NettyHAServerHandler(AutoSwitchHAService autoSwitchHAService) {
-        this.nettyHAService = autoSwitchHAService;
+    public NettyHAServerHandler(AutoSwitchHAService nettyHAService) {
+        this.nettyHAService = nettyHAService;
     }
 
     public void slaveHandshake(HAMessage message, Channel channel) {
@@ -61,15 +65,15 @@ public class NettyHAServerHandler extends SimpleChannelInboundHandler<HAMessage>
 
     public void pushCommitLogAck(HAMessage message, Channel channel) {
         PushCommitLogAck pushCommitLogAck = RemotingSerializable.decode(message.getBytes(), PushCommitLogAck.class);
-        System.out.println(new Date() + "broker confirm receive offset: " + pushCommitLogAck.getConfirmOffset());
+        System.out.println(new Date() + " broker confirm receive offset: " + pushCommitLogAck.getConfirmOffset());
         nettyHAService.pushCommitLogDataAck(channel, pushCommitLogAck);
     }
 
-    @Override
-    public void channelUnregistered(ChannelHandlerContext ctx) throws Exception {
-        nettyHAService.removeConnection(ctx.channel());
-        super.channelUnregistered(ctx);
-    }
+    //@Override
+    //public void channelUnregistered(ChannelHandlerContext ctx) throws Exception {
+    //    //nettyHAService.removeConnection(ctx.channel());
+    //    super.channelUnregistered(ctx);
+    //}
 
     @Override
     protected void channelRead0(ChannelHandlerContext ctx, HAMessage message) throws Exception {
@@ -78,8 +82,10 @@ public class NettyHAServerHandler extends SimpleChannelInboundHandler<HAMessage>
         }
 
         if (nettyHAService.getCurrentMasterEpoch() != message.getEpoch()) {
-            System.out.println("server epoch not match, connection epoch " + message.getEpoch());
+            System.out.printf("server epoch not match, currentMaster=%s, message=%s%n",
+                nettyHAService.getCurrentMasterEpoch(), message.getEpoch());
             log.error("epoch not match, connection epoch:{}", message.getEpoch());
+            RemotingUtil.closeChannel(ctx.channel());
             return;
         }
 

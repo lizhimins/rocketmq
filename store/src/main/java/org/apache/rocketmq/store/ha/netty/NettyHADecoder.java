@@ -7,6 +7,9 @@ import java.nio.ByteBuffer;
 import org.apache.rocketmq.common.constant.LoggerName;
 import org.apache.rocketmq.logging.InternalLogger;
 import org.apache.rocketmq.logging.InternalLoggerFactory;
+import org.apache.rocketmq.remoting.common.RemotingHelper;
+import org.apache.rocketmq.remoting.common.RemotingUtil;
+import org.apache.rocketmq.remoting.protocol.RemotingCommand;
 
 public class NettyHADecoder extends LengthFieldBasedFrameDecoder {
 
@@ -27,28 +30,42 @@ public class NettyHADecoder extends LengthFieldBasedFrameDecoder {
 
     @Override
     protected HAMessage decode(ChannelHandlerContext ctx, ByteBuf in) throws Exception {
-        ByteBuf frame = (ByteBuf) super.decode(ctx, in);
-        if (frame == null) {
-            return null;
+        ByteBuf frame = null;
+        try {
+            frame = (ByteBuf) super.decode(ctx, in);
+            if (null == frame) {
+                return null;
+            }
+
+            int bodyLength = frame.readInt();
+            HAMessageType messageType = HAMessageType.valueOf(frame.readInt());
+            long epoch = frame.readLong();
+            this.lastReadTimestamp = frame.readLong();
+
+            // if direct byte buffer, return underlying nioBuffer.
+            // otherwise copy to a byte array and wrap it.
+            //ByteBuffer byteBuffer;
+            //if (frame.isDirect()) {
+            //    byteBuffer = frame.nioBuffer();
+            //} else {
+            //    final byte[] out = new byte[frame.readableBytes()];
+            //    frame.getBytes(frame.readerIndex(), out, 0, bodyLength);
+            //    byteBuffer = ByteBuffer.wrap(out);
+            //}
+
+            byte[] body = new byte[bodyLength];
+            frame.readBytes(body);
+            return new HAMessage(messageType, epoch, body);
+
+        } catch (Exception e) {
+            System.out.println(e.toString());
+            log.error("decode exception, " + RemotingHelper.parseChannelRemoteAddr(ctx.channel()), e);
+            RemotingUtil.closeChannel(ctx.channel());
+        } finally {
+            //if (null != frame) {
+            //    frame.release();
+            //}
         }
-        int bodyLength = frame.readInt();
-        HAMessageType messageType = HAMessageType.valueOf(frame.readInt());
-        long epoch = frame.readLong();
-        this.lastReadTimestamp = frame.readLong();
-
-        // if direct byte buffer, return underlying nioBuffer.
-        // otherwise copy to a byte array and wrap it.
-        //ByteBuffer byteBuffer;
-        //if (frame.isDirect()) {
-        //    byteBuffer = frame.nioBuffer();
-        //} else {
-        //    final byte[] out = new byte[frame.readableBytes()];
-        //    frame.getBytes(frame.readerIndex(), out, 0, bodyLength);
-        //    byteBuffer = ByteBuffer.wrap(out);
-        //}
-
-        byte[] body = new byte[bodyLength];
-        frame.readBytes(body);
-        return new HAMessage(messageType, epoch, body);
+        return null;
     }
 }
