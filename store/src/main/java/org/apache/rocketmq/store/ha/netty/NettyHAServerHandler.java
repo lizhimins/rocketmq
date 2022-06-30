@@ -51,7 +51,7 @@ public class NettyHAServerHandler extends SimpleChannelInboundHandler<HAMessage>
         byteBuffer.flip();
         HAMessage replyMessage = new HAMessage(HAMessageType.RETURN_EPOCH,
             nettyHAService.getCurrentMasterEpoch(), byteBuffer);
-        System.out.println("handler: " + entries + " size: " + entries.size());
+        //System.out.println("handler: " + entries + " size: " + entries.size());
         channel.writeAndFlush(replyMessage);
     }
 
@@ -60,6 +60,7 @@ public class NettyHAServerHandler extends SimpleChannelInboundHandler<HAMessage>
      */
     public void confirmTruncate(HAMessage message, Channel channel) {
         ConfirmTruncate confirmTruncate = RemotingSerializable.decode(message.getBytes(), ConfirmTruncate.class);
+        System.out.println("master receive truncate offset: " + confirmTruncate.getCommitLogStartOffset());
         nettyHAService.confirmTruncate(channel, confirmTruncate.getCommitLogStartOffset());
     }
 

@@ -103,7 +103,6 @@ public class AutoSwitchHAClient extends ServiceThread implements HAClient {
             this.flowMonitor = new FlowMonitor(this.messageStore.getMessageStoreConfig());
         }
 
-        this.currentMasterEpoch = -1L;
         this.currentReceivedEpoch = -1L;
         this.currentConfirmOffset = -1L;
         this.currentReportedOffset = -1L;
@@ -195,7 +194,6 @@ public class AutoSwitchHAClient extends ServiceThread implements HAClient {
         if (future != null && future.channel() != null) {
             try {
                 future.channel().close().sync();
-                System.out.println("关闭 channel");
             } catch (InterruptedException e) {
                 e.printStackTrace();
             }
@@ -214,11 +212,6 @@ public class AutoSwitchHAClient extends ServiceThread implements HAClient {
         this.flowMonitor.shutdown();
         super.shutdown();
         closeMaster();
-    }
-
-    private boolean isTimeToReportOffset() {
-        long interval = this.messageStore.now() - this.lastWriteTimestamp;
-        return interval > this.messageStore.getMessageStoreConfig().getHaSendHeartbeatInterval();
     }
 
     private void sendHandshakeSlave(Channel channel) {
@@ -277,8 +270,9 @@ public class AutoSwitchHAClient extends ServiceThread implements HAClient {
         SocketAddress socketAddress = RemotingUtil.string2SocketAddress(this.masterHaAddress.get());
         future = bootstrap.connect(socketAddress).addListener((ChannelFutureListener) future -> {
             if (future.isSuccess()) {
-                System.out.println("HAClient connect to server successfully! " + socketAddress + " " + future.channel().id());
-                LOGGER.info("HAClient connect to server successfully!");
+                System.out.println("client connect to server successfully! " +
+                    this.messageStore.getBrokerConfig().getBrokerName() + " " + socketAddress + " " + future.channel().id());
+                LOGGER.info("client connect to server successfully!");
             } else {
                 System.out.println("remote: " + future.channel().remoteAddress() + ", local: " + future.channel().localAddress() + " " + future.cause().toString());
                 System.out.println("Failed to connect to server, try connect after 1000 ms" + socketAddress);
@@ -326,11 +320,17 @@ public class AutoSwitchHAClient extends ServiceThread implements HAClient {
         return false;
     }
 
+    private boolean isTimeToReportOffset() {
+        long interval = this.messageStore.now() - this.lastWriteTimestamp;
+        return interval > this.messageStore.getMessageStoreConfig().getHaSendHeartbeatInterval();
+    }
+
     private boolean transferFromMaster() throws IOException {
-        //if (isTimeToReportOffset()) {
-        LOGGER.info("timer report slave offset: {}", this.currentReportedOffset);
-        this.sendPushCommitLogAck(this.currentReportedOffset);
-        //}
+        if (isTimeToReportOffset()) {
+            System.out.println("schedule to report slave offset: " + this.currentReportedOffset);
+            LOGGER.info("schedule to report slave offset: {}", this.currentReportedOffset);
+            this.sendPushCommitLogAck(this.currentReportedOffset);
+        }
         return true;
     }
 
@@ -338,6 +338,7 @@ public class AutoSwitchHAClient extends ServiceThread implements HAClient {
         if (handshakeMaster != null
             && HandshakeResult.ACCEPT.equals(handshakeMaster.getHandshakeResult())) {
             channelPromise.setSuccess();
+            return;
         }
         LOGGER.error("Master reject build connection, {}", handshakeMaster);
         channelPromise.setFailure(new Exception("Master reject build connection"));
@@ -367,7 +368,6 @@ public class AutoSwitchHAClient extends ServiceThread implements HAClient {
         }
         sendConfirmTruncateToMaster(messageStore.getMaxPhyOffset());
         changeCurrentState(HAConnectionState.TRANSFER);
-        channelPromise.setSuccess();
     }
 
     private void sendConfirmTruncateToMaster(long startOffset) {
@@ -384,6 +384,7 @@ public class AutoSwitchHAClient extends ServiceThread implements HAClient {
         HAMessage haMessage = new HAMessage(HAMessageType.PUSH_ACK, currentMasterEpoch,
             RemotingSerializable.encode(pushCommitLogAck));
         future.channel().writeAndFlush(haMessage);
+        lastWriteTimestamp = System.currentTimeMillis();
     }
 
     @Override
@@ -437,30 +438,25 @@ public class AutoSwitchHAClient extends ServiceThread implements HAClient {
      */
     private boolean doTruncateFiles(List<EpochEntry> masterEpochEntries) {
 
-        System.out.println("master epoch: " + masterEpochEntries);
+        System.out.println("client receive master epoch: " + masterEpochEntries);
         // If epochMap is empty, means the broker is a new replicas
         if (this.epochCache.getAllEntries().size() == 0) {
+            System.out.println("slave epoch list is null, so skip truncate files");
             LOGGER.info("Slave local epochCache is empty, skip truncate log");
-            this.currentReportedOffset = 0;
             return true;
         }
 
         // TODO: set max phy commitLog offset
         final EpochStore masterEpochCache = new EpochFileStore();
-        try {
-            masterEpochCache.initStateFromEntries(masterEpochEntries);
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
+        masterEpochCache.initStateFromEntries(masterEpochEntries);
 
         final EpochStore localEpochCache = new EpochFileStore();
         final List<EpochEntry> localEpochEntries = this.epochCache.getAllEntries();
         localEpochCache.initStateFromEntries(localEpochEntries);
 
+        // If truncateOffset < 0, means we can't find a consistent point
         final long truncateOffset = localEpochCache.findLastConsistentPoint(masterEpochCache);
-
         if (truncateOffset < 0) {
-            // If truncateOffset < 0, means we can't find a consistent point
             LOGGER.error("Failed to find a consistent point between masterEpoch:{} and slaveEpoch:{}",
                 masterEpochEntries, localEpochEntries);
             return false;
@@ -493,7 +489,7 @@ public class AutoSwitchHAClient extends ServiceThread implements HAClient {
         // If epoch changed to bigger, last epoch record would be terminated
         if (this.currentReceivedEpoch < currentBlockEpoch) {
             this.currentReceivedEpoch = currentBlockEpoch;
-            this.epochCache.tryAppendEpochEntry(new EpochEntry(currentMasterEpoch, masterOffset));
+            this.epochCache.tryAppendEpochEntry(new EpochEntry(currentReceivedEpoch, masterOffset));
         }
 
         if (byteBuffer.hasRemaining()) {

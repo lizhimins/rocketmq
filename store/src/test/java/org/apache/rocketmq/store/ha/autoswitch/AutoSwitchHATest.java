@@ -22,6 +22,8 @@ import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.net.UnknownHostException;
+import java.nio.file.Paths;
+import java.sql.Time;
 import java.time.Duration;
 import java.util.Arrays;
 import java.util.HashSet;
@@ -38,11 +40,13 @@ import org.apache.rocketmq.common.message.MessageExtBrokerInner;
 import org.apache.rocketmq.store.DefaultMessageStore;
 import org.apache.rocketmq.store.GetMessageResult;
 import org.apache.rocketmq.store.GetMessageStatus;
+import org.apache.rocketmq.store.MappedFileQueue;
 import org.apache.rocketmq.store.PutMessageResult;
 import org.apache.rocketmq.store.PutMessageStatus;
 import org.apache.rocketmq.store.config.BrokerRole;
 import org.apache.rocketmq.store.config.FlushDiskType;
 import org.apache.rocketmq.store.config.MessageStoreConfig;
+import org.apache.rocketmq.store.logfile.MappedFile;
 import org.apache.rocketmq.store.stats.BrokerStatsManager;
 import org.junit.After;
 import org.junit.Before;
@@ -57,19 +61,21 @@ public class AutoSwitchHATest {
 
     private static final String TOPIC = "FooBar";
     private static final String GROUP = "GROUP-A";
-    private static final int QUEUE_TOTAL = 16;
+    private static final String BROKER_NAME = "brokerName";
     private static final String COMMIT_LOG = "commitlog";
     private static final String CHECKPOINT_NAME = "epoch.ckpt";
     private static final int DEFAULT_MAPPED_FILE_SIZE = 1024 * 1024;
 
-    private final BrokerStatsManager brokerStatsManager =
-        new BrokerStatsManager("HASimpleTest", true);
-    private final String storePathRootParentDir = System.getProperty("user.home") + File.separator + "store";
-    private final String storePathRootDir = storePathRootParentDir + File.separator +
-        UUID.randomUUID().toString().replace("-", "");
+    private final int queueTotal = 16;
+    private final AtomicInteger queueId = new AtomicInteger(0);
     private final String messageBodyString = "Once, there was a chance for me!";
     private final byte[] messageBody = messageBodyString.getBytes();
-    private final AtomicInteger queueId = new AtomicInteger(0);
+    private final BrokerStatsManager brokerStatsManager =
+        new BrokerStatsManager("HASimpleTest", true);
+    private final String storePathRootParentDir =
+        Paths.get(System.getProperty("user.home"), "store").toString();
+    private final String storePathRootDir =
+        Paths.get(storePathRootParentDir, UUID.randomUUID().toString().replace("-", "")).toString();
 
     private SocketAddress bornHost;
     private SocketAddress storeHost;
@@ -86,11 +92,11 @@ public class AutoSwitchHATest {
         bornHost = new InetSocketAddress(InetAddress.getLoopbackAddress(), 0);
     }
 
-    private MessageStoreConfig buildMessageStoreConfig(String brokerName, int mappedFileSize) {
+    private MessageStoreConfig buildMessageStoreConfig(long brokerId, int mappedFileSize) {
         MessageStoreConfig messageStoreConfig = new MessageStoreConfig();
         messageStoreConfig.setBrokerRole(BrokerRole.SLAVE);
 
-        String storePath = storePathRootDir + File.separator + brokerName;
+        String storePath = storePathRootDir + File.separator + BROKER_NAME + "-" + brokerId;
         messageStoreConfig.setStorePathRootDir(storePath);
         messageStoreConfig.setStorePathCommitLog(storePath + File.separator + COMMIT_LOG);
         messageStoreConfig.setStorePathEpochFile(storePath + File.separator + CHECKPOINT_NAME);
@@ -112,10 +118,37 @@ public class AutoSwitchHATest {
         return "127.0.0.1:" + messageStore.getMessageStoreConfig().getHaListenPort();
     }
 
+    private DefaultMessageStore buildMessageStore(MessageStoreConfig messageStoreConfig, long brokerId)
+        throws Exception {
+
+        BrokerConfig brokerConfig = new BrokerConfig();
+        brokerConfig.setBrokerName(BROKER_NAME);
+        brokerConfig.setBrokerId(brokerId);
+        brokerConfig.setEnableControllerMode(true);
+
+        return new DefaultMessageStore(
+            messageStoreConfig, brokerStatsManager, null, brokerConfig);
+    }
+
+    private MessageExtBrokerInner buildMessage() {
+        MessageExtBrokerInner msg = new MessageExtBrokerInner();
+        msg.setTopic(TOPIC);
+        msg.setTags("TAG1");
+        msg.setBody(messageBody);
+        msg.setKeys(String.valueOf(System.currentTimeMillis()));
+        msg.setQueueId(Math.abs(queueId.getAndIncrement()) % queueTotal);
+        msg.setSysFlag(0);
+        msg.setBornTimestamp(System.currentTimeMillis());
+        msg.setStoreHost(storeHost);
+        msg.setBornHost(bornHost);
+        msg.setPropertiesString(MessageDecoder.messageProperties2String(msg.getProperties()));
+        return msg;
+    }
+
     public void initMessageStore(int mappedFileSize) throws Exception {
-        MessageStoreConfig storeConfig1 = buildMessageStoreConfig("broker1", mappedFileSize);
-        MessageStoreConfig storeConfig2 = buildMessageStoreConfig("broker2", mappedFileSize);
-        MessageStoreConfig storeConfig3 = buildMessageStoreConfig("broker3", mappedFileSize);
+        MessageStoreConfig storeConfig1 = buildMessageStoreConfig(1, mappedFileSize);
+        MessageStoreConfig storeConfig2 = buildMessageStoreConfig(2, mappedFileSize);
+        MessageStoreConfig storeConfig3 = buildMessageStoreConfig(3, mappedFileSize);
 
         storeConfig1.setBrokerRole(BrokerRole.SYNC_MASTER);
         storeConfig1.setHaListenPort(7000);
@@ -144,9 +177,30 @@ public class AutoSwitchHATest {
         messageStore3.start();
     }
 
+    @After
+    public void destroy() throws Exception {
+        if (this.messageStore1 != null) {
+            messageStore1.shutdown();
+            messageStore1.destroy();
+        }
+
+        if (this.messageStore2 != null) {
+            messageStore2.shutdown();
+            messageStore2.destroy();
+        }
+
+        if (this.messageStore3 != null) {
+            messageStore3.shutdown();
+            messageStore3.destroy();
+        }
+
+        File file = new File(storePathRootParentDir);
+        UtilAll.deleteFile(file);
+    }
+
     private int getMessageCount(final DefaultMessageStore messageStore) {
         int foundMessage = 0;
-        for (int i = 0; i < QUEUE_TOTAL; i++) {
+        for (int i = 0; i < queueTotal; i++) {
             GetMessageResult result = messageStore.getMessage(
                 GROUP, TOPIC, i, 0, 1024 * 1024, null);
             assertThat(result).isNotNull();
@@ -317,7 +371,6 @@ public class AutoSwitchHATest {
             () -> messageCount * 3 == getMessageCount(messageStore2));
     }
 
-
     @Test
     public void testDynamicAddBroker() throws Exception {
         initMessageStore(DEFAULT_MAPPED_FILE_SIZE);
@@ -338,163 +391,116 @@ public class AutoSwitchHATest {
             () -> messageCount == getMessageCount(messageStore3));
     }
 
-    private void printMasterHaAddress(DefaultMessageStore defaultMessageStore) {
-        System.out.println("address: " + defaultMessageStore.getMessageStoreConfig().getHaMasterAddress());
-    }
-
-    //@Test
-    //public void testTruncateEpochLogAndAddBroker() throws Exception {
-    //    // Noted that 10 msg 's total size = 1570, and if init the mappedFileSize = 1700, one file only be used to store 10 msg.
-    //    initMessageStore(1700);
-    //
-    //    // Step1: broker1 as leader, broker2 as follower, append 2 epoch, each epoch will be stored on one file(Because fileSize = 1700, which only can hold 10 msgs);
-    //    // Master: <Epoch1, 0, 1570> <Epoch2, 1570, 3270>
-    //
-    //    //changeMasterAndPutMessage(this.messageStore1, this.storeConfig1, this.messageStore2, 2, this.storeConfig2, 1, store1HaAddress, 10);
-    //    //getMessageCount(this.messageStore2, 10, 0);
-    //    //changeMasterAndPutMessage(this.messageStore1, this.storeConfig1, this.messageStore2, 2, this.storeConfig2, 2, store1HaAddress, 10);
-    //    //getMessageCount(this.messageStore2, 20, 0);
-    //
-    //    // Step2: Check file position, each epoch will be stored on one file(Because fileSize = 1700, which equal to 10 msg size);
-    //    // So epoch1 was stored in firstFile, epoch2 was stored in second file, the lastFile was empty.
-    //    final MappedFileQueue fileQueue = this.messageStore1.getCommitLog().getMappedFileQueue();
-    //    assertEquals(2, fileQueue.getTotalFileSize() / 1700);
-    //
-    //    // Step3: truncate epoch1's log (truncateEndOffset = 1570), which means we should delete the first file directly.
-    //    final MappedFile firstFile = this.messageStore1.getCommitLog().getMappedFileQueue().getFirstMappedFile();
-    //    firstFile.shutdown(1000);
-    //    fileQueue.retryDeleteFirstFile(1000);
-    //    assertEquals(this.messageStore1.getCommitLog().getMinOffset(), 1700);
-    //    //getMessageCount(this.messageStore1, 10, 10);
-    //
-    //    final AutoSwitchHAService haService = (AutoSwitchHAService) this.messageStore1.getHaService();
-    //    haService.truncateEpochFilePrefix(1570);
-    //
-    //    // Step4: add broker3 as slave, only have 10 msg from offset 10;
-    //    messageStore3.getHaService().changeToSlave("", 2, 3L);
-    //    messageStore3.getHaService().updateHaMasterAddress(getHaAddress(messageStore1));
-    //    Thread.sleep(6000);
-    //
-    //    //getMessageCount(messageStore3, 10, 10);
-    //}
-    //
-    //@Test
-    //public void testTruncateEpochLogAndChangeMaster() throws Exception {
-    //    // Noted that 10 msg 's total size = 1570, and if init the mappedFileSize = 1700, one file only be used to store 10 msg.
-    //    initMessageStore(1700);
-    //
-    //    // Step1: broker1 as leader, broker2 as follower, append 2 epoch, each epoch will be stored on one file(Because fileSize = 1700, which only can hold 10 msgs);
-    //    // Master: <Epoch1, 0, 1570> <Epoch2, 1570, 3270>
-    //
-    //    //changeMasterAndPutMessage(this.messageStore1, this.storeConfig1, this.messageStore2, 2, this.storeConfig2, 1, store1HaAddress, 10);
-    //    //getMessageCount(this.messageStore2, 10, 0);
-    //    //changeMasterAndPutMessage(this.messageStore1, this.storeConfig1, this.messageStore2, 2, this.storeConfig2, 2, store1HaAddress, 10);
-    //    //getMessageCount(this.messageStore2, 20, 0);
-    //
-    //    // Step2: Check file position, each epoch will be stored on one file(Because fileSize = 1700, which equal to 10 msg size);
-    //    // So epoch1 was stored in firstFile, epoch2 was stored in second file, the lastFile was empty.
-    //    final MappedFileQueue fileQueue = this.messageStore1.getCommitLog().getMappedFileQueue();
-    //    assertEquals(2, fileQueue.getTotalFileSize() / 1700);
-    //
-    //    // Step3: truncate epoch1's log (truncateEndOffset = 1570), which means we should delete the first file directly.
-    //    final MappedFile firstFile = this.messageStore1.getCommitLog().getMappedFileQueue().getFirstMappedFile();
-    //    firstFile.shutdown(1000);
-    //    fileQueue.retryDeleteFirstFile(1000);
-    //    assertEquals(this.messageStore1.getCommitLog().getMinOffset(), 1700);
-    //
-    //    final AutoSwitchHAService haService = (AutoSwitchHAService) this.messageStore1.getHaService();
-    //    haService.truncateEpochFilePrefix(1570);
-    //    //getMessageCount(this.messageStore1, 10, 10);
-    //
-    //    // Step4: add broker3 as slave
-    //    messageStore3.getHaService().changeToSlave("", 2, 3L);
-    //    messageStore3.getHaService().updateHaMasterAddress(getHaAddress(messageStore1));
-    //    Thread.sleep(6000);
-    //    //getMessageCount(messageStore3, 10, 10);
-    //
-    //    // Step5: change broker2 as leader, broker3 as follower
-    //    //changeMasterAndPutMessage(this.messageStore2, this.storeConfig2, this.messageStore3, 3, this.storeConfig3, 3, this.store2HaAddress, 10);
-    //    //getMessageCount(messageStore3, 20, 10);
-    //
-    //    // Step6, let broker1 link to broker2, it should sync log from epoch3.
-    //    //this.storeConfig1.setBrokerRole(BrokerRole.SLAVE);
-    //    this.messageStore1.getHaService().changeToSlave("", 3, 1L);
-    //    this.messageStore1.getHaService().updateHaMasterAddress(this.getHaAddress(messageStore1));
-    //    Thread.sleep(6000);
-    //    //getMessageCount(messageStore1, 20, 0);
-    //}
-    //
-    //@Test
-    //public void testAddBrokerAndSyncFromLastFile() throws Exception {
-    //    initMessageStore(1700);
-    //
-    //    // Step1: broker1 as leader, broker2 as follower, append 2 epoch, each epoch will be stored on one file(Because fileSize = 1700, which only can hold 10 msgs);
-    //    // Master: <Epoch1, 0, 1570> <Epoch2, 1570, 3270>
-    //    //changeMasterAndPutMessage(this.messageStore1, this.storeConfig1, this.messageStore2, 2, this.storeConfig2, 1, store1HaAddress, 10);
-    //    //getMessageCount(this.messageStore2, 10, 0);
-    //    //changeMasterAndPutMessage(this.messageStore1, this.storeConfig1, this.messageStore2, 2, this.storeConfig2, 2, store1HaAddress, 10);
-    //    //getMessageCount(this.messageStore2, 20, 0);
-    //
-    //    // Step2: restart broker3
-    //    messageStore3.shutdown();
-    //    messageStore3.destroy();
-    //
-    //    //storeConfig3.setSyncFromLastFile(true);
-    //    //messageStore3 = buildMessageStore(storeConfig3, 3L);
-    //    assertTrue(messageStore3.load());
-    //    messageStore3.start();
-    //
-    //    // Step2: add new broker3, link to broker1. because broker3 request sync from lastFile, so it only synced 10 msg from offset 10;
-    //    messageStore3.getHaService().changeToSlave("", 2, 3L);
-    //    messageStore3.getHaService().updateHaMasterAddress("127.0.0.1:10912");
-    //    Thread.sleep(6000);
-    //    //getMessageCount(messageStore3, 10, 10);
+    //private void printMasterHaAddress(DefaultMessageStore defaultMessageStore) {
+    //    System.out.println("address: " + defaultMessageStore.getMessageStoreConfig().getHaMasterAddress());
     //}
 
-    @After
-    public void destroy() throws Exception {
-        if (this.messageStore1 != null) {
-            messageStore1.shutdown();
-            messageStore1.destroy();
-        }
+    @Test
+    public void testTruncateEpochLogAndAddBroker() throws Exception {
+        // Noted that 10 msg 's total size = 1570
+        // Init the mappedFileSize = 1700, one file only be used to store 10 msg.
+        initMessageStore(1700);
+        int messageCount = 10;
 
-        if (this.messageStore2 != null) {
-            messageStore2.shutdown();
-            messageStore2.destroy();
-        }
+        // Step1: broker1 as leader, broker2 as follower
+        // append epoch 2, each epoch will be stored on one file
+        // Master: <Epoch1, 0, 1570> <Epoch2, 1570, 3270>
+        changeMasterAndPutMessage(1, this.messageStore1, "127.0.0.1:7000", this.messageStore2, 1, 10);
+        changeMasterAndPutMessage(2, this.messageStore1, "127.0.0.1:7000", this.messageStore2, 1, 10);
+        await().atMost(Duration.ofSeconds(30)).until(
+            () -> messageCount * 2 == getMessageCount(messageStore2));
 
-        if (this.messageStore3 != null) {
-            messageStore3.shutdown();
-            messageStore3.destroy();
-        }
+        // Step2: check file position, each epoch will be stored on one file
+        // So epoch1 was stored in firstFile, epoch2 was stored in second file, the lastFile was empty.
+        final MappedFileQueue fileQueue = this.messageStore1.getCommitLog().getMappedFileQueue();
+        assertEquals(2, fileQueue.getTotalFileSize() / 1700);
 
-        File file = new File(storePathRootParentDir);
-        UtilAll.deleteFile(file);
+        // Step3: truncate epoch1's log (truncateEndOffset = 1570), which means we should delete the first file directly.
+        final MappedFile firstFile = this.messageStore1.getCommitLog().getMappedFileQueue().getFirstMappedFile();
+        firstFile.shutdown(1000);
+        fileQueue.retryDeleteFirstFile(1000);
+        assertEquals(this.messageStore1.getCommitLog().getMinOffset(), 1700);
+
+        final AutoSwitchHAService haService = (AutoSwitchHAService) this.messageStore1.getHaService();
+        haService.truncateEpochFilePrefix(1570);
+        await().atMost(Duration.ofSeconds(30)).until(
+            () -> messageCount == getMessageCount(messageStore1));
+
+        // Step4: add broker3 as slave, only have 10 msg from offset 10, broker3 copy from first file
+        messageStore3.getHaService().changeToSlave("", 2, 3L);
+        messageStore3.getHaService().updateHaMasterAddress("127.0.0.1:7000");
+        await().atMost(Duration.ofSeconds(30)).until(
+            () -> messageCount == getMessageCount(messageStore1));
     }
 
-    private DefaultMessageStore buildMessageStore(MessageStoreConfig messageStoreConfig,
-        long brokerId) throws Exception {
+    @Test
+    public void testTruncateEpochLogAndChangeMaster() throws Exception {
+        testTruncateEpochLogAndAddBroker();
 
-        BrokerConfig brokerConfig = new BrokerConfig();
-        brokerConfig.setBrokerId(brokerId);
-        brokerConfig.setEnableControllerMode(true);
+        // Step5: change broker2 as leader, broker3 as follower
+        // store1:                   <Epoch2, 1570, 3270>
+        // store2: <Epoch1, 0, 1570> <Epoch2, 1570, 3270> <Epoch3, 3400, 4970> Master
+        // store3:                                        <Epoch3, 3400, 4970>
 
-        return new DefaultMessageStore(
-            messageStoreConfig, brokerStatsManager, null, brokerConfig);
+        System.out.println("=====================");
+        changeMasterAndPutMessage(3, this.messageStore2, "127.0.0.1:7001", this.messageStore3, 3, 10);
+        //await().pollInterval(Duration.ofSeconds(1)).atMost(Duration.ofSeconds(30)).until(
+        //    () -> 20 == getMessageCount(messageStore3));
+
+        TimeUnit.SECONDS.sleep(30);
+        System.out.println("start print--------------------------------------");
+        System.out.println(((AutoSwitchHAService) messageStore3.getHaService()).getEpochEntries().toString());
+        System.out.println(messageStore3.getMinPhyOffset());
+        System.out.println(messageStore3.getMaxPhyOffset());
+
+        /*
+         Step6, let broker1 link to broker2, it should sync log from epoch3.
+        this.storeConfig1.setBrokerRole(BrokerRole.SLAVE);
+        this.messageStore1.getHaService().changeToSlave("", 3, 1L);
+        this.messageStore1.getHaService().updateHaMasterAddress(this.getHaAddress(messageStore1));
+        Thread.sleep(6000);
+        getMessageCount(messageStore1, 20, 0);
+        */
     }
 
-    private MessageExtBrokerInner buildMessage() {
-        MessageExtBrokerInner msg = new MessageExtBrokerInner();
-        msg.setTopic(TOPIC);
-        msg.setTags("TAG1");
-        msg.setBody(messageBody);
-        msg.setKeys(String.valueOf(System.currentTimeMillis()));
-        msg.setQueueId(Math.abs(queueId.getAndIncrement()) % QUEUE_TOTAL);
-        msg.setSysFlag(0);
-        msg.setBornTimestamp(System.currentTimeMillis());
-        msg.setStoreHost(storeHost);
-        msg.setBornHost(bornHost);
-        msg.setPropertiesString(MessageDecoder.messageProperties2String(msg.getProperties()));
-        return msg;
+    @Test
+    public void testAddBrokerAndSyncFromLastFile() throws Exception {
+        initMessageStore(1700);
+
+        // Step1: broker1 as leader, broker2 as follower
+        // append epoch 2, each epoch will be stored on one file
+        // Master: <Epoch1, 0, 1570> <Epoch2, 1570, 3270>
+        int messageCount = 10;
+        changeMasterAndPutMessage(1, this.messageStore1, "127.0.0.1:7000", this.messageStore2, 1, messageCount);
+        changeMasterAndPutMessage(2, this.messageStore1, "127.0.0.1:7000", this.messageStore2, 1, messageCount);
+        await().atMost(Duration.ofSeconds(30)).until(
+            () -> messageCount * 2 == getMessageCount(messageStore2));
+
+        // Step2: restart broker3
+        messageStore3.shutdown();
+        messageStore3.destroy();
+
+        messageStore3.getMessageStoreConfig().setSyncFromLastFile(true);
+        messageStore3 = buildMessageStore(messageStore3.getMessageStoreConfig(), 3L);
+        assertTrue(messageStore3.load());
+        messageStore3.start();
+
+        // Put message on master
+        for (int i = 0; i < messageCount; i++) {
+            messageStore1.putMessage(buildMessage());
+        }
+
+        // Step3: add new broker3, link to broker1.
+        // Due to broker3 request sync from lastFile, so it only synced 10 msg from offset 10;
+        messageStore3.getHaService().changeToSlave("", 2, 3L);
+        messageStore3.getHaService().updateHaMasterAddress("127.0.0.1:7000");
+
+        //await().atMost(Duration.ofSeconds(30)).until(new Callable<Boolean>() {
+        //    @Override
+        //    public Boolean call() {
+        //        System.out.println(getMessageCount(messageStore3));
+        //        return false;
+        //    }
+        //});
     }
 }

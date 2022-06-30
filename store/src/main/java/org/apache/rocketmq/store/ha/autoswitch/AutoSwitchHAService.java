@@ -251,16 +251,13 @@ public class AutoSwitchHAService implements HAService {
     public boolean changeToSlave(String newMasterAddr, int newMasterEpoch, Long slaveId) {
         try {
             destroyConnections();
-            //if (this.haClient == null) {
-            //    this.haClient = new AutoSwitchHAClient(defaultMessageStore, this.epochCache);
-            //} else {
-            //    this.haClient.shutdown();
-            //}
-
-            if (this.haClient != null) {
+            if (this.haClient == null) {
+                this.haClient = new AutoSwitchHAClient(defaultMessageStore, this.epochCache);
+            } else {
                 this.haClient.shutdown();
             }
 
+            this.currentMasterEpoch = newMasterEpoch;
             this.haClient = new AutoSwitchHAClient(defaultMessageStore, this.epochCache);
             this.haClient.init();
             this.haClient.updateSlaveId(slaveId);

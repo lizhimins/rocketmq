@@ -8,6 +8,7 @@ import org.apache.rocketmq.common.EpochEntry;
 import org.apache.rocketmq.common.constant.LoggerName;
 import org.apache.rocketmq.logging.InternalLogger;
 import org.apache.rocketmq.logging.InternalLoggerFactory;
+import org.apache.rocketmq.remoting.common.RemotingUtil;
 import org.apache.rocketmq.remoting.protocol.RemotingSerializable;
 import org.apache.rocketmq.store.ha.HAConnectionState;
 import org.apache.rocketmq.store.ha.autoswitch.AutoSwitchHAClient;
@@ -21,7 +22,7 @@ public class NettyHAClientHandler extends ChannelInboundHandlerAdapter {
 
     @Override
     public void channelUnregistered(ChannelHandlerContext ctx) throws Exception {
-        System.out.println("关闭 channel 2");
+        System.out.println("client disconnect to server " + ctx.channel().id());
         nettyHAClient.changeCurrentState(HAConnectionState.READY);
         super.channelUnregistered(ctx);
     }
@@ -55,8 +56,8 @@ public class NettyHAClientHandler extends ChannelInboundHandlerAdapter {
     public void pushData(HAMessage message) {
         long epoch = message.getByteBuffer().getLong();
         long startOffset = message.getByteBuffer().getLong();
-        System.out.printf("receive data, block start offset: %s, available payload size: %s%n",
-            startOffset, message.getByteBuffer().remaining());
+        System.out.printf("receive data, epoch: %d, block start offset: %s, available payload size: %s%n",
+            epoch, startOffset, message.getByteBuffer().remaining());
         nettyHAClient.doPutCommitLog(epoch, startOffset, message.getByteBuffer());
         nettyHAClient.sendPushCommitLogAck(startOffset + message.getByteBuffer().limit() - 16);
     }
@@ -71,8 +72,10 @@ public class NettyHAClientHandler extends ChannelInboundHandlerAdapter {
         HAMessage message = (HAMessage) msg;
 
         if (nettyHAClient.getCurrentMasterEpoch() != message.getEpoch()) {
-            System.out.println("client epoch not match, connection epoch " + message.getEpoch());
+            System.out.println("client epoch not match, connection epoch "
+                + nettyHAClient.getCurrentMasterEpoch() + " " + message.getEpoch());
             log.error("epoch not match, connection epoch:{}", message.getEpoch());
+            RemotingUtil.closeChannel(ctx.channel());
         }
 
         System.out.println(message.getType());
