@@ -52,7 +52,7 @@ public class NettyHAServerHandler extends SimpleChannelInboundHandler<HAMessage>
         byteBuffer.flip();
         HAMessage replyMessage = new HAMessage(HAMessageType.RETURN_EPOCH,
             nettyHAService.getCurrentMasterEpoch(), byteBuffer);
-        //System.out.println("handler: " + entries + " size: " + entries.size());
+        System.out.println("handler: " + entries + " size: " + entries.size());
         channel.writeAndFlush(replyMessage);
     }
 

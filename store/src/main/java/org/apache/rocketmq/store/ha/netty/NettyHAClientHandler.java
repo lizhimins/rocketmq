@@ -2,6 +2,7 @@ package org.apache.rocketmq.store.ha.netty;
 
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundHandlerAdapter;
+import io.netty.channel.ChannelPromise;
 import java.util.ArrayList;
 import java.util.List;
 import org.apache.rocketmq.common.EpochEntry;
@@ -29,6 +30,7 @@ public class NettyHAClientHandler extends ChannelInboundHandlerAdapter {
     @Override
     public void channelUnregistered(ChannelHandlerContext ctx) throws Exception {
         System.out.println("client disconnect to server " + ctx.channel().id());
+        nettyHAClient.changePromise(false);
         super.channelUnregistered(ctx);
     }
 
@@ -80,7 +82,7 @@ public class NettyHAClientHandler extends ChannelInboundHandlerAdapter {
             System.out.println("client epoch not match, connection epoch "
                 + nettyHAClient.getCurrentMasterEpoch() + " " + message.getEpoch());
             log.error("epoch not match, connection epoch:{}", message.getEpoch());
-            RemotingUtil.closeChannel(ctx.channel());
+            nettyHAClient.shutdown();
         }
 
         System.out.println(message.getType());

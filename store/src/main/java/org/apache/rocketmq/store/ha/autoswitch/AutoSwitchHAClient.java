@@ -114,6 +114,20 @@ public class AutoSwitchHAClient extends ServiceThread implements HAClient {
         changeCurrentState(HAConnectionState.READY);
     }
 
+    public ChannelPromise getChannelPromise() {
+        return channelPromise;
+    }
+
+    public void changePromise(boolean success) {
+        if (this.channelPromise != null && !this.channelPromise.isDone()) {
+            if (success) {
+                this.channelPromise.setSuccess();
+            } else {
+                this.channelPromise.setFailure(new RuntimeException("promise failure"));
+            }
+        }
+    }
+
     @Override
     public String getServiceName() {
         if (messageStore.getBrokerConfig().isInBrokerContainer()) {
@@ -192,12 +206,13 @@ public class AutoSwitchHAClient extends ServiceThread implements HAClient {
         // close channel
         if (future != null && future.channel() != null) {
             try {
+                System.out.println("channel close by client");
                 future.channel().close().sync();
+                future = null;
             } catch (InterruptedException e) {
                 e.printStackTrace();
             }
         }
-        System.out.println("channel close by client");
         LOGGER.info("AutoSwitchHAClient close connection with master {}", this.masterHaAddress.get());
     }
 
@@ -208,6 +223,9 @@ public class AutoSwitchHAClient extends ServiceThread implements HAClient {
 
     @Override
     public void shutdown() {
+        if (channelPromise != null) {
+            channelPromise.setFailure(new RuntimeException("epoch not match"));
+        }
         changeCurrentState(HAConnectionState.SHUTDOWN);
         this.flowMonitor.shutdown();
         super.shutdown();
@@ -287,21 +305,21 @@ public class AutoSwitchHAClient extends ServiceThread implements HAClient {
         }
     }
 
-    public boolean tryConnectToMaster() throws InterruptedException {
+    public synchronized boolean tryConnectToMaster() throws InterruptedException {
         try {
             String address = this.masterHaAddress.get();
             if (StringUtils.isNotEmpty(address)) {
                 doNettyConnect();
-                Channel channel = future.channel();
-                channelPromise = new DefaultChannelPromise(channel);
-                sendHandshakeSlave(channel);
+                channelPromise = new DefaultChannelPromise(future.channel());
+                sendHandshakeSlave(future.channel());
                 channelPromise.await(5000);
                 if (channelPromise.isSuccess()) {
+                    channelPromise = null;
                     changeCurrentState(HAConnectionState.HANDSHAKE);
-                } else {
-                    System.out.println("client not receive handshake signal");
+                    return true;
                 }
-                return channelPromise.isSuccess();
+                channelPromise = null;
+                System.out.println("client not receive handshake signal");
             }
         } catch (InterruptedException e) {
             System.out.println("HAClient send handshake but not receive response" + e);
@@ -340,7 +358,13 @@ public class AutoSwitchHAClient extends ServiceThread implements HAClient {
             channelPromise = new DefaultChannelPromise(future.channel());
             future.channel().writeAndFlush(haMessage);
             channelPromise.await(5000);
-            return channelPromise.isSuccess();
+            if (channelPromise.isSuccess()) {
+                channelPromise = null;
+                changeCurrentState(HAConnectionState.TRANSFER);
+                return true;
+            }
+            channelPromise = null;
+            return false;
         } catch (InterruptedException e) {
             System.out.println("query epoch failed");
             future.channel().close().sync();
@@ -348,7 +372,7 @@ public class AutoSwitchHAClient extends ServiceThread implements HAClient {
         return true;
     }
 
-    public void doConsistencyRepairWithMaster(List<EpochEntry> entryList) {
+    public synchronized void doConsistencyRepairWithMaster(List<EpochEntry> entryList) {
         channelPromise.setSuccess();
         if (!doTruncateFiles(entryList)) {
             return;
@@ -367,7 +391,6 @@ public class AutoSwitchHAClient extends ServiceThread implements HAClient {
         }
 
         sendConfirmTruncateToMaster(currentTransferOffset);
-        changeCurrentState(HAConnectionState.TRANSFER);
     }
 
     private void sendConfirmTruncateToMaster(long startOffset) {
@@ -488,17 +511,21 @@ public class AutoSwitchHAClient extends ServiceThread implements HAClient {
             return;
         }
 
-        // If epoch changed to bigger, last epoch record would be terminated
-        if (this.currentReceivedEpoch < currentBlockEpoch) {
-            this.currentReceivedEpoch = currentBlockEpoch;
-            this.epochCache.tryAppendEpochEntry(new EpochEntry(currentReceivedEpoch, masterOffset));
-        }
-
+        // Must put data first
         if (byteBuffer.hasRemaining()) {
             this.messageStore.appendToCommitLog(
                 masterOffset, byteBuffer.array(), 16, byteBuffer.remaining());
         }
+
         this.currentConfirmOffset = Math.min(currentConfirmOffset, messageStore.getMaxPhyOffset());
+
+        // If epoch changed to bigger, last epoch record would be terminated
+        if (this.currentReceivedEpoch < currentBlockEpoch) {
+            System.out.println("put epoch: " + this.currentReceivedEpoch + " " + currentBlockEpoch + " " + masterOffset);
+            this.currentReceivedEpoch = currentBlockEpoch;
+            this.epochCache.tryAppendEpochEntry(new EpochEntry(currentBlockEpoch, masterOffset));
+        }
+
         this.currentTransferOffset = this.messageStore.getMaxPhyOffset();
     }
 }

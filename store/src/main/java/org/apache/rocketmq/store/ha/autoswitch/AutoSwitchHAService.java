@@ -234,7 +234,7 @@ public class AutoSwitchHAService implements HAService {
             "newMasterEpoch:{}, truncate size:{}", minPhyOffset, maxPhyOffset, masterEpoch, truncateSize);
 
         // Correct epoch store
-        this.epochCache.truncateSuffixByOffset(minPhyOffset);
+        this.epochCache.truncateSuffixByOffset(maxPhyOffset);
         this.epochCache.truncateSuffixByEpoch(masterEpoch);
         this.epochCache.tryAppendEpochEntry(new EpochEntry(masterEpoch, maxPhyOffset));
         this.currentMasterEpoch = masterEpoch;
@@ -521,7 +521,7 @@ public class AutoSwitchHAService implements HAService {
     }
 
     public void addConnection(Channel channel, final HAConnection conn) {
-        System.out.println("add connection: " + conn.getClientAddress() + " now: " + (connectionMap.size() + 1));
+        //System.out.println("add connection: " + conn.getClientAddress() + " now: " + (connectionMap.size() + 1));
         this.connectionMap.put(channel, conn);
     }
 

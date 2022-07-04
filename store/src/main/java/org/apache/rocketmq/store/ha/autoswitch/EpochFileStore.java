@@ -95,7 +95,6 @@ public class EpochFileStore implements EpochStore {
     public boolean tryAppendEpochEntry(final EpochEntry entry) {
         this.writeLock.lock();
         try {
-            System.out.println("append entry: " + entry.toString());
             if (!this.epochMap.isEmpty()) {
                 final EpochEntry lastEntry = this.epochMap.lastEntry().getValue();
                 if (lastEntry.getEpoch() >= entry.getEpoch() || lastEntry.getStartOffset() >= entry.getStartOffset()) {
@@ -106,6 +105,8 @@ public class EpochFileStore implements EpochStore {
             }
             this.epochMap.put(entry.getEpoch(), new EpochEntry(entry));
             flushCheckpoint();
+            System.out.println("now append: " + entry.getEpoch() + "=>" + new EpochEntry(entry) +
+                ", epoch print: " + epochMap);
             return true;
         } finally {
             this.writeLock.unlock();
@@ -183,8 +184,8 @@ public class EpochFileStore implements EpochStore {
     public List<EpochEntry> getAllEntries() {
         this.readLock.lock();
         try {
-            final ArrayList<EpochEntry> result = new ArrayList<>(this.epochMap.size());
-            this.epochMap.forEach((key, value) -> result.add(new EpochEntry(value)));
+            final List<EpochEntry> result = new ArrayList<>(this.epochMap.size());
+            result.addAll(this.epochMap.values());
             return result;
         } finally {
             this.readLock.unlock();
