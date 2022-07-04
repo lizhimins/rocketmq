@@ -23,13 +23,11 @@ import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.net.UnknownHostException;
 import java.nio.file.Paths;
-import java.sql.Time;
 import java.time.Duration;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.Callable;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.apache.rocketmq.common.BrokerConfig;
@@ -66,7 +64,7 @@ public class AutoSwitchHATest {
     private static final String CHECKPOINT_NAME = "epoch.ckpt";
     private static final int DEFAULT_MAPPED_FILE_SIZE = 1024 * 1024;
 
-    private final int queueTotal = 16;
+    private final int queueTotal = 4;
     private final AtomicInteger queueId = new AtomicInteger(0);
     private final String messageBodyString = "Once, there was a chance for me!";
     private final byte[] messageBody = messageBodyString.getBytes();
@@ -179,6 +177,7 @@ public class AutoSwitchHATest {
 
     @After
     public void destroy() throws Exception {
+        System.out.println("================start destroy==============");
         if (this.messageStore1 != null) {
             messageStore1.shutdown();
             messageStore1.destroy();
@@ -209,6 +208,7 @@ public class AutoSwitchHATest {
             }
             result.release();
         }
+        System.out.println("found: " + foundMessage);
         return foundMessage;
     }
 
@@ -250,6 +250,7 @@ public class AutoSwitchHATest {
         await().atMost(Duration.ofSeconds(30)).until(
             () -> messageCount == getMessageCount(messageStore2));
 
+        messageStore2.getMessageStoreConfig().setHaSendHeartbeatInterval(1000);
         messageStore2.getMessageStoreConfig().setAsyncLearner(false);
         await().pollInterval(Duration.ofSeconds(1)).atMost(Duration.ofSeconds(30)).until(() -> {
             final Set<String> syncStateSet =
@@ -358,12 +359,15 @@ public class AutoSwitchHATest {
         await().pollInterval(Duration.ofSeconds(1)).atMost(Duration.ofSeconds(30)).until(
             () -> messageCount == getMessageCount(messageStore2));
 
+        System.out.println("==========================================");
         // Step2, change store2 to master, epoch = 2
         changeMasterAndPutMessage(2, this.messageStore2, "127.0.0.1:7001",
             this.messageStore1, 1, messageCount);
         await().pollInterval(Duration.ofSeconds(1)).atMost(Duration.ofSeconds(30)).until(
             () -> messageCount * 2 == getMessageCount(messageStore1));
 
+
+        System.out.println("==========================================");
         // Step3, change store1 to master, epoch = 3
         changeMasterAndPutMessage(3, this.messageStore1, "127.0.0.1:7000",
             this.messageStore2, 1, messageCount);
@@ -390,10 +394,6 @@ public class AutoSwitchHATest {
         await().atMost(Duration.ofSeconds(30)).until(
             () -> messageCount == getMessageCount(messageStore3));
     }
-
-    //private void printMasterHaAddress(DefaultMessageStore defaultMessageStore) {
-    //    System.out.println("address: " + defaultMessageStore.getMessageStoreConfig().getHaMasterAddress());
-    //}
 
     @Test
     public void testTruncateEpochLogAndAddBroker() throws Exception {
@@ -423,14 +423,14 @@ public class AutoSwitchHATest {
 
         final AutoSwitchHAService haService = (AutoSwitchHAService) this.messageStore1.getHaService();
         haService.truncateEpochFilePrefix(1570);
-        await().atMost(Duration.ofSeconds(30)).until(
+        await().pollInterval(Duration.ofSeconds(1)).atMost(Duration.ofSeconds(30)).until(
             () -> messageCount == getMessageCount(messageStore1));
 
         // Step4: add broker3 as slave, only have 10 msg from offset 10, broker3 copy from first file
         messageStore3.getHaService().changeToSlave("", 2, 3L);
         messageStore3.getHaService().updateHaMasterAddress("127.0.0.1:7000");
-        await().atMost(Duration.ofSeconds(30)).until(
-            () -> messageCount == getMessageCount(messageStore1));
+        await().pollInterval(Duration.ofSeconds(1)).atMost(Duration.ofSeconds(30)).until(
+            () -> messageCount == getMessageCount(messageStore3));
     }
 
     @Test

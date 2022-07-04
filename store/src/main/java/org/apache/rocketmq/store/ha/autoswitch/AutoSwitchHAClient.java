@@ -76,8 +76,7 @@ public class AutoSwitchHAClient extends ServiceThread implements HAClient {
     private final EpochStore epochCache;
     private FlowMonitor flowMonitor;
 
-    private long lastReadTimestamp;
-    private long lastWriteTimestamp;
+    private volatile HAConnectionState currentState = HAConnectionState.SHUTDOWN;
 
     /**
      * Confirm offset = min(localMaxOffset, master confirm offset).
@@ -85,8 +84,10 @@ public class AutoSwitchHAClient extends ServiceThread implements HAClient {
     private volatile long currentMasterEpoch = -1L;
     private volatile long currentReceivedEpoch = -1L;
     private volatile long currentConfirmOffset = -1L;
-    private volatile long currentReportedOffset = -1L;
-    private volatile HAConnectionState currentState = HAConnectionState.SHUTDOWN;
+    private volatile long currentTransferOffset = -1L;
+
+    private volatile long lastReadTimestamp;
+    private volatile long lastWriteTimestamp;
 
     public EventLoopGroup workerGroup;
     public Bootstrap bootstrap;
@@ -103,9 +104,11 @@ public class AutoSwitchHAClient extends ServiceThread implements HAClient {
             this.flowMonitor = new FlowMonitor(this.messageStore.getMessageStoreConfig());
         }
 
+        // init offset
+        this.currentMasterEpoch = -1L;
         this.currentReceivedEpoch = -1L;
         this.currentConfirmOffset = -1L;
-        this.currentReportedOffset = -1L;
+        this.currentTransferOffset = -1L;
 
         startNettyClient();
         changeCurrentState(HAConnectionState.READY);
@@ -179,13 +182,9 @@ public class AutoSwitchHAClient extends ServiceThread implements HAClient {
 
     @Override
     public void changeCurrentState(HAConnectionState haConnectionState) {
+        System.out.println("client change state: " + this.currentState + " => " + haConnectionState);
         LOGGER.info("change state to {}", haConnectionState);
         this.currentState = haConnectionState;
-    }
-
-    public void closeMasterAndWait() {
-        this.closeMaster();
-        this.waitForRunning(1000 * 5);
     }
 
     @Override
@@ -198,6 +197,7 @@ public class AutoSwitchHAClient extends ServiceThread implements HAClient {
                 e.printStackTrace();
             }
         }
+        System.out.println("channel close by client");
         LOGGER.info("AutoSwitchHAClient close connection with master {}", this.masterHaAddress.get());
     }
 
@@ -231,15 +231,7 @@ public class AutoSwitchHAClient extends ServiceThread implements HAClient {
         channel.writeAndFlush(haMessage);
     }
 
-    public synchronized void reportSlaveMaxOffset() {
-        final long maxPhyOffset = this.messageStore.getMaxPhyOffset();
-        if (this.currentReportedOffset < maxPhyOffset) {
-            this.currentReportedOffset = maxPhyOffset;
-            this.sendPushCommitLogAck(this.currentReportedOffset);
-        }
-    }
-
-    public void startNettyClient() {
+    public synchronized void startNettyClient() {
         AutoSwitchHAClient haClient = this;
         workerGroup = new NioEventLoopGroup();
         bootstrap = new Bootstrap();
@@ -306,7 +298,6 @@ public class AutoSwitchHAClient extends ServiceThread implements HAClient {
                 channelPromise.await(5000);
                 if (channelPromise.isSuccess()) {
                     changeCurrentState(HAConnectionState.HANDSHAKE);
-                    System.out.println("client receive handshake signal and change to handshake");
                 } else {
                     System.out.println("client not receive handshake signal");
                 }
@@ -327,9 +318,8 @@ public class AutoSwitchHAClient extends ServiceThread implements HAClient {
 
     private boolean transferFromMaster() throws IOException {
         if (isTimeToReportOffset()) {
-            System.out.println("schedule to report slave offset: " + this.currentReportedOffset);
-            LOGGER.info("schedule to report slave offset: {}", this.currentReportedOffset);
-            this.sendPushCommitLogAck(this.currentReportedOffset);
+            LOGGER.info("schedule to report slave offset: {}", this.currentTransferOffset);
+            this.sendPushCommitLogAck();
         }
         return true;
     }
@@ -350,23 +340,33 @@ public class AutoSwitchHAClient extends ServiceThread implements HAClient {
             channelPromise = new DefaultChannelPromise(future.channel());
             future.channel().writeAndFlush(haMessage);
             channelPromise.await(5000);
-            if (channelPromise.isSuccess()) {
-                //System.out.println("client change to transfer");
-                changeCurrentState(HAConnectionState.TRANSFER);
-            }
             return channelPromise.isSuccess();
         } catch (InterruptedException e) {
             System.out.println("query epoch failed");
             future.channel().close().sync();
         }
-        return false;
+        return true;
     }
 
     public void doConsistencyRepairWithMaster(List<EpochEntry> entryList) {
+        channelPromise.setSuccess();
         if (!doTruncateFiles(entryList)) {
             return;
         }
-        sendConfirmTruncateToMaster(messageStore.getMaxPhyOffset());
+
+        long masterMinOffset = entryList.get(0).getStartOffset();
+        long masterMaxOffset = entryList.get(entryList.size() - 1).getEndOffset();
+
+        // only take effect when slave commitLog is empty
+        if (currentTransferOffset == -1L) {
+            boolean fromLast = this.messageStore.getMessageStoreConfig().isSyncFromLastFile();
+            currentTransferOffset = fromLast ? masterMaxOffset : masterMinOffset;
+        } else {
+            currentTransferOffset = Math.max(currentTransferOffset, masterMinOffset);
+            currentTransferOffset = Math.min(currentTransferOffset, masterMaxOffset);
+        }
+
+        sendConfirmTruncateToMaster(currentTransferOffset);
         changeCurrentState(HAConnectionState.TRANSFER);
     }
 
@@ -377,14 +377,16 @@ public class AutoSwitchHAClient extends ServiceThread implements HAClient {
         future.channel().writeAndFlush(haMessage);
     }
 
-    public synchronized void sendPushCommitLogAck(final long offsetToReport) {
+    public synchronized void sendPushCommitLogAck() {
         PushCommitLogAck pushCommitLogAck = new PushCommitLogAck();
-        pushCommitLogAck.setConfirmOffset(offsetToReport);
+        pushCommitLogAck.setConfirmOffset(this.currentTransferOffset);
         pushCommitLogAck.setReadOnly(messageStore.getMessageStoreConfig().isAsyncLearner());
         HAMessage haMessage = new HAMessage(HAMessageType.PUSH_ACK, currentMasterEpoch,
             RemotingSerializable.encode(pushCommitLogAck));
         future.channel().writeAndFlush(haMessage);
         lastWriteTimestamp = System.currentTimeMillis();
+        System.out.printf("send ack, offset=%d, async role=%s%n",
+            this.currentTransferOffset, messageStore.getMessageStoreConfig().isAsyncLearner());
     }
 
     @Override
@@ -397,22 +399,24 @@ public class AutoSwitchHAClient extends ServiceThread implements HAClient {
                 switch (this.currentState) {
                     case READY:
                         if (!tryConnectToMaster()) {
-                            this.waitForRunning(1000);
+                            closeMaster();
+                            this.waitForRunning(50);
                         }
                         continue;
                     case HANDSHAKE:
                         if (!queryMasterEpoch()) {
-                            this.waitForRunning(1000);
+                            closeMaster();
+                            this.waitForRunning(50);
                         }
                         continue;
                     case TRANSFER:
                     case SUSPEND:
                         // only do flow control and monitor
                         if (!transferFromMaster()) {
-                            closeMasterAndWait();
+                            closeMaster();
                             break;
                         }
-                        this.waitForRunning(1000);
+                        this.waitForRunning(50);
                         continue;
                     case SHUTDOWN:
                     default:
@@ -428,7 +432,7 @@ public class AutoSwitchHAClient extends ServiceThread implements HAClient {
                 }
             } catch (Exception e) {
                 LOGGER.warn(this.getServiceName() + " service has exception. ", e);
-                closeMasterAndWait();
+                closeMaster();
             }
         }
     }
@@ -439,6 +443,7 @@ public class AutoSwitchHAClient extends ServiceThread implements HAClient {
     private boolean doTruncateFiles(List<EpochEntry> masterEpochEntries) {
 
         System.out.println("client receive master epoch: " + masterEpochEntries);
+
         // If epochMap is empty, means the broker is a new replicas
         if (this.epochCache.getAllEntries().size() == 0) {
             System.out.println("slave epoch list is null, so skip truncate files");
@@ -462,8 +467,6 @@ public class AutoSwitchHAClient extends ServiceThread implements HAClient {
             return false;
         }
 
-        boolean syncFromLastFile = this.messageStore.getMessageStoreConfig().isSyncFromLastFile();
-
         // Truncate invalid msg first
         if (0 > truncateStrategy.truncateInvalidMsg(messageStore, truncateOffset)) {
             LOGGER.error("Failed to truncate slave log to {}", truncateOffset);
@@ -474,8 +477,7 @@ public class AutoSwitchHAClient extends ServiceThread implements HAClient {
         this.epochCache.truncateSuffixByOffset(truncateOffset);
         LOGGER.info("Truncate slave log to {} success, change to transfer state", truncateOffset);
 
-        changeCurrentState(HAConnectionState.TRANSFER);
-        this.currentReportedOffset = truncateOffset;
+        this.currentTransferOffset = truncateOffset;
         return true;
     }
 
@@ -497,6 +499,6 @@ public class AutoSwitchHAClient extends ServiceThread implements HAClient {
                 masterOffset, byteBuffer.array(), 16, byteBuffer.remaining());
         }
         this.currentConfirmOffset = Math.min(currentConfirmOffset, messageStore.getMaxPhyOffset());
-        this.reportSlaveMaxOffset();
+        this.currentTransferOffset = this.messageStore.getMaxPhyOffset();
     }
 }

@@ -11,9 +11,9 @@ public interface EpochStore {
 
     boolean tryAppendEpochEntry(final EpochEntry entry);
 
-    EpochEntry getLastEntry();
+    List<EpochEntry> getAllEntries();
 
-    long getLastEpoch();
+    EpochEntry getLastEntry();
 
     EpochEntry findEpochEntryByEpoch(final long epoch);
 
@@ -21,11 +21,11 @@ public interface EpochStore {
 
     EpochEntry findCeilingEntryByEpoch(final long epoch);
 
-    List<EpochEntry> getAllEntries();
-
-    void truncatePrefixByOffset(final long truncateOffset);
+    long getLastEpoch();
 
     long findLastConsistentPoint(final EpochStore compareEpoch);
+
+    void truncatePrefixByOffset(final long truncateOffset);
 
     void truncateSuffixByEpoch(final int truncateEpoch);
 

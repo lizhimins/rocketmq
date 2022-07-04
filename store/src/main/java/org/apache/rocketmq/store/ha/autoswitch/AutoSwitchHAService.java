@@ -442,7 +442,11 @@ public class AutoSwitchHAService implements HAService {
     }
 
     public List<EpochEntry> getEpochEntries() {
-        return this.epochCache.getAllEntries();
+        List<EpochEntry> entryList = this.epochCache.getAllEntries();
+        if (entryList.size() > 0) {
+            entryList.get(entryList.size() - 1).setEndOffset(this.defaultMessageStore.getMaxPhyOffset());
+        }
+        return entryList;
     }
 
     public HandshakeResult verifySlaveIdentity(HandshakeSlave handshakeSlave) {

@@ -21,9 +21,14 @@ public class NettyHAClientHandler extends ChannelInboundHandlerAdapter {
     private final AutoSwitchHAClient nettyHAClient;
 
     @Override
+    public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) throws Exception {
+        System.out.println("exception: cause" + cause);
+        super.exceptionCaught(ctx, cause);
+    }
+
+    @Override
     public void channelUnregistered(ChannelHandlerContext ctx) throws Exception {
         System.out.println("client disconnect to server " + ctx.channel().id());
-        nettyHAClient.changeCurrentState(HAConnectionState.READY);
         super.channelUnregistered(ctx);
     }
 
@@ -59,7 +64,7 @@ public class NettyHAClientHandler extends ChannelInboundHandlerAdapter {
         System.out.printf("receive data, epoch: %d, block start offset: %s, available payload size: %s%n",
             epoch, startOffset, message.getByteBuffer().remaining());
         nettyHAClient.doPutCommitLog(epoch, startOffset, message.getByteBuffer());
-        nettyHAClient.sendPushCommitLogAck(startOffset + message.getByteBuffer().limit() - 16);
+        nettyHAClient.sendPushCommitLogAck();
     }
 
     @Override

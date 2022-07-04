@@ -1956,7 +1956,9 @@ public class DefaultMessageStore implements MessageStore {
                     if (DefaultMessageStore.this.brokerConfig.isEnableControllerMode()) {
                         if (DefaultMessageStore.this.haService instanceof AutoSwitchHAService) {
                             final long minPhyOffset = getMinPhyOffset();
-                            ((AutoSwitchHAService) DefaultMessageStore.this.haService).truncateEpochFilePrefix(minPhyOffset - 1);
+
+                            // range change
+                            ((AutoSwitchHAService) DefaultMessageStore.this.haService).truncateEpochFilePrefix(minPhyOffset);
                         }
                     }
                 } else if (isUsageExceedsThreshold) {

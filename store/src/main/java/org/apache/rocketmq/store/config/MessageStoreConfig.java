@@ -304,7 +304,7 @@ public class MessageStoreConfig {
      */
     private boolean syncFromLastFile = false;
 
-    private boolean asyncLearner = false;
+    private volatile boolean asyncLearner = false;
 
     public boolean isDebugLockEnable() {
         return debugLockEnable;

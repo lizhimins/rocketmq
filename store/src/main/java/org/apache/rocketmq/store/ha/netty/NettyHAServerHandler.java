@@ -7,6 +7,7 @@ import io.netty.channel.ChannelInitializer;
 import io.netty.channel.SimpleChannelInboundHandler;
 import io.netty.channel.socket.SocketChannel;
 import java.nio.ByteBuffer;
+import java.time.LocalDateTime;
 import java.util.Date;
 import java.util.List;
 import org.apache.rocketmq.common.EpochEntry;
@@ -66,7 +67,7 @@ public class NettyHAServerHandler extends SimpleChannelInboundHandler<HAMessage>
 
     public void pushCommitLogAck(HAMessage message, Channel channel) {
         PushCommitLogAck pushCommitLogAck = RemotingSerializable.decode(message.getBytes(), PushCommitLogAck.class);
-        System.out.println(new Date() + " broker confirm receive offset: " + pushCommitLogAck.getConfirmOffset());
+        System.out.println(LocalDateTime.now().toLocalTime().toString() + " master receive ack offset: " + pushCommitLogAck.getConfirmOffset());
         nettyHAService.pushCommitLogDataAck(channel, pushCommitLogAck);
     }
 
