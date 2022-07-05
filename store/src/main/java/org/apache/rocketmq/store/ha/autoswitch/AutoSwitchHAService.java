@@ -198,13 +198,10 @@ public class AutoSwitchHAService implements HAService {
     }
 
     private void destroyConnections() {
-        final Set<String> syncStateSet = getSyncStateSet();
-        for (HAConnection haConnection : this.connectionMap.values()) {
-            String clientAddress = haConnection.getClientAddress();
+        for (Channel channel : this.connectionMap.keySet()) {
+            HAConnection haConnection = this.connectionMap.remove(channel);
             haConnection.shutdown();
-            syncStateSet.remove(clientAddress);
         }
-        notifySyncStateSetChanged(syncStateSet);
     }
 
     @Override
@@ -234,15 +231,18 @@ public class AutoSwitchHAService implements HAService {
             "newMasterEpoch:{}, truncate size:{}", minPhyOffset, maxPhyOffset, masterEpoch, truncateSize);
 
         // Correct epoch store
-        this.epochCache.truncateSuffixByOffset(maxPhyOffset);
         this.epochCache.truncateSuffixByEpoch(masterEpoch);
+        this.epochCache.truncateSuffixByOffset(maxPhyOffset);
         this.epochCache.tryAppendEpochEntry(new EpochEntry(masterEpoch, maxPhyOffset));
+
         this.currentMasterEpoch = masterEpoch;
 
         // Rollback index
         this.defaultMessageStore.recoverTopicQueueTable();
 
         setSyncStateSet(new HashSet<>(Collections.singletonList(this.localAddress)));
+        notifySyncStateSetChanged(syncStateSet);
+
         LOGGER.info("Broker change to master success, newMasterEpoch:{}, startPhyOffset:{}", masterEpoch, maxPhyOffset);
         return true;
     }
@@ -251,6 +251,8 @@ public class AutoSwitchHAService implements HAService {
     public boolean changeToSlave(String newMasterAddr, int newMasterEpoch, Long slaveId) {
         try {
             destroyConnections();
+            setSyncStateSet(new HashSet<>());
+
             if (this.haClient == null) {
                 this.haClient = new AutoSwitchHAClient(defaultMessageStore, this.epochCache);
             } else {
@@ -258,7 +260,7 @@ public class AutoSwitchHAService implements HAService {
             }
 
             this.currentMasterEpoch = newMasterEpoch;
-            this.haClient = new AutoSwitchHAClient(defaultMessageStore, this.epochCache);
+
             this.haClient.init();
             this.haClient.updateSlaveId(slaveId);
             this.haClient.updateHaMasterAddress(newMasterAddr);
@@ -319,7 +321,7 @@ public class AutoSwitchHAService implements HAService {
 
     @Override
     public int inSyncSlaveNums(long masterPutWhere) {
-        return syncStateSet.size();
+        return Math.max(1, syncStateSet.size() - 1);
     }
 
     protected boolean isInSyncSlave(final long masterPutWhere, HAConnection conn) {
@@ -352,7 +354,7 @@ public class AutoSwitchHAService implements HAService {
      * A slave will be removed from inSyncStateSet if
      * (curTime - HaConnection.lastCaughtUpTime) > option(haMaxTimeSlaveNotCatchup)
      */
-    public Set<String> buildShrinkInSyncStateSet() {
+    public synchronized Set<String> buildShrinkInSyncStateSet() {
         final HashSet<String> newSyncStateSet = new HashSet<>();
         final long haMaxTimeSlaveNotCatchup =
             this.defaultMessageStore.getMessageStoreConfig().getHaMaxTimeSlaveNotCatchup();
@@ -377,7 +379,7 @@ public class AutoSwitchHAService implements HAService {
      * A slave will be added to inSyncStateSet if its slaveAckOffset >= current confirmOffset
      * and it is caught up to an offset within the current leader epoch.
      */
-    public void tryExpandInSyncStateSet(HAConnection haConnection, final long slaveAckOffset) {
+    public synchronized void tryExpandInSyncStateSet(HAConnection haConnection, final long slaveAckOffset) {
         AutoSwitchHAConnection connection = (AutoSwitchHAConnection) haConnection;
         if (connection.isSlaveAsyncLearner()) {
             return;
@@ -442,11 +444,7 @@ public class AutoSwitchHAService implements HAService {
     }
 
     public List<EpochEntry> getEpochEntries() {
-        List<EpochEntry> entryList = this.epochCache.getAllEntries();
-        if (entryList.size() > 0) {
-            entryList.get(entryList.size() - 1).setEndOffset(this.defaultMessageStore.getMaxPhyOffset());
-        }
-        return entryList;
+        return this.epochCache.getAllEntries();
     }
 
     public HandshakeResult verifySlaveIdentity(HandshakeSlave handshakeSlave) {
@@ -496,8 +494,8 @@ public class AutoSwitchHAService implements HAService {
         }
     }
 
-    public void notifyTransferSome(final long offset) {
-        this.confirmOffset = offset;
+    public void notifyTransferSome() {
+        this.confirmOffset = getConfirmOffset();
         this.groupTransferService.notifyTransferSome();
     }
 
@@ -507,8 +505,10 @@ public class AutoSwitchHAService implements HAService {
             long offset = pushCommitLogAck.getConfirmOffset();
             haConnection.setSlaveAsyncLearner(pushCommitLogAck.isReadOnly());
             haConnection.updateSlaveTransferProgress(offset);
-            tryExpandInSyncStateSet(haConnection, offset);
-            notifyTransferSome(offset);
+            if (!pushCommitLogAck.isReadOnly()) {
+                tryExpandInSyncStateSet(haConnection, offset);
+                notifyTransferSome();
+            }
         }
     }
 
@@ -526,9 +526,8 @@ public class AutoSwitchHAService implements HAService {
     }
 
     public void removeConnection(Channel channel) {
-        HAConnection haConnection = this.connectionMap.get(channel);
+        HAConnection haConnection = this.connectionMap.remove(channel);
         //this.haConnectionStateNotificationService.checkConnectionStateAndNotify(haConnection);
         haConnection.shutdown();
-        this.connectionMap.remove(channel);
     }
 }

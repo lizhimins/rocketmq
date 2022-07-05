@@ -155,7 +155,8 @@ public class EpochFileStore implements EpochStore {
         try {
             if (!this.epochMap.isEmpty()) {
                 for (Map.Entry<Long, EpochEntry> entry : this.epochMap.entrySet()) {
-                    if (entry.getValue().getStartOffset() <= offset && entry.getValue().getEndOffset() > offset) {
+                    // start offset <= offset < end offset
+                    if (entry.getValue().getStartOffset() <= offset && offset < entry.getValue().getEndOffset()) {
                         return new EpochEntry(entry.getValue());
                     }
                 }
@@ -184,8 +185,8 @@ public class EpochFileStore implements EpochStore {
     public List<EpochEntry> getAllEntries() {
         this.readLock.lock();
         try {
-            final List<EpochEntry> result = new ArrayList<>(this.epochMap.size());
-            result.addAll(this.epochMap.values());
+            final ArrayList<EpochEntry> result = new ArrayList<>(this.epochMap.size());
+            this.epochMap.forEach((key, value) -> result.add(new EpochEntry(value)));
             return result;
         } finally {
             this.readLock.unlock();

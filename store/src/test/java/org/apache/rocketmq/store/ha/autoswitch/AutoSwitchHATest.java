@@ -208,7 +208,7 @@ public class AutoSwitchHATest {
             }
             result.release();
         }
-        System.out.println("found: " + foundMessage);
+        System.out.println("test found message total: " + foundMessage);
         return foundMessage;
     }
 
@@ -296,6 +296,7 @@ public class AutoSwitchHATest {
     @Test
     public void testOptionAllAckInSyncStateSet() throws Exception {
         initMessageStore(DEFAULT_MAPPED_FILE_SIZE);
+
         int messageCount = 10;
         changeMasterAndPutMessage(1, this.messageStore1, "127.0.0.1:7000",
             this.messageStore2, 1, messageCount);
@@ -371,7 +372,7 @@ public class AutoSwitchHATest {
         // Step3, change store1 to master, epoch = 3
         changeMasterAndPutMessage(3, this.messageStore1, "127.0.0.1:7000",
             this.messageStore2, 1, messageCount);
-        await().pollInterval(Duration.ofSeconds(1)).atMost(Duration.ofSeconds(30)).until(
+        await().pollInterval(Duration.ofSeconds(1)).atMost(Duration.ofSeconds(60)).until(
             () -> messageCount * 3 == getMessageCount(messageStore2));
     }
 
@@ -431,6 +432,11 @@ public class AutoSwitchHATest {
         messageStore3.getHaService().updateHaMasterAddress("127.0.0.1:7000");
         await().pollInterval(Duration.ofSeconds(1)).atMost(Duration.ofSeconds(30)).until(
             () -> messageCount == getMessageCount(messageStore3));
+    }
+
+    @Test
+    public void testPushDataForDifferentEpoch() {
+
     }
 
     @Test

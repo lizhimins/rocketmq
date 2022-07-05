@@ -72,4 +72,8 @@ public class HAMessage {
     public int getBodyLength() {
         return bodyLength;
     }
+
+    public void setBodyLength(int bodyLength) {
+        this.bodyLength = bodyLength;
+    }
 }

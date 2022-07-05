@@ -1,14 +1,9 @@
 package org.apache.rocketmq.store.ha.netty;
 
 import io.netty.channel.Channel;
-import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
-import io.netty.channel.ChannelInitializer;
 import io.netty.channel.SimpleChannelInboundHandler;
-import io.netty.channel.socket.SocketChannel;
 import java.nio.ByteBuffer;
-import java.time.LocalDateTime;
-import java.util.Date;
 import java.util.List;
 import org.apache.rocketmq.common.EpochEntry;
 import org.apache.rocketmq.common.constant.LoggerName;
@@ -45,6 +40,10 @@ public class NettyHAServerHandler extends SimpleChannelInboundHandler<HAMessage>
 
     public void responseEpochList(Channel channel) {
         List<EpochEntry> entries = nettyHAService.getEpochEntries();
+        // Set epoch end offset == message store max offset
+        if (entries.size() > 0) {
+            entries.get(entries.size() - 1).setEndOffset(nettyHAService.getDefaultMessageStore().getMaxPhyOffset());
+        }
         ByteBuffer byteBuffer = ByteBuffer.allocate(3 * 8 * entries.size());
         for (EpochEntry entry : entries) {
             byteBuffer.putLong(entry.getEpoch()).putLong(entry.getStartOffset()).putLong(entry.getEndOffset());
@@ -52,7 +51,7 @@ public class NettyHAServerHandler extends SimpleChannelInboundHandler<HAMessage>
         byteBuffer.flip();
         HAMessage replyMessage = new HAMessage(HAMessageType.RETURN_EPOCH,
             nettyHAService.getCurrentMasterEpoch(), byteBuffer);
-        System.out.println("handler: " + entries + " size: " + entries.size());
+        //System.out.println("server send epoch: " + entries + " size: " + entries.size());
         channel.writeAndFlush(replyMessage);
     }
 
@@ -67,15 +66,9 @@ public class NettyHAServerHandler extends SimpleChannelInboundHandler<HAMessage>
 
     public void pushCommitLogAck(HAMessage message, Channel channel) {
         PushCommitLogAck pushCommitLogAck = RemotingSerializable.decode(message.getBytes(), PushCommitLogAck.class);
-        System.out.println(LocalDateTime.now().toLocalTime().toString() + " master receive ack offset: " + pushCommitLogAck.getConfirmOffset());
+        System.out.println("master receive ack offset: " + pushCommitLogAck.getConfirmOffset());
         nettyHAService.pushCommitLogDataAck(channel, pushCommitLogAck);
     }
-
-    //@Override
-    //public void channelUnregistered(ChannelHandlerContext ctx) throws Exception {
-    //    //nettyHAService.removeConnection(ctx.channel());
-    //    super.channelUnregistered(ctx);
-    //}
 
     @Override
     protected void channelRead0(ChannelHandlerContext ctx, HAMessage message) throws Exception {

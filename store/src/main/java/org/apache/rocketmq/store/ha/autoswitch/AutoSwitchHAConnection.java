@@ -49,7 +49,7 @@ public class AutoSwitchHAConnection implements HAConnection {
 
     private volatile HAConnectionState currentState = HAConnectionState.READY;
     private long currentTransferOffset = 0L;
-    private volatile EpochEntry currentTransferEpochEntry = null;
+    private EpochEntry currentTransferEpochEntry = null;
     private SelectMappedBufferResult currentTransferBuffer;
 
     private volatile long slaveId = -1L;
@@ -155,7 +155,7 @@ public class AutoSwitchHAConnection implements HAConnection {
 
     @Override
     public String getClientAddress() {
-        return channel.remoteAddress().toString();
+        return slaveAddress;
     }
 
     @Override
@@ -227,9 +227,6 @@ public class AutoSwitchHAConnection implements HAConnection {
             long phyMinOffset = haService.getDefaultMessageStore().getCommitLog().getMinOffset();
             long phyMaxOffset = haService.getDefaultMessageStore().getCommitLog().getMaxOffset();
 
-            //System.out.printf(new Date() + " currentTransferOffset: %d, phyMinOffset:%d, phyMaxOffset:%d%n",
-            //    currentTransferOffset, phyMinOffset, phyMaxOffset);
-
             // We must ensure that the starting point of syncing log
             // must be the startOffset of a file (maybe the last file, or the minOffset)
             if (currentTransferOffset < phyMinOffset) {
@@ -282,25 +279,30 @@ public class AutoSwitchHAConnection implements HAConnection {
             // currentTransferEpoch == last epoch && endOffset = Long.MAX_VALUE
             final long currentEpochEndOffset = currentTransferEpochEntry.getEndOffset();
             if (currentTransferOffset + size > currentEpochEndOffset) {
-                currentTransferEpochEntry = epochCache.findCeilingEntryByEpoch(currentTransferOffset);
+                long currentEpoch = currentTransferEpochEntry.getEpoch();
+                currentTransferEpochEntry = epochCache.findCeilingEntryByEpoch(currentEpoch);
                 if (currentTransferEpochEntry == null) {
                     LOGGER.error("Can't find a bigger epochEntry than epoch {}", currentTransferOffset);
                     waitForRunning(100);
                     return;
                 }
                 size = (int) (currentEpochEndOffset - currentTransferOffset);
+                currentTransferBuffer.getByteBuffer().limit(size);
             }
-            doNettyTransferData();
+            doNettyTransferData(size);
             currentTransferOffset += size;
         }
 
-        private void doNettyTransferData() {
+        private void doNettyTransferData(int size) {
             HAMessage haMessage = new HAMessage(HAMessageType.PUSH_DATA, currentTransferEpochEntry.getEpoch());
             PushCommitLogData pushCommitLogData = new PushCommitLogData();
             pushCommitLogData.setEpoch(currentTransferEpochEntry.getEpoch());
             pushCommitLogData.setStartOffset(currentTransferOffset);
             haMessage.appendBody(pushCommitLogData.encode());
             haMessage.appendBody(currentTransferBuffer.getByteBuffer());
+            haMessage.setBodyLength(16 + size);
+            //System.out.println("size: " + size + " bodySize: " + haMessage.getBodyLength());
+
             ChannelFuture future = channel.writeAndFlush(haMessage);
 
             future.addListener((ChannelFutureListener) future1 -> {
