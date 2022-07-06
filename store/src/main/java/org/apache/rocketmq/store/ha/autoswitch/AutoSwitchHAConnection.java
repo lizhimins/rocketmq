@@ -46,7 +46,7 @@ public class AutoSwitchHAConnection implements HAConnection {
     private final NettyTransferService transferService;
 
     private volatile HAConnectionState currentState = HAConnectionState.READY;
-    private long currentTransferOffset = 0L;
+    private long currentTransferOffset = -1L;
     private EpochEntry currentTransferEpochEntry = null;
     private SelectMappedBufferResult currentTransferBuffer;
 
@@ -271,21 +271,27 @@ public class AutoSwitchHAConnection implements HAConnection {
                 return;
             }
 
+            currentTransferOffset = currentTransferBuffer.getStartOffset();
             // We must ensure that the transmitted logs are within the same epoch
             // currentTransferEpoch == last epoch && endOffset = Long.MAX_VALUE
             final long currentEpochEndOffset = currentTransferEpochEntry.getEndOffset();
-            if (currentTransferOffset + size > currentEpochEndOffset) {
+            boolean separated = currentTransferOffset + size > currentEpochEndOffset;
+            if (separated) {
+                size = (int) (currentEpochEndOffset - currentTransferOffset);
+                currentTransferBuffer.getByteBuffer().limit(size);
+            }
+
+            doNettyTransferData(size);
+
+            if (separated) {
                 long currentEpoch = currentTransferEpochEntry.getEpoch();
                 currentTransferEpochEntry = epochCache.findCeilingEntryByEpoch(currentEpoch);
                 if (currentTransferEpochEntry == null) {
                     LOGGER.error("Can't find a bigger epochEntry than epoch {}", currentTransferOffset);
                     waitForRunning(100);
-                    return;
                 }
-                size = (int) (currentEpochEndOffset - currentTransferOffset);
-                currentTransferBuffer.getByteBuffer().limit(size);
             }
-            doNettyTransferData(size);
+
             currentTransferOffset += size;
         }
 
@@ -296,6 +302,10 @@ public class AutoSwitchHAConnection implements HAConnection {
             pushCommitLogData.setConfirmOffset(haService.getConfirmOffset());
             pushCommitLogData.setStartOffset(currentTransferOffset);
             haMessage.appendBody(pushCommitLogData.encode());
+
+            System.out.printf("transfer data, epoch=%d, start=%d, size=%d, master confirm=%d%n",
+                currentTransferEpochEntry.getEpoch(), currentTransferOffset, maxTransferSize,
+                pushCommitLogData.getConfirmOffset());
 
             if (maxTransferSize > 0) {
                 haMessage.appendBody(currentTransferBuffer.getByteBuffer());

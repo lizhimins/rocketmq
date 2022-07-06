@@ -514,13 +514,13 @@ public class AutoSwitchHAClient extends ServiceThread implements HAClient {
         // Must put data first
         if (byteBuffer.hasRemaining()) {
             this.messageStore.appendToCommitLog(
-                masterOffset, byteBuffer.array(), 16, byteBuffer.remaining());
+                masterOffset, byteBuffer.array(), 24, byteBuffer.remaining());
         }
 
         confirmOffset = Math.min(confirmOffset, this.messageStore.getMaxPhyOffset());
-        System.out.println("confirm offset: " + confirmOffset);
+        //System.out.println("confirm offset: " + confirmOffset);
         this.haService.updateConfirmOffset(confirmOffset);
-        System.out.println("print confirm offset: " + haService.getConfirmOffset());
+        System.out.println("print confirm offset: " + haService.getLocalAddress() + " " + haService.getConfirmOffset());
 
         // If epoch changed to bigger, last epoch record would be terminated
         if (this.currentReceivedEpoch < currentBlockEpoch) {
