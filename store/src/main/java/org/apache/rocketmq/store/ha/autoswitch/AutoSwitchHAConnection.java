@@ -252,22 +252,20 @@ public class AutoSwitchHAConnection implements HAConnection {
             if (currentTransferBuffer == null || currentTransferBuffer.getSize() <= 0) {
                 return 0;
             }
-            int size = currentTransferBuffer.getSize();
-            if (size > haService.getDefaultMessageStore().getMessageStoreConfig().getHaTransferBatchSize()) {
-                size = haService.getDefaultMessageStore().getMessageStoreConfig().getHaTransferBatchSize();
-            }
-            return size;
+            return Math.min(currentTransferBuffer.getSize(),
+                haService.getDefaultMessageStore().getMessageStoreConfig().getHaTransferBatchSize());
         }
 
         private void pushCommitLogDataToSlave0() {
             currentTransferBuffer = haService.getDefaultMessageStore().getCommitLogData(currentTransferOffset);
             if (currentTransferBuffer == null) {
-                waitForRunning(100);
+                doNettyTransferData(0);
+                waitForRunning(1000);
                 return;
             }
 
             int size = this.getNextTransferDataSize();
-            if (size <= 0) {
+            if (size < 0) {
                 this.releaseData();
                 this.waitForRunning(100);
                 return;
@@ -291,30 +289,34 @@ public class AutoSwitchHAConnection implements HAConnection {
             currentTransferOffset += size;
         }
 
-        private void doNettyTransferData(int size) {
+        private void doNettyTransferData(int maxTransferSize) {
             HAMessage haMessage = new HAMessage(HAMessageType.PUSH_DATA, currentTransferEpochEntry.getEpoch());
             PushCommitLogData pushCommitLogData = new PushCommitLogData();
             pushCommitLogData.setEpoch(currentTransferEpochEntry.getEpoch());
-            pushCommitLogData.setStartOffset(haService.getConfirmOffset());
+            pushCommitLogData.setConfirmOffset(haService.getConfirmOffset());
             pushCommitLogData.setStartOffset(currentTransferOffset);
             haMessage.appendBody(pushCommitLogData.encode());
-            haMessage.appendBody(currentTransferBuffer.getByteBuffer());
-            haMessage.setBodyLength(24 + size);
+
+            if (maxTransferSize > 0) {
+                haMessage.appendBody(currentTransferBuffer.getByteBuffer());
+                haMessage.setBodyLength(24 + maxTransferSize);
+            }
 
             ChannelFuture future = channel.writeAndFlush(haMessage);
-
             future.addListener((ChannelFutureListener) future1 -> {
                 if (future1.isSuccess()) {
-                    LOGGER.info("transfer data, " + currentTransferBuffer.getSize());
-                    //System.out.println(new Date() +" transfer success, " + currentTransferBuffer.getSize());
+                    //LOGGER.info("transfer data, " + maxTransferSize);
+                    //System.out.println("transfer success, " + maxTransferSize);
                 } else {
-                    System.out.println("transfer error, " + currentTransferBuffer.getSize());
+                    System.out.println("transfer error, " + maxTransferSize);
                 }
             });
 
             try {
                 future.sync();
-                releaseData();
+                if (maxTransferSize > 0) {
+                    releaseData();
+                }
             } catch (InterruptedException e) {
                 LOGGER.error("Netty transfer data error", e);
                 waitForRunning(100);

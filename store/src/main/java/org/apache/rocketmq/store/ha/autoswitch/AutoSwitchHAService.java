@@ -55,6 +55,7 @@ import org.apache.rocketmq.logging.InternalLoggerFactory;
 import org.apache.rocketmq.remoting.protocol.LanguageCode;
 import org.apache.rocketmq.store.CommitLog;
 import org.apache.rocketmq.store.DefaultMessageStore;
+import org.apache.rocketmq.store.config.BrokerRole;
 import org.apache.rocketmq.store.ha.GroupTransferService;
 import org.apache.rocketmq.store.ha.HAClient;
 import org.apache.rocketmq.store.ha.HAConnection;
@@ -131,18 +132,10 @@ public class AutoSwitchHAService implements HAService {
         if (this.haClient != null) {
             this.haClient.shutdown();
         }
+
         executorService.shutdown();
         scheduledService.shutdown();
 
-        // Wait until the server socket is closed.
-        // In this example, this does not happen, but you can do that to gracefully
-        // shut down your server.
-        //try {
-        //    future.channel().closeFuture().sync();
-        //} catch (InterruptedException e) {
-        //    e.printStackTrace();
-        //}
-        //
         bossGroup.shutdownGracefully();
         workerGroup.shutdownGracefully();
     }
@@ -254,7 +247,7 @@ public class AutoSwitchHAService implements HAService {
             setSyncStateSet(new HashSet<>());
 
             if (this.haClient == null) {
-                this.haClient = new AutoSwitchHAClient(this, this.epochCache);
+                this.haClient = new AutoSwitchHAClient(this);
             } else {
                 this.haClient.shutdown();
             }
@@ -290,7 +283,19 @@ public class AutoSwitchHAService implements HAService {
         return new AtomicLong(this.confirmOffset);
     }
 
+    /**
+     * Get confirm offset (min slaveAckOffset of all syncStateSet members) for master
+     */
     public long getConfirmOffset() {
+        if (this.defaultMessageStore.getMessageStoreConfig().getBrokerRole() != BrokerRole.SLAVE) {
+            if (this.syncStateSet.size() == 1) {
+                return this.defaultMessageStore.getMaxPhyOffset();
+            }
+            // First time compute confirmOffset.
+            if (this.confirmOffset <= 0) {
+                this.confirmOffset = computeConfirmOffset();
+            }
+        }
         return confirmOffset;
     }
 
@@ -538,5 +543,13 @@ public class AutoSwitchHAService implements HAService {
         HAConnection haConnection = this.connectionMap.remove(channel);
         //this.haConnectionStateNotificationService.checkConnectionStateAndNotify(haConnection);
         haConnection.shutdown();
+    }
+
+    public EpochStore getEpochCache() {
+        return epochCache;
+    }
+
+    public void setEpochCache(EpochStore epochCache) {
+        this.epochCache = epochCache;
     }
 }

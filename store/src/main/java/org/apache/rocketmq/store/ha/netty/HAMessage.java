@@ -7,8 +7,11 @@ import java.util.List;
 public class HAMessage {
 
     private HAMessageType type;
+
     private long epoch;
+
     private int bodyLength;
+
     private final List<ByteBuffer> byteBufferList;
 
     public HAMessage(HAMessageType type, long epoch) {

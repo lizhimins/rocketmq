@@ -23,11 +23,23 @@ public interface EpochStore {
 
     long getLastEpoch();
 
+    /**
+     * Find the consistentPoint between compareStore and local.
+     */
     long findLastConsistentPoint(final EpochStore compareEpoch);
 
+    /**
+     * Remove epochEntries with endOffset <= truncateOffset.
+     */
     void truncatePrefixByOffset(final long truncateOffset);
 
+    /**
+     * Remove epochEntries with epoch >= truncateEpoch.
+     */
     void truncateSuffixByEpoch(final int truncateEpoch);
 
+    /**
+     * Remove epochEntries with startOffset >= truncateOffset.
+     */
     void truncateSuffixByOffset(final long truncateOffset);
 }

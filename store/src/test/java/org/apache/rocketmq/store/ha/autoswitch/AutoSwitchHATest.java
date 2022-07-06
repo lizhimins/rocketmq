@@ -436,7 +436,7 @@ public class AutoSwitchHATest {
             () -> 11 == getMessageCount(messageStore1, 10));
 
         messageStore1.getMessageStoreConfig().setDuplicationEnable(true);
-        
+
         System.out.println("==============================");
         // Step4: add broker3 as slave, only have 10 msg from offset 10, broker3 copy from first file
         messageStore3.getHaService().changeToSlave("", 2, 3L);

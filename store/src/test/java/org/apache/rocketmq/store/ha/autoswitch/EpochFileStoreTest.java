@@ -97,10 +97,10 @@ public class EpochFileStoreTest {
 
     @Test
     public void testFindEpochEntryByOffset() {
-        //final EpochEntry entry = this.epochStore.findEpochEntryByOffset(350);
-        //assertEquals(entry.getEpoch(), 2);
-        //assertEquals(entry.getStartOffset(), 300);
-        //assertEquals(entry.getEndOffset(), 500);
+        final EpochEntry entry = this.epochStore.findEpochEntryByOffset(350);
+        assertEquals(entry.getEpoch(), 2);
+        assertEquals(entry.getStartOffset(), 300);
+        assertEquals(entry.getEndOffset(), 500);
     }
 
     @Test
@@ -115,8 +115,16 @@ public class EpochFileStoreTest {
          *  cache2: <Epoch1, 100>, <Epoch2, 300>, <Epoch3, 450>
          *  The consistent point should be 450
          */
-        //final long consistentPoint = this.epochStore.findConsistentPoint(this.epochStore2);
-        //assertEquals(consistentPoint, 450);
+        final long consistentPoint = this.epochStore.findLastConsistentPoint(this.epochStore2);
+        assertEquals(consistentPoint, 450);
+    }
+
+    private EpochStore setLastEpochEndOffset(EpochStore epochStore, long lastOffset) {
+        List<EpochEntry> entries = epochStore.getAllEntries();
+        entries.get(entries.size() - 1).setEndOffset(lastOffset);
+        epochStore = new EpochFileStore();
+        epochStore.initStateFromEntries(entries);
+        return epochStore;
     }
 
     @Test
@@ -131,10 +139,10 @@ public class EpochFileStoreTest {
          *  cache2: <Epoch1, 100>, <Epoch2, 300>, <Epoch3, 500, 600>
          *  The consistent point should be 600
          */
-        //this.epochStore.setLastEpochEntryEndOffset(700);
-        //this.epochStore2.setLastEpochEntryEndOffset(600);
-        //final long consistentPoint = this.epochStore.findConsistentPoint(this.epochStore2);
-        //assertEquals(consistentPoint, 600);
+        this.epochStore = setLastEpochEndOffset(epochStore, 700);
+        this.epochStore2 = setLastEpochEndOffset(epochStore2, 600);
+        final long consistentPoint = this.epochStore.findLastConsistentPoint(this.epochStore2);
+        assertEquals(consistentPoint, 600);
     }
 
     @Test
@@ -148,8 +156,8 @@ public class EpochFileStoreTest {
          *  cache2: <Epoch1, 200>, <Epoch2, 500>
          *  The consistent point should be -1
          */
-        //final long consistentPoint = this.epochStore.findConsistentPoint(this.epochStore2);
-        //assertEquals(consistentPoint, -1);
+        final long consistentPoint = this.epochStore.findLastConsistentPoint(this.epochStore2);
+        assertEquals(consistentPoint, -1);
     }
 
     @Test
@@ -165,8 +173,8 @@ public class EpochFileStoreTest {
          *  cache2: <Epoch1, 100>, <Epoch2, 300>, <Epoch3, 500>, <Epoch4, 800>
          *  The consistent point should be 700
          */
-        //this.epochStore.setLastEpochEntryEndOffset(700);
-        //final long consistentPoint = this.epochStore2.findConsistentPoint(this.epochStore);
-        //assertEquals(consistentPoint, 700);
+        this.epochStore = setLastEpochEndOffset(epochStore, 700);
+        final long consistentPoint = this.epochStore2.findLastConsistentPoint(this.epochStore);
+        assertEquals(consistentPoint, 700);
     }
 }

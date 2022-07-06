@@ -72,20 +72,15 @@ public class AutoSwitchHAClient extends ServiceThread implements HAClient {
     private final AtomicReference<Long> slaveId = new AtomicReference<>();
 
     private final AutoSwitchHAService haService;
-    private final DefaultMessageStore messageStore;
     private final EpochStore epochCache;
+    private final DefaultMessageStore messageStore;
     private final TruncateStrategy truncateStrategy;
     private FlowMonitor flowMonitor;
 
     private volatile HAConnectionState currentState = HAConnectionState.SHUTDOWN;
-
-    /**
-     * Confirm offset = min(localMaxOffset, master confirm offset).
-     */
     private volatile long currentMasterEpoch = -1L;
     private volatile long currentReceivedEpoch = -1L;
     private volatile long currentTransferOffset = -1L;
-
     private volatile long lastReadTimestamp;
     private volatile long lastWriteTimestamp;
 
@@ -94,10 +89,10 @@ public class AutoSwitchHAClient extends ServiceThread implements HAClient {
     private ChannelFuture future;
     private ChannelPromise channelPromise;
 
-    public AutoSwitchHAClient(AutoSwitchHAService haService, EpochStore epochCache) {
+    public AutoSwitchHAClient(AutoSwitchHAService haService) {
         this.haService = haService;
         this.messageStore = haService.getDefaultMessageStore();
-        this.epochCache = epochCache;
+        this.epochCache = haService.getEpochCache();
         this.truncateStrategy = new MoveAndDiscardTruncateStrategy();
     }
 
@@ -182,12 +177,12 @@ public class AutoSwitchHAClient extends ServiceThread implements HAClient {
 
     @Override
     public long getLastReadTimestamp() {
-        return this.getLastReadTimestamp();
+        return this.lastReadTimestamp;
     }
 
     @Override
     public long getLastWriteTimestamp() {
-        return this.getLastWriteTimestamp();
+        return this.lastWriteTimestamp;
     }
 
     @Override
@@ -335,7 +330,7 @@ public class AutoSwitchHAClient extends ServiceThread implements HAClient {
         return interval > this.messageStore.getMessageStoreConfig().getHaSendHeartbeatInterval();
     }
 
-    private boolean transferFromMaster() throws IOException {
+    private boolean transferFromMaster() {
         if (isTimeToReportOffset()) {
             LOGGER.info("schedule to report slave offset: {}", this.currentTransferOffset);
             this.sendPushCommitLogAck();
@@ -523,7 +518,9 @@ public class AutoSwitchHAClient extends ServiceThread implements HAClient {
         }
 
         confirmOffset = Math.min(confirmOffset, this.messageStore.getMaxPhyOffset());
+        System.out.println("confirm offset: " + confirmOffset);
         this.haService.updateConfirmOffset(confirmOffset);
+        System.out.println("print confirm offset: " + haService.getConfirmOffset());
 
         // If epoch changed to bigger, last epoch record would be terminated
         if (this.currentReceivedEpoch < currentBlockEpoch) {
