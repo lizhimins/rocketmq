@@ -87,6 +87,7 @@ public class NettyHAServerHandler extends SimpleChannelInboundHandler<HAMessage>
         if (!message.getType().equals(HAMessageType.PUSH_ACK)) {
             System.out.println(message.getType());
         }
+
         Channel channel = ctx.channel();
         switch (message.getType()) {
             case SLAVE_HANDSHAKE:

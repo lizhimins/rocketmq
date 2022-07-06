@@ -6,6 +6,8 @@ public class PushCommitLogData {
 
     private long epoch;
 
+    private long confirmOffset;
+
     private long startOffset;
 
     public long getEpoch() {
@@ -24,9 +26,18 @@ public class PushCommitLogData {
         this.startOffset = startOffset;
     }
 
+    public long getConfirmOffset() {
+        return confirmOffset;
+    }
+
+    public void setConfirmOffset(long confirmOffset) {
+        this.confirmOffset = confirmOffset;
+    }
+
     public ByteBuffer encode() {
-        ByteBuffer byteBuffer = ByteBuffer.allocate(16);
+        ByteBuffer byteBuffer = ByteBuffer.allocate(24);
         byteBuffer.putLong(epoch);
+        byteBuffer.putLong(confirmOffset);
         byteBuffer.putLong(startOffset);
         byteBuffer.flip();
         return byteBuffer;

@@ -21,13 +21,11 @@ import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelFutureListener;
 import java.nio.channels.SocketChannel;
-import java.util.Date;
 import org.apache.rocketmq.common.EpochEntry;
 import org.apache.rocketmq.common.ServiceThread;
 import org.apache.rocketmq.common.constant.LoggerName;
 import org.apache.rocketmq.logging.InternalLogger;
 import org.apache.rocketmq.logging.InternalLoggerFactory;
-import org.apache.rocketmq.remoting.common.RemotingUtil;
 import org.apache.rocketmq.store.DefaultMessageStore;
 import org.apache.rocketmq.store.SelectMappedBufferResult;
 import org.apache.rocketmq.store.ha.FlowMonitor;
@@ -297,11 +295,11 @@ public class AutoSwitchHAConnection implements HAConnection {
             HAMessage haMessage = new HAMessage(HAMessageType.PUSH_DATA, currentTransferEpochEntry.getEpoch());
             PushCommitLogData pushCommitLogData = new PushCommitLogData();
             pushCommitLogData.setEpoch(currentTransferEpochEntry.getEpoch());
+            pushCommitLogData.setStartOffset(haService.getConfirmOffset());
             pushCommitLogData.setStartOffset(currentTransferOffset);
             haMessage.appendBody(pushCommitLogData.encode());
             haMessage.appendBody(currentTransferBuffer.getByteBuffer());
-            haMessage.setBodyLength(16 + size);
-            //System.out.println("size: " + size + " bodySize: " + haMessage.getBodyLength());
+            haMessage.setBodyLength(24 + size);
 
             ChannelFuture future = channel.writeAndFlush(haMessage);
 
@@ -312,11 +310,11 @@ public class AutoSwitchHAConnection implements HAConnection {
                 } else {
                     System.out.println("transfer error, " + currentTransferBuffer.getSize());
                 }
-                releaseData();
             });
 
             try {
                 future.sync();
+                releaseData();
             } catch (InterruptedException e) {
                 LOGGER.error("Netty transfer data error", e);
                 waitForRunning(100);

@@ -80,10 +80,10 @@ public class AutoSwitchHAService implements HAService {
     private static final int READ_MAX_BUFFER_SIZE = 4 * 1024 * 1024;
     private static final int WRITE_MAX_BUFFER_SIZE = 16 * 1024 * 1024;
 
-    private final ScheduledExecutorService scheduledService =
-        Executors.newScheduledThreadPool(1, new ThreadFactoryImpl("ReplicasManager_ExecutorService_"));
-    private final ExecutorService executorService =
-        Executors.newSingleThreadExecutor(new ThreadFactoryImpl("NettyHAService_Executor_"));
+    private final ScheduledExecutorService scheduledService = Executors.newScheduledThreadPool(
+        1, new ThreadFactoryImpl("ReplicasManager_ExecutorService_"));
+    private final ExecutorService executorService = Executors.newSingleThreadExecutor(
+        new ThreadFactoryImpl("NettyHAService_Executor_"));
 
     private final Map<Channel, HAConnection> connectionMap = new ConcurrentHashMap<>();
     private final List<Consumer<Set<String>>> syncStateSetChangedListeners = new ArrayList<>();
@@ -254,7 +254,7 @@ public class AutoSwitchHAService implements HAService {
             setSyncStateSet(new HashSet<>());
 
             if (this.haClient == null) {
-                this.haClient = new AutoSwitchHAClient(defaultMessageStore, this.epochCache);
+                this.haClient = new AutoSwitchHAClient(this, this.epochCache);
             } else {
                 this.haClient.shutdown();
             }
@@ -288,6 +288,10 @@ public class AutoSwitchHAService implements HAService {
     @Override
     public AtomicLong getPush2SlaveMaxOffset() {
         return new AtomicLong(this.confirmOffset);
+    }
+
+    public long getConfirmOffset() {
+        return confirmOffset;
     }
 
     @Override
@@ -405,14 +409,19 @@ public class AutoSwitchHAService implements HAService {
         }
     }
 
+    public void updateConfirmOffset(long confirmOffset) {
+        this.confirmOffset = confirmOffset;
+    }
+
     /**
      * Get confirm offset (min slaveAckOffset of all syncStateSet members)
      */
-    public long getConfirmOffset() {
+    public long computeConfirmOffset() {
         final Set<String> currentSyncStateSet = getSyncStateSet();
         long confirmOffset = this.defaultMessageStore.getMaxPhyOffset();
         for (HAConnection connection : this.connectionMap.values()) {
-            if (currentSyncStateSet.contains(connection.getClientAddress())) {
+            final String slaveAddress = ((AutoSwitchHAConnection) connection).getSlaveAddress();
+            if (currentSyncStateSet.contains(slaveAddress)) {
                 confirmOffset = Math.min(confirmOffset, connection.getSlaveAckOffset());
             }
         }
@@ -495,7 +504,7 @@ public class AutoSwitchHAService implements HAService {
     }
 
     public void notifyTransferSome() {
-        this.confirmOffset = getConfirmOffset();
+        this.confirmOffset = computeConfirmOffset();
         this.groupTransferService.notifyTransferSome();
     }
 

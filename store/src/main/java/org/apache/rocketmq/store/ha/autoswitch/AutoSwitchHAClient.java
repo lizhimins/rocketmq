@@ -71,9 +71,10 @@ public class AutoSwitchHAClient extends ServiceThread implements HAClient {
     private final AtomicReference<String> masterAddress = new AtomicReference<>();
     private final AtomicReference<Long> slaveId = new AtomicReference<>();
 
-    private final TruncateStrategy truncateStrategy = new MoveAndDiscardTruncateStrategy();
+    private final AutoSwitchHAService haService;
     private final DefaultMessageStore messageStore;
     private final EpochStore epochCache;
+    private final TruncateStrategy truncateStrategy;
     private FlowMonitor flowMonitor;
 
     private volatile HAConnectionState currentState = HAConnectionState.SHUTDOWN;
@@ -83,7 +84,6 @@ public class AutoSwitchHAClient extends ServiceThread implements HAClient {
      */
     private volatile long currentMasterEpoch = -1L;
     private volatile long currentReceivedEpoch = -1L;
-    private volatile long currentConfirmOffset = -1L;
     private volatile long currentTransferOffset = -1L;
 
     private volatile long lastReadTimestamp;
@@ -94,9 +94,11 @@ public class AutoSwitchHAClient extends ServiceThread implements HAClient {
     private ChannelFuture future;
     private ChannelPromise channelPromise;
 
-    public AutoSwitchHAClient(DefaultMessageStore defaultMessageStore, EpochStore epochCache) {
-        this.messageStore = defaultMessageStore;
+    public AutoSwitchHAClient(AutoSwitchHAService haService, EpochStore epochCache) {
+        this.haService = haService;
+        this.messageStore = haService.getDefaultMessageStore();
         this.epochCache = epochCache;
+        this.truncateStrategy = new MoveAndDiscardTruncateStrategy();
     }
 
     public void init() throws IOException {
@@ -107,7 +109,6 @@ public class AutoSwitchHAClient extends ServiceThread implements HAClient {
         // init offset
         this.currentMasterEpoch = -1L;
         this.currentReceivedEpoch = -1L;
-        this.currentConfirmOffset = -1L;
         this.currentTransferOffset = -1L;
 
         startNettyClient();
@@ -504,11 +505,15 @@ public class AutoSwitchHAClient extends ServiceThread implements HAClient {
         return true;
     }
 
-    public void doPutCommitLog(long currentBlockEpoch, long masterOffset, ByteBuffer byteBuffer) {
+    public void doPutCommitLog(long currentBlockEpoch, long confirmOffset, long masterOffset, ByteBuffer byteBuffer) {
         long slavePhyOffset = this.messageStore.getMaxPhyOffset();
-        if (slavePhyOffset != masterOffset) {
-            System.out.printf("Put commitLog error, slave: %d, master offset: %d%n", slavePhyOffset, masterOffset);
-            return;
+
+        if (slavePhyOffset != 0) {
+            if (slavePhyOffset != masterOffset) {
+                LOGGER.error("master pushed offset not equal the max phy offset in slave, SLAVE: "
+                    + slavePhyOffset + " MASTER: " + masterOffset);
+                throw new RuntimeException("offset not match");
+            }
         }
 
         // Must put data first
@@ -517,7 +522,8 @@ public class AutoSwitchHAClient extends ServiceThread implements HAClient {
                 masterOffset, byteBuffer.array(), 16, byteBuffer.remaining());
         }
 
-        this.currentConfirmOffset = Math.min(currentConfirmOffset, messageStore.getMaxPhyOffset());
+        confirmOffset = Math.min(confirmOffset, this.messageStore.getMaxPhyOffset());
+        this.haService.updateConfirmOffset(confirmOffset);
 
         // If epoch changed to bigger, last epoch record would be terminated
         if (this.currentReceivedEpoch < currentBlockEpoch) {

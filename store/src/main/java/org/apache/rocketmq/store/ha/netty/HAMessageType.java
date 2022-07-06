@@ -34,7 +34,7 @@ public enum HAMessageType {
     CONFIRM_TRUNCATE(5),
 
     /**
-     * 主向备推送数据, epoch, pull from offset, block size, content(large)
+     * 主向备推送数据, current epoch, confirm offset, pull from offset, block size, content(large)
      */
     PUSH_DATA(6),
 

@@ -177,7 +177,7 @@ public class AutoSwitchHATest {
 
     @After
     public void destroy() throws Exception {
-        System.out.println("================start destroy==============");
+        System.out.println("================ start destroy ================");
         if (this.messageStore1 != null) {
             messageStore1.shutdown();
             messageStore1.destroy();
@@ -198,6 +198,10 @@ public class AutoSwitchHATest {
     }
 
     private int getMessageCount(final DefaultMessageStore messageStore) {
+        return getMessageCount(messageStore, 0);
+    }
+
+    private int getMessageCount(final DefaultMessageStore messageStore, int startIndex) {
         int foundMessage = 0;
         for (int i = 0; i < queueTotal; i++) {
             GetMessageResult result = messageStore.getMessage(
@@ -206,9 +210,11 @@ public class AutoSwitchHATest {
             if (GetMessageStatus.FOUND.equals(result.getStatus())) {
                 foundMessage += result.getMessageCount();
             }
+            System.out.print("queueId: " + i + ", message: " + result.getMessageCount() + "\n");
             result.release();
         }
-        System.out.println("test found message total: " + foundMessage);
+        System.out.printf("min: %d, max: %d, test found message total: %d%n",
+            messageStore.getMinPhyOffset(), messageStore.getMaxPhyOffset(), foundMessage);
         return foundMessage;
     }
 
@@ -224,10 +230,10 @@ public class AutoSwitchHATest {
             messageStore1.putMessage(buildMessage());
         }
 
-        await().atMost(Duration.ofSeconds(30)).until(
+        await().pollInterval(Duration.ofSeconds(1)).atMost(Duration.ofSeconds(30)).until(
             () -> messageCount == getMessageCount(messageStore1));
 
-        await().atMost(Duration.ofSeconds(30)).until(
+        await().pollInterval(Duration.ofSeconds(1)).atMost(Duration.ofSeconds(30)).until(
             () -> messageCount == getMessageCount(messageStore2));
     }
 
@@ -316,7 +322,7 @@ public class AutoSwitchHATest {
             () -> messageCount * 2 == getMessageCount(messageStore2));
 
         long maxPhyOffset = this.messageStore1.getMaxPhyOffset();
-        long confirmOffset = ((AutoSwitchHAService) messageStore2.getHaService()).getConfirmOffset();
+        long confirmOffset = ((AutoSwitchHAService) messageStore2.getHaService()).computeConfirmOffset();
         assertEquals(maxPhyOffset, confirmOffset);
 
         // Now, shutdown store2
@@ -410,6 +416,8 @@ public class AutoSwitchHATest {
         changeMasterAndPutMessage(2, this.messageStore1, "127.0.0.1:7000", this.messageStore2, 1, 10);
         await().atMost(Duration.ofSeconds(30)).until(
             () -> messageCount * 2 == getMessageCount(messageStore2));
+        messageStore2.destroy();
+        messageStore2.shutdown();
 
         // Step2: check file position, each epoch will be stored on one file
         // So epoch1 was stored in firstFile, epoch2 was stored in second file, the lastFile was empty.
@@ -425,13 +433,17 @@ public class AutoSwitchHATest {
         final AutoSwitchHAService haService = (AutoSwitchHAService) this.messageStore1.getHaService();
         haService.truncateEpochFilePrefix(1570);
         await().pollInterval(Duration.ofSeconds(1)).atMost(Duration.ofSeconds(30)).until(
-            () -> messageCount == getMessageCount(messageStore1));
+            () -> 11 == getMessageCount(messageStore1, 10));
 
+        messageStore1.getMessageStoreConfig().setDuplicationEnable(true);
+        
+        System.out.println("==============================");
         // Step4: add broker3 as slave, only have 10 msg from offset 10, broker3 copy from first file
         messageStore3.getHaService().changeToSlave("", 2, 3L);
         messageStore3.getHaService().updateHaMasterAddress("127.0.0.1:7000");
+
         await().pollInterval(Duration.ofSeconds(1)).atMost(Duration.ofSeconds(30)).until(
-            () -> messageCount == getMessageCount(messageStore3));
+            () -> 11 == getMessageCount(messageStore3, 10));
     }
 
     @Test
