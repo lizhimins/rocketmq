@@ -390,14 +390,6 @@ public class AutoSwitchHAService implements HAService {
      */
     public synchronized void tryExpandInSyncStateSet(HAConnection haConnection, final long slaveAckOffset) {
         AutoSwitchHAConnection connection = (AutoSwitchHAConnection) haConnection;
-        if (connection.isSlaveAsyncLearner()) {
-            return;
-        }
-
-        long diffTotal = defaultMessageStore.getMaxPhyOffset() - slaveAckOffset;
-        if (diffTotal > defaultMessageStore.getMessageStoreConfig().getHaMaxGapNotInSync()) {
-            return;
-        }
 
         final Set<String> currentSyncStateSet = getSyncStateSet();
         String brokerAddr = connection.getSlaveAddress();
@@ -405,12 +397,16 @@ public class AutoSwitchHAService implements HAService {
             return;
         }
 
-        final EpochEntry currentLeaderEpoch = this.epochCache.getLastEntry();
-        if (slaveAckOffset >= currentLeaderEpoch.getStartOffset()) {
-            currentSyncStateSet.add(brokerAddr);
-            setSyncStateSet(currentSyncStateSet);
-            notifySyncStateSetChanged(currentSyncStateSet);
-            System.out.printf("expand in sync state set %s%n", currentSyncStateSet);
+        final long confirmOffset = getConfirmOffset();
+        if (slaveAckOffset >= confirmOffset) {
+            final EpochEntry currentLeaderEpoch = this.epochCache.getLastEntry();
+            if (slaveAckOffset >= currentLeaderEpoch.getStartOffset()) {
+                currentSyncStateSet.add(brokerAddr);
+                setSyncStateSet(currentSyncStateSet);
+                // Notify the upper layer that syncStateSet changed.
+                notifySyncStateSetChanged(currentSyncStateSet);
+                System.out.printf("expand in sync state set %s%n", currentSyncStateSet);
+            }
         }
     }
 
@@ -519,7 +515,9 @@ public class AutoSwitchHAService implements HAService {
             long offset = pushCommitLogAck.getConfirmOffset();
             haConnection.setSlaveAsyncLearner(pushCommitLogAck.isReadOnly());
             haConnection.updateSlaveTransferProgress(offset);
-            if (!pushCommitLogAck.isReadOnly()) {
+            if (pushCommitLogAck.isReadOnly()) {
+                this.connectionMap.remove(channel);
+            } else {
                 tryExpandInSyncStateSet(haConnection, offset);
                 notifyTransferSome();
             }

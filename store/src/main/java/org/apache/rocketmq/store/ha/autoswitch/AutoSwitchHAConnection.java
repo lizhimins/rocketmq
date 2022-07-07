@@ -296,7 +296,7 @@ public class AutoSwitchHAConnection implements HAConnection {
         }
 
         private void doNettyTransferData(int maxTransferSize) {
-            HAMessage haMessage = new HAMessage(HAMessageType.PUSH_DATA, currentTransferEpochEntry.getEpoch());
+            HAMessage haMessage = new HAMessage(HAMessageType.PUSH_DATA, haService.getCurrentMasterEpoch());
             PushCommitLogData pushCommitLogData = new PushCommitLogData();
             pushCommitLogData.setEpoch(currentTransferEpochEntry.getEpoch());
             pushCommitLogData.setConfirmOffset(haService.getConfirmOffset());

@@ -77,7 +77,7 @@ public class NettyHAServerHandler extends SimpleChannelInboundHandler<HAMessage>
         }
 
         if (nettyHAService.getCurrentMasterEpoch() != message.getEpoch()) {
-            System.out.printf("server epoch not match, currentMaster=%s, message=%s%n",
+            System.out.printf("server epoch not match, currentMaster=%s, client=%s%n",
                 nettyHAService.getCurrentMasterEpoch(), message.getEpoch());
             log.error("epoch not match, connection epoch:{}", message.getEpoch());
             RemotingUtil.closeChannel(ctx.channel());

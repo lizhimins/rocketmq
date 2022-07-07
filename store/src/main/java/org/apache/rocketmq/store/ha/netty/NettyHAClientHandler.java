@@ -2,14 +2,12 @@ package org.apache.rocketmq.store.ha.netty;
 
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundHandlerAdapter;
-import io.netty.channel.ChannelPromise;
 import java.util.ArrayList;
 import java.util.List;
 import org.apache.rocketmq.common.EpochEntry;
 import org.apache.rocketmq.common.constant.LoggerName;
 import org.apache.rocketmq.logging.InternalLogger;
 import org.apache.rocketmq.logging.InternalLoggerFactory;
-import org.apache.rocketmq.remoting.common.RemotingUtil;
 import org.apache.rocketmq.remoting.protocol.RemotingSerializable;
 import org.apache.rocketmq.store.ha.HAConnectionState;
 import org.apache.rocketmq.store.ha.autoswitch.AutoSwitchHAClient;
@@ -23,7 +21,9 @@ public class NettyHAClientHandler extends ChannelInboundHandlerAdapter {
 
     @Override
     public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) throws Exception {
-        System.out.println("exception: cause" + cause);
+        if (cause != null) {
+            System.out.println("exception: cause" + cause);
+        }
         super.exceptionCaught(ctx, cause);
     }
 
@@ -31,6 +31,7 @@ public class NettyHAClientHandler extends ChannelInboundHandlerAdapter {
     public void channelUnregistered(ChannelHandlerContext ctx) throws Exception {
         System.out.println("client disconnect to server " + ctx.channel().id());
         nettyHAClient.changePromise(false);
+        nettyHAClient.changeCurrentState(HAConnectionState.READY);
         super.channelUnregistered(ctx);
     }
 
@@ -71,7 +72,7 @@ public class NettyHAClientHandler extends ChannelInboundHandlerAdapter {
     }
 
     @Override
-    public void channelRead(ChannelHandlerContext ctx, Object msg) throws Exception {
+    public void channelRead(ChannelHandlerContext ctx, Object msg) {
 
         if (!(msg instanceof HAMessage)) {
             return;
@@ -80,10 +81,11 @@ public class NettyHAClientHandler extends ChannelInboundHandlerAdapter {
         HAMessage message = (HAMessage) msg;
 
         if (nettyHAClient.getCurrentMasterEpoch() != message.getEpoch()) {
-            System.out.println("client epoch not match, connection epoch "
+            System.out.println("client epoch not match, connection epoch " + message.getType() + " "
                 + nettyHAClient.getCurrentMasterEpoch() + " " + message.getEpoch());
             log.error("epoch not match, connection epoch:{}", message.getEpoch());
-            nettyHAClient.shutdown();
+            nettyHAClient.closeMaster();
+            return;
         }
 
         System.out.println(message.getType());
