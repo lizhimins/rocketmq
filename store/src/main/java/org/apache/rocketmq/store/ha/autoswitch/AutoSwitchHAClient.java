@@ -199,6 +199,9 @@ public class AutoSwitchHAClient extends ServiceThread implements HAClient {
 
     @Override
     public void closeMaster() {
+        if (channelPromise != null) {
+            channelPromise.setFailure(new RuntimeException("epoch not match"));
+        }
         // close channel
         if (future != null && future.channel() != null) {
             try {
@@ -219,13 +222,10 @@ public class AutoSwitchHAClient extends ServiceThread implements HAClient {
 
     @Override
     public void shutdown() {
-        if (channelPromise != null) {
-            channelPromise.setFailure(new RuntimeException("epoch not match"));
-        }
         changeCurrentState(HAConnectionState.SHUTDOWN);
+        closeMaster();
         this.flowMonitor.shutdown();
         super.shutdown();
-        closeMaster();
     }
 
     private void sendHandshakeSlave(Channel channel) {
@@ -518,9 +518,9 @@ public class AutoSwitchHAClient extends ServiceThread implements HAClient {
         }
 
         confirmOffset = Math.min(confirmOffset, this.messageStore.getMaxPhyOffset());
-        //System.out.println("confirm offset: " + confirmOffset);
+        System.out.println("print confirm offset1: " + haService.getLocalAddress() + " " + haService.getConfirmOffset());
         this.haService.updateConfirmOffset(confirmOffset);
-        System.out.println("print confirm offset: " + haService.getLocalAddress() + " " + haService.getConfirmOffset());
+        System.out.println("print confirm offset2: " + haService.getLocalAddress() + " " + haService.getConfirmOffset());
 
         // If epoch changed to bigger, last epoch record would be terminated
         if (this.currentReceivedEpoch < currentBlockEpoch) {

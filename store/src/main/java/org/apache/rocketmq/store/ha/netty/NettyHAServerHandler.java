@@ -28,6 +28,13 @@ public class NettyHAServerHandler extends SimpleChannelInboundHandler<HAMessage>
         this.nettyHAService = nettyHAService;
     }
 
+    @Override
+    public void channelUnregistered(ChannelHandlerContext ctx) throws Exception {
+        System.out.println("server unregister client" + ctx.channel().id());
+        nettyHAService.removeConnection(ctx.channel());
+        super.channelUnregistered(ctx);
+    }
+
     public void slaveHandshake(HAMessage message, Channel channel) {
         HandshakeSlave handshakeSlave = RemotingSerializable.decode(message.getBytes(), HandshakeSlave.class);
         HandshakeResult handshakeResult = nettyHAService.verifySlaveIdentity(handshakeSlave);
@@ -66,7 +73,8 @@ public class NettyHAServerHandler extends SimpleChannelInboundHandler<HAMessage>
 
     public void pushCommitLogAck(HAMessage message, Channel channel) {
         PushCommitLogAck pushCommitLogAck = RemotingSerializable.decode(message.getBytes(), PushCommitLogAck.class);
-        System.out.println("master receive ack offset: " + pushCommitLogAck.getConfirmOffset());
+        System.out.println("master receive ack offset: " + pushCommitLogAck.getConfirmOffset()
+            + " count: " + nettyHAService.getConnectionCount());
         nettyHAService.pushCommitLogDataAck(channel, pushCommitLogAck);
     }
 

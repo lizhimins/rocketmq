@@ -398,15 +398,14 @@ public class AutoSwitchHAService implements HAService {
         }
 
         final long confirmOffset = getConfirmOffset();
-        if (slaveAckOffset >= confirmOffset) {
-            final EpochEntry currentLeaderEpoch = this.epochCache.getLastEntry();
-            if (slaveAckOffset >= currentLeaderEpoch.getStartOffset()) {
-                currentSyncStateSet.add(brokerAddr);
-                setSyncStateSet(currentSyncStateSet);
-                // Notify the upper layer that syncStateSet changed.
-                notifySyncStateSetChanged(currentSyncStateSet);
-                System.out.printf("expand in sync state set %s%n", currentSyncStateSet);
-            }
+        final EpochEntry currentLeaderEpoch = this.epochCache.getLastEntry();
+        if (slaveAckOffset >= confirmOffset && slaveAckOffset >= currentLeaderEpoch.getStartOffset()) {
+            currentSyncStateSet.add(brokerAddr);
+            setSyncStateSet(currentSyncStateSet);
+            // Notify the upper layer that syncStateSet changed.
+            notifySyncStateSetChanged(currentSyncStateSet);
+            System.out.printf("expand in sync state set %s, slaveAckOffset %d%n",
+                currentSyncStateSet, slaveAckOffset);
         }
     }
 
@@ -420,12 +419,16 @@ public class AutoSwitchHAService implements HAService {
     public long computeConfirmOffset() {
         final Set<String> currentSyncStateSet = getSyncStateSet();
         long confirmOffset = this.defaultMessageStore.getMaxPhyOffset();
+
+        StringBuilder printData = new StringBuilder(confirmOffset + " ");
         for (HAConnection connection : this.connectionMap.values()) {
             final String slaveAddress = ((AutoSwitchHAConnection) connection).getSlaveAddress();
             if (currentSyncStateSet.contains(slaveAddress)) {
                 confirmOffset = Math.min(confirmOffset, connection.getSlaveAckOffset());
+                printData.append(connection.getSlaveAckOffset()).append(" ");
             }
         }
+        //System.out.println("compute: " + printData);
         return confirmOffset;
     }
 
@@ -515,9 +518,7 @@ public class AutoSwitchHAService implements HAService {
             long offset = pushCommitLogAck.getConfirmOffset();
             haConnection.setSlaveAsyncLearner(pushCommitLogAck.isReadOnly());
             haConnection.updateSlaveTransferProgress(offset);
-            if (pushCommitLogAck.isReadOnly()) {
-                this.connectionMap.remove(channel);
-            } else {
+            if (!pushCommitLogAck.isReadOnly()) {
                 tryExpandInSyncStateSet(haConnection, offset);
                 notifyTransferSome();
             }

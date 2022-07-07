@@ -299,7 +299,7 @@ public class AutoSwitchHAConnection implements HAConnection {
             HAMessage haMessage = new HAMessage(HAMessageType.PUSH_DATA, haService.getCurrentMasterEpoch());
             PushCommitLogData pushCommitLogData = new PushCommitLogData();
             pushCommitLogData.setEpoch(currentTransferEpochEntry.getEpoch());
-            pushCommitLogData.setConfirmOffset(haService.getConfirmOffset());
+            pushCommitLogData.setConfirmOffset(haService.computeConfirmOffset());
             pushCommitLogData.setStartOffset(currentTransferOffset);
             haMessage.appendBody(pushCommitLogData.encode());
 

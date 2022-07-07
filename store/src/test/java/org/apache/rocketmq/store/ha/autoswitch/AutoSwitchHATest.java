@@ -35,6 +35,7 @@ import org.apache.rocketmq.common.MixAll;
 import org.apache.rocketmq.common.UtilAll;
 import org.apache.rocketmq.common.message.MessageDecoder;
 import org.apache.rocketmq.common.message.MessageExtBrokerInner;
+import org.apache.rocketmq.store.ConsumeQueue;
 import org.apache.rocketmq.store.DefaultMessageStore;
 import org.apache.rocketmq.store.GetMessageResult;
 import org.apache.rocketmq.store.GetMessageStatus;
@@ -205,7 +206,7 @@ public class AutoSwitchHATest {
         int foundMessage = 0;
         for (int i = 0; i < queueTotal; i++) {
             GetMessageResult result = messageStore.getMessage(
-                GROUP, TOPIC, i, 0, 1024 * 1024, null);
+                GROUP, TOPIC, i, startIndex, 1024 * 1024, null);
             assertThat(result).isNotNull();
             if (GetMessageStatus.FOUND.equals(result.getStatus())) {
                 foundMessage += result.getMessageCount();
@@ -374,13 +375,17 @@ public class AutoSwitchHATest {
         await().pollInterval(Duration.ofSeconds(1)).atMost(Duration.ofSeconds(30)).until(
             () -> messageCount * 2 == getMessageCount(messageStore1));
 
-
         System.out.println("==========================================");
         // Step3, change store1 to master, epoch = 3
         changeMasterAndPutMessage(3, this.messageStore1, "127.0.0.1:7000",
             this.messageStore2, 1, messageCount);
         await().pollInterval(Duration.ofSeconds(1)).atMost(Duration.ofSeconds(60)).until(
             () -> messageCount * 3 == getMessageCount(messageStore2));
+    }
+
+    @Test
+    public void testPushDataForDifferentEpoch() {
+
     }
 
     @Test
@@ -404,7 +409,7 @@ public class AutoSwitchHATest {
     }
 
     @Test
-    public void testTruncateEpochLogAndAddBroker() throws Exception {
+    public void testTruncateCommitLogAndAddBroker() throws Exception {
 
         queueTotal = 1;
 
@@ -413,51 +418,48 @@ public class AutoSwitchHATest {
         initMessageStore(1700);
         int messageCount = 10;
 
-        // Step1: broker1 as leader, broker2 as follower
-        // append epoch 2, each epoch will be stored on one file
+        // Step1: broker1 as leader, broker2 as follower. Append epoch 2, each epoch will be stored on one file
         // Master: <Epoch1, 0, 1570> <Epoch2, 1570, 3270>
         changeMasterAndPutMessage(1, this.messageStore1, "127.0.0.1:7000", this.messageStore2, 1, 10);
         changeMasterAndPutMessage(2, this.messageStore1, "127.0.0.1:7000", this.messageStore2, 1, 10);
         await().atMost(Duration.ofSeconds(30)).until(
             () -> messageCount * 2 == getMessageCount(messageStore2));
+
         messageStore2.destroy();
         messageStore2.shutdown();
 
         // Step2: check file position, each epoch will be stored on one file
         // So epoch1 was stored in firstFile, epoch2 was stored in second file, the lastFile was empty.
-        //final MappedFileQueue fileQueue = this.messageStore1.getCommitLog().getMappedFileQueue();
-        //assertEquals(2, fileQueue.getTotalFileSize() / 1700);
-        //
-        //// Step3: truncate epoch1's log (truncateEndOffset = 1570), which means we should delete the first file directly.
-        //final MappedFile firstFile = this.messageStore1.getCommitLog().getMappedFileQueue().getFirstMappedFile();
-        //firstFile.shutdown(1000);
-        //fileQueue.retryDeleteFirstFile(1000);
-        //assertEquals(this.messageStore1.getCommitLog().getMinOffset(), 1700);
-        //
-        //final AutoSwitchHAService haService = (AutoSwitchHAService) this.messageStore1.getHaService();
-        //haService.truncateEpochFilePrefix(1570);
-        //await().pollInterval(Duration.ofSeconds(1)).atMost(Duration.ofSeconds(30)).until(
-        //    () -> 10 == getMessageCount(messageStore1, 10));
-        //
-        //messageStore1.getMessageStoreConfig().setDuplicationEnable(true);
-        //
-        //System.out.println("==============================");
-        //// Step4: add broker3 as slave, only have 10 msg from offset 10, broker3 copy from first file
-        //messageStore3.getHaService().changeToSlave("", 2, 3L);
-        //messageStore3.getHaService().updateHaMasterAddress("127.0.0.1:7000");
-        //
-        //await().pollInterval(Duration.ofSeconds(1)).atMost(Duration.ofSeconds(30)).until(
-        //    () -> 10 == getMessageCount(messageStore3, 0));
-    }
+        final MappedFileQueue fileQueue = this.messageStore1.getCommitLog().getMappedFileQueue();
+        assertEquals(2, fileQueue.getTotalFileSize() / 1700);
 
-    @Test
-    public void testPushDataForDifferentEpoch() {
+        // Step3: truncate epoch1's log (truncateEndOffset = 1570), which means we should delete the first file directly.
+        final MappedFile firstFile = this.messageStore1.getCommitLog().getMappedFileQueue().getFirstMappedFile();
+        firstFile.shutdown(1000);
+        fileQueue.retryDeleteFirstFile(1000);
+        assertEquals(this.messageStore1.getCommitLog().getMinOffset(), 1700);
 
+        final AutoSwitchHAService haService = (AutoSwitchHAService) this.messageStore1.getHaService();
+        haService.truncateEpochFilePrefix(1570);
+        assertEquals(1, haService.getEpochEntries().size());
+
+        ((ConsumeQueue) this.messageStore1.getConsumeQueue(TOPIC, 0)).correctMinOffset(1570);
+
+        await().pollInterval(Duration.ofSeconds(1)).atMost(Duration.ofSeconds(30)).until(
+            () -> 10 == getMessageCount(messageStore1, 10));
+
+        System.out.println("==============================");
+        // Step4: add broker3 as slave, only have 10 msg from offset 10, broker3 copy from first file
+        messageStore3.getHaService().changeToSlave("", 2, 3L);
+        messageStore3.getHaService().updateHaMasterAddress("127.0.0.1:7000");
+
+        await().pollInterval(Duration.ofSeconds(1)).atMost(Duration.ofSeconds(30)).until(
+            () -> 10 == getMessageCount(messageStore3, 10));
     }
 
     @Test
     public void testTruncateEpochLogAndChangeMaster() throws Exception {
-        testTruncateEpochLogAndAddBroker();
+        testTruncateCommitLogAndAddBroker();
 
         // Step5: change broker2 as leader, broker3 as follower
         // store1:                   <Epoch2, 1570, 3270>
