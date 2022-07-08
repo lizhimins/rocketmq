@@ -242,6 +242,8 @@ public class AutoSwitchHAClient extends ServiceThread implements HAClient {
         //System.out.println("hand shake: " + handshakeSlave);
         HAMessage haMessage = new HAMessage(HAMessageType.SLAVE_HANDSHAKE, currentMasterEpoch,
             RemotingSerializable.encode(handshakeSlave));
+
+        this.lastWriteTimestamp = System.currentTimeMillis();
         channel.writeAndFlush(haMessage);
     }
 
@@ -327,13 +329,15 @@ public class AutoSwitchHAClient extends ServiceThread implements HAClient {
 
     private boolean isTimeToReportOffset() {
         long interval = this.messageStore.now() - this.lastWriteTimestamp;
-        return interval > this.messageStore.getMessageStoreConfig().getHaSendHeartbeatInterval();
+        //return interval > this.messageStore.getMessageStoreConfig().getHaSendHeartbeatInterval();
+        return interval > 10 * 1000L;
     }
 
-    private boolean transferFromMaster() {
+    private boolean checkConnectionTimeout() {
         if (isTimeToReportOffset()) {
+            System.out.println("check connection timeout, maybe rebuild connection");
             LOGGER.info("schedule to report slave offset: {}", this.currentTransferOffset);
-            this.sendPushCommitLogAck();
+            return false;
         }
         return true;
     }
@@ -352,6 +356,7 @@ public class AutoSwitchHAClient extends ServiceThread implements HAClient {
         try {
             HAMessage haMessage = new HAMessage(HAMessageType.QUERY_EPOCH, currentMasterEpoch);
             channelPromise = new DefaultChannelPromise(future.channel());
+            this.lastWriteTimestamp = System.currentTimeMillis();
             future.channel().writeAndFlush(haMessage);
             channelPromise.await(5000);
             if (channelPromise.isSuccess()) {
@@ -393,6 +398,7 @@ public class AutoSwitchHAClient extends ServiceThread implements HAClient {
         ConfirmTruncate confirmTruncate = new ConfirmTruncate(startOffset);
         HAMessage haMessage = new HAMessage(HAMessageType.CONFIRM_TRUNCATE, currentMasterEpoch,
             RemotingSerializable.encode(confirmTruncate));
+        this.lastWriteTimestamp = System.currentTimeMillis();
         future.channel().writeAndFlush(haMessage);
     }
 
@@ -402,8 +408,8 @@ public class AutoSwitchHAClient extends ServiceThread implements HAClient {
         pushCommitLogAck.setReadOnly(messageStore.getMessageStoreConfig().isAsyncLearner());
         HAMessage haMessage = new HAMessage(HAMessageType.PUSH_ACK, currentMasterEpoch,
             RemotingSerializable.encode(pushCommitLogAck));
+        this.lastWriteTimestamp = System.currentTimeMillis();
         future.channel().writeAndFlush(haMessage);
-        lastWriteTimestamp = System.currentTimeMillis();
         System.out.printf("send ack, offset=%d, async role=%s%n",
             this.currentTransferOffset, messageStore.getMessageStoreConfig().isAsyncLearner());
     }
@@ -419,23 +425,23 @@ public class AutoSwitchHAClient extends ServiceThread implements HAClient {
                     case READY:
                         if (!tryConnectToMaster()) {
                             closeMaster();
-                            this.waitForRunning(50);
+                            this.waitForRunning(1000);
                         }
                         continue;
                     case HANDSHAKE:
                         if (!queryMasterEpoch()) {
                             closeMaster();
-                            this.waitForRunning(50);
+                            this.waitForRunning(1000);
                         }
                         continue;
                     case TRANSFER:
                     case SUSPEND:
-                        // only do flow control and monitor
-                        if (!transferFromMaster()) {
+                        // only do flow control and housekeeping monitor
+                        if (!checkConnectionTimeout()) {
                             closeMaster();
                             break;
                         }
-                        this.waitForRunning(50);
+                        this.waitForRunning(500);
                         continue;
                     case SHUTDOWN:
                     default:

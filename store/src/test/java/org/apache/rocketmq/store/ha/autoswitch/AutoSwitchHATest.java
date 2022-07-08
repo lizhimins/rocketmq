@@ -46,6 +46,7 @@ import org.apache.rocketmq.store.config.BrokerRole;
 import org.apache.rocketmq.store.config.FlushDiskType;
 import org.apache.rocketmq.store.config.MessageStoreConfig;
 import org.apache.rocketmq.store.logfile.MappedFile;
+import org.apache.rocketmq.store.queue.ConsumeQueueInterface;
 import org.apache.rocketmq.store.stats.BrokerStatsManager;
 import org.junit.After;
 import org.junit.Before;
@@ -211,7 +212,7 @@ public class AutoSwitchHATest {
             if (GetMessageStatus.FOUND.equals(result.getStatus())) {
                 foundMessage += result.getMessageCount();
             }
-            System.out.print("queueId: " + i + ", message: " + result.getMessageCount() + "\n");
+            //System.out.print("queueId: " + i + ", message: " + result.getMessageCount() + "\n");
             result.release();
         }
         System.out.printf("min: %d, max: %d, test found message total: %d, confirm offset: %d%n",
@@ -425,9 +426,6 @@ public class AutoSwitchHATest {
         await().atMost(Duration.ofSeconds(30)).until(
             () -> messageCount * 2 == getMessageCount(messageStore2));
 
-        messageStore2.destroy();
-        messageStore2.shutdown();
-
         // Step2: check file position, each epoch will be stored on one file
         // So epoch1 was stored in firstFile, epoch2 was stored in second file, the lastFile was empty.
         final MappedFileQueue fileQueue = this.messageStore1.getCommitLog().getMappedFileQueue();
@@ -462,14 +460,24 @@ public class AutoSwitchHATest {
         testTruncateCommitLogAndAddBroker();
 
         // Step5: change broker2 as leader, broker3 as follower
+
+        // store1: <Epoch1, 0, 1570> <Epoch2, 1570, 3270>
+        // store2: <Epoch1, 0, 1570> <Epoch2, 1570, 3270>
+
         // store1:                   <Epoch2, 1570, 3270>
-        // store2: <Epoch1, 0, 1570> <Epoch2, 1570, 3270> <Epoch3, 3400, 4970> Master
-        // store3:                                        <Epoch3, 3400, 4970>
+        // store2: <Epoch1, 0, 1570> <Epoch2, 1570, 3270> <Epoch3, 3400, 4970>
+        // store3:                   <Epoch2, 1570, 3270> <Epoch3, 3400, 4970>
 
         System.out.println("=====================");
         changeMasterAndPutMessage(3, this.messageStore2, "127.0.0.1:7001", this.messageStore3, 3, 10);
-        //await().pollInterval(Duration.ofSeconds(1)).atMost(Duration.ofSeconds(30)).until(
-        //    () -> 20 == getMessageCount(messageStore3));
+        await().pollInterval(Duration.ofSeconds(1)).atMost(Duration.ofSeconds(30)).until(
+            () -> 30 == getMessageCount(messageStore2, 0));
+
+        ConsumeQueueInterface consumeQueue = messageStore3.getConsumeQueue(TOPIC, 0);
+        System.out.println(consumeQueue.getMinOffsetInQueue() + " " + consumeQueue.getMaxOffsetInQueue());
+
+        await().pollInterval(Duration.ofSeconds(1)).atMost(Duration.ofSeconds(30)).until(
+            () -> 20 == getMessageCount(messageStore3, 10));
 
         TimeUnit.SECONDS.sleep(30);
         System.out.println("start print--------------------------------------");
