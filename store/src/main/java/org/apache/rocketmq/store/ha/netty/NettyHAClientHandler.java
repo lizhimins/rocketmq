@@ -12,6 +12,7 @@ import org.apache.rocketmq.remoting.protocol.RemotingSerializable;
 import org.apache.rocketmq.store.ha.HAConnectionState;
 import org.apache.rocketmq.store.ha.autoswitch.AutoSwitchHAClient;
 import org.apache.rocketmq.store.ha.protocol.HandshakeMaster;
+import org.apache.rocketmq.store.ha.protocol.PushCommitLogData;
 
 public class NettyHAClientHandler extends ChannelInboundHandlerAdapter {
 
@@ -29,7 +30,7 @@ public class NettyHAClientHandler extends ChannelInboundHandlerAdapter {
 
     @Override
     public void channelUnregistered(ChannelHandlerContext ctx) throws Exception {
-        System.out.println("client disconnect to server " + ctx.channel().id());
+        System.out.println("client disconnect to server " + ctx.channel().remoteAddress() + " " + ctx.channel().id());
         nettyHAClient.changePromise(false);
         nettyHAClient.changeCurrentState(HAConnectionState.READY);
         super.channelUnregistered(ctx);
@@ -62,12 +63,17 @@ public class NettyHAClientHandler extends ChannelInboundHandlerAdapter {
     }
 
     public void pushData(HAMessage message) {
-        long epoch = message.getByteBuffer().getLong();
-        long confirmOffset = message.getByteBuffer().getLong();
-        long startOffset = message.getByteBuffer().getLong();
-        System.out.printf("receive data, epoch: %d, block start offset: %s, available payload size: %s%n",
-            epoch, startOffset, message.getByteBuffer().remaining());
-        nettyHAClient.doPutCommitLog(epoch, confirmOffset, startOffset, message.getByteBuffer());
+        PushCommitLogData pushCommitLogData = new PushCommitLogData();
+        pushCommitLogData.setEpoch(message.getByteBuffer().getLong());
+        pushCommitLogData.setEpochStartOffset(message.getByteBuffer().getLong());
+        pushCommitLogData.setConfirmOffset(message.getByteBuffer().getLong());
+        pushCommitLogData.setStartOffset(message.getByteBuffer().getLong());
+        System.out.printf("receive data, epoch: %d, epoch start: %d, confirm offset: %d" +
+                "block start offset: %s, available payload size: %s%n",
+            pushCommitLogData.getEpoch(), pushCommitLogData.getEpochStartOffset(),
+            pushCommitLogData.getConfirmOffset(), pushCommitLogData.getStartOffset(),
+            message.getByteBuffer().remaining());
+        nettyHAClient.doPutCommitLog(pushCommitLogData, message.getByteBuffer());
         nettyHAClient.sendPushCommitLogAck();
     }
 

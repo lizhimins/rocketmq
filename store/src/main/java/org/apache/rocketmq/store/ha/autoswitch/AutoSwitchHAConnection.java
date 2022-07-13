@@ -17,9 +17,11 @@
 
 package org.apache.rocketmq.store.ha.autoswitch;
 
+import io.netty.buffer.ByteBuf;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelFutureListener;
+import java.nio.ByteBuffer;
 import java.nio.channels.SocketChannel;
 import org.apache.rocketmq.common.EpochEntry;
 import org.apache.rocketmq.common.ServiceThread;
@@ -202,8 +204,11 @@ public class AutoSwitchHAConnection implements HAConnection {
                             this.waitForRunning(10);
                             continue;
                         case TRANSFER:
-                            this.pushCommitLogDataToSlave();
-                            this.waitForRunning(10);
+                            if (this.pushCommitLogDataToSlave()) {
+                                this.waitForRunning(10);
+                            } else {
+                                close();
+                            }
                             continue;
                         case SHUTDOWN:
                             // remove
@@ -299,6 +304,7 @@ public class AutoSwitchHAConnection implements HAConnection {
             HAMessage haMessage = new HAMessage(HAMessageType.PUSH_DATA, haService.getCurrentMasterEpoch());
             PushCommitLogData pushCommitLogData = new PushCommitLogData();
             pushCommitLogData.setEpoch(currentTransferEpochEntry.getEpoch());
+            pushCommitLogData.setEpochStartOffset(currentTransferEpochEntry.getStartOffset());
             pushCommitLogData.setConfirmOffset(haService.computeConfirmOffset());
             pushCommitLogData.setStartOffset(currentTransferOffset);
             haMessage.appendBody(pushCommitLogData.encode());
@@ -309,7 +315,7 @@ public class AutoSwitchHAConnection implements HAConnection {
 
             if (maxTransferSize > 0) {
                 haMessage.appendBody(currentTransferBuffer.getByteBuffer());
-                haMessage.setBodyLength(24 + maxTransferSize);
+                haMessage.setBodyLength(32 + maxTransferSize);
             }
 
             ChannelFuture future = channel.writeAndFlush(haMessage);

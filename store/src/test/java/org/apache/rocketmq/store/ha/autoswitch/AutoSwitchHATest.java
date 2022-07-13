@@ -453,6 +453,9 @@ public class AutoSwitchHATest {
 
         await().pollInterval(Duration.ofSeconds(1)).atMost(Duration.ofSeconds(30)).until(
             () -> 10 == getMessageCount(messageStore3, 10));
+
+        System.out.println("1213123123123");
+        System.out.println(((AutoSwitchHAService) messageStore3.getHaService()).getEpochEntries());
     }
 
     @Test

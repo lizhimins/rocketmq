@@ -59,6 +59,7 @@ import org.apache.rocketmq.store.ha.protocol.HandshakeMaster;
 import org.apache.rocketmq.store.ha.protocol.HandshakeResult;
 import org.apache.rocketmq.store.ha.protocol.HandshakeSlave;
 import org.apache.rocketmq.store.ha.protocol.PushCommitLogAck;
+import org.apache.rocketmq.store.ha.protocol.PushCommitLogData;
 
 public class AutoSwitchHAClient extends ServiceThread implements HAClient {
 
@@ -335,7 +336,7 @@ public class AutoSwitchHAClient extends ServiceThread implements HAClient {
 
     private boolean checkConnectionTimeout() {
         if (isTimeToReportOffset()) {
-            System.out.println("check connection timeout, maybe rebuild connection");
+            System.out.println("detect connection timeout, maybe rebuild connection");
             LOGGER.info("schedule to report slave offset: {}", this.currentTransferOffset);
             return false;
         }
@@ -506,7 +507,11 @@ public class AutoSwitchHAClient extends ServiceThread implements HAClient {
         return true;
     }
 
-    public void doPutCommitLog(long currentBlockEpoch, long confirmOffset, long masterOffset, ByteBuffer byteBuffer) {
+    public void doPutCommitLog(PushCommitLogData pushCommitLogData, ByteBuffer byteBuffer) {
+        long currentBlockEpoch = pushCommitLogData.getEpoch();
+        long confirmOffset = pushCommitLogData.getConfirmOffset();
+        long masterOffset = pushCommitLogData.getStartOffset();
+        long epochStartOffset = pushCommitLogData.getEpochStartOffset();
         long slavePhyOffset = this.messageStore.getMaxPhyOffset();
 
         if (slavePhyOffset != 0) {
@@ -520,7 +525,7 @@ public class AutoSwitchHAClient extends ServiceThread implements HAClient {
         // Must put data first
         if (byteBuffer.hasRemaining()) {
             this.messageStore.appendToCommitLog(
-                masterOffset, byteBuffer.array(), 24, byteBuffer.remaining());
+                masterOffset, byteBuffer.array(), 32, byteBuffer.remaining());
         }
 
         confirmOffset = Math.min(confirmOffset, this.messageStore.getMaxPhyOffset());
@@ -530,9 +535,9 @@ public class AutoSwitchHAClient extends ServiceThread implements HAClient {
 
         // If epoch changed to bigger, last epoch record would be terminated
         if (this.currentReceivedEpoch < currentBlockEpoch) {
-            System.out.println("put epoch: " + this.currentReceivedEpoch + " " + currentBlockEpoch + " " + masterOffset);
+            System.out.println("put epoch: " + this.currentReceivedEpoch + " " + currentBlockEpoch + " " + epochStartOffset);
             this.currentReceivedEpoch = currentBlockEpoch;
-            this.epochCache.tryAppendEpochEntry(new EpochEntry(currentBlockEpoch, masterOffset));
+            this.epochCache.tryAppendEpochEntry(new EpochEntry(currentBlockEpoch, epochStartOffset));
         }
 
         this.currentTransferOffset = this.messageStore.getMaxPhyOffset();
