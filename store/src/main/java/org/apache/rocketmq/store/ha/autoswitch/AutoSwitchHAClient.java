@@ -135,10 +135,7 @@ public class AutoSwitchHAClient extends ServiceThread implements HAClient {
     }
 
     public void updateSlaveId(Long newId) {
-        Long currentId = this.slaveId.get();
-        if (this.slaveId.compareAndSet(currentId, newId)) {
-            LOGGER.info("Update slave Id, OLD: {}, New: {}", currentId, newId);
-        }
+        this.slaveId.set(newId);
     }
 
     public long getCurrentMasterEpoch() {

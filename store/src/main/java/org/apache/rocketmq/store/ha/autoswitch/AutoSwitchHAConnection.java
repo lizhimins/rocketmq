@@ -227,19 +227,6 @@ public class AutoSwitchHAConnection implements HAConnection {
                 return false;
             }
 
-            long phyMinOffset = haService.getDefaultMessageStore().getCommitLog().getMinOffset();
-            long phyMaxOffset = haService.getDefaultMessageStore().getCommitLog().getMaxOffset();
-
-            // We must ensure that the starting point of syncing log
-            // must be the startOffset of a file (maybe the last file, or the minOffset)
-            if (currentTransferOffset < phyMinOffset) {
-                currentTransferOffset = phyMinOffset;
-            }
-
-            if (currentTransferOffset > phyMaxOffset) {
-                currentTransferOffset = phyMaxOffset;
-            }
-
             // Correct transferEpoch
             if (currentTransferEpochEntry == null) {
                 currentTransferEpochEntry = epochCache.findEpochEntryByOffset(currentTransferOffset);

@@ -3,6 +3,7 @@ package org.apache.rocketmq.store.ha.netty;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
+import io.netty.util.AttributeKey;
 import java.nio.ByteBuffer;
 import java.util.List;
 import org.apache.rocketmq.common.EpochEntry;

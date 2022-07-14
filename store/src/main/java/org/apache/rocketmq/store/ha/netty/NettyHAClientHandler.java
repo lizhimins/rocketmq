@@ -68,7 +68,7 @@ public class NettyHAClientHandler extends ChannelInboundHandlerAdapter {
         pushCommitLogData.setEpochStartOffset(message.getByteBuffer().getLong());
         pushCommitLogData.setConfirmOffset(message.getByteBuffer().getLong());
         pushCommitLogData.setStartOffset(message.getByteBuffer().getLong());
-        System.out.printf("receive data, epoch: %d, epoch start: %d, confirm offset: %d" +
+        System.out.printf("receive data, epoch: %d, epoch start: %d, confirm offset: %d, " +
                 "block start offset: %s, available payload size: %s%n",
             pushCommitLogData.getEpoch(), pushCommitLogData.getEpochStartOffset(),
             pushCommitLogData.getConfirmOffset(), pushCommitLogData.getStartOffset(),

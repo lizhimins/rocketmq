@@ -56,6 +56,7 @@ import org.apache.rocketmq.remoting.protocol.LanguageCode;
 import org.apache.rocketmq.store.CommitLog;
 import org.apache.rocketmq.store.DefaultMessageStore;
 import org.apache.rocketmq.store.config.BrokerRole;
+import org.apache.rocketmq.store.config.MessageStoreConfig;
 import org.apache.rocketmq.store.ha.GroupTransferService;
 import org.apache.rocketmq.store.ha.HAClient;
 import org.apache.rocketmq.store.ha.HAConnection;
@@ -498,9 +499,31 @@ public class AutoSwitchHAService implements HAService {
     public void confirmTruncate(Channel channel, long slaveOffset) {
         HAConnection haConnection = this.connectionMap.get(channel);
         if (haConnection != null) {
-            ((AutoSwitchHAConnection) haConnection).setCurrentTransferOffset(slaveOffset);
-            // System.out.println("receive client confirm truncate, request start offset " + slaveOffset);
-            LOGGER.info("receive client confirm truncate, request start offset:{}", slaveOffset);
+
+            long transferStart = slaveOffset;
+            long phyMinOffset = defaultMessageStore.getCommitLog().getMinOffset();
+            long phyMaxOffset = defaultMessageStore.getCommitLog().getMaxOffset();
+
+            if (transferStart < phyMinOffset) {
+                transferStart = phyMinOffset;
+            }
+
+            if (transferStart > phyMaxOffset) {
+                transferStart = phyMaxOffset;
+            }
+
+            // We must ensure that the starting point of syncing log
+            // must be the startOffset of a file (maybe the last file, or the minOffset)
+            final MessageStoreConfig config = this.defaultMessageStore.getMessageStoreConfig();
+            transferStart = transferStart - (transferStart % config.getMappedFileSizeCommitLog());
+            if (transferStart < 0) {
+                transferStart = 0;
+            }
+
+            ((AutoSwitchHAConnection) haConnection).setCurrentTransferOffset(transferStart);
+            System.out.println("receive client confirm truncate, request start offset " + slaveOffset);
+            LOGGER.info("receive client confirm truncate, request start offset:{}, start:{}",
+                slaveOffset, transferStart);
             ((AutoSwitchHAConnection) haConnection).changeCurrentState(HAConnectionState.TRANSFER);
         } else {
             LOGGER.error("confirm failed");

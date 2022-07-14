@@ -385,8 +385,19 @@ public class AutoSwitchHATest {
     }
 
     @Test
-    public void testPushDataForDifferentEpoch() {
+    public void testPushDataForDifferentEpoch() throws Exception {
+        initMessageStore(1700);
 
+        int times = 5;
+        int messageCount = 10;
+
+        for (int i = 0; i < 5; i++) {
+            changeMasterAndPutMessage(i, this.messageStore1,
+                "127.0.0.1:7000", this.messageStore2, 1, messageCount);
+        }
+
+        await().atMost(Duration.ofSeconds(30)).until(
+            () -> messageCount * times == getMessageCount(messageStore2));
     }
 
     @Test
@@ -482,25 +493,27 @@ public class AutoSwitchHATest {
         await().pollInterval(Duration.ofSeconds(1)).atMost(Duration.ofSeconds(30)).until(
             () -> 20 == getMessageCount(messageStore3, 10));
 
-        TimeUnit.SECONDS.sleep(30);
-        System.out.println("start print--------------------------------------");
-        System.out.println(((AutoSwitchHAService) messageStore3.getHaService()).getEpochEntries().toString());
-        System.out.println(messageStore3.getMinPhyOffset());
-        System.out.println(messageStore3.getMaxPhyOffset());
+        //System.out.println(((AutoSwitchHAService) messageStore3.getHaService()).getEpochEntries().toString());
+        //System.out.println(messageStore3.getMinPhyOffset());
+        //System.out.println(messageStore3.getMaxPhyOffset());
 
-        /*
-         Step6, let broker1 link to broker2, it should sync log from epoch3.
-        this.storeConfig1.setBrokerRole(BrokerRole.SLAVE);
+        messageStore3.shutdown();
+        messageStore3.destroy();
+
+        // Step6, let broker1 link to broker2, it should sync log from epoch3.
+        this.messageStore1.getBrokerConfig().setBrokerId(1);
+        this.messageStore1.getMessageStoreConfig().setBrokerRole(BrokerRole.SLAVE);
         this.messageStore1.getHaService().changeToSlave("", 3, 1L);
-        this.messageStore1.getHaService().updateHaMasterAddress(this.getHaAddress(messageStore1));
-        Thread.sleep(6000);
-        getMessageCount(messageStore1, 20, 0);
-        */
+        this.messageStore1.getHaService().updateHaMasterAddress("127.0.0.1:7001");
+
+        await().pollInterval(Duration.ofSeconds(1)).atMost(Duration.ofSeconds(30)).until(
+            () -> 20 == getMessageCount(messageStore1, 10));
     }
 
     @Test
     public void testAddBrokerAndSyncFromLastFile() throws Exception {
         initMessageStore(1700);
+        queueTotal = 1;
 
         // Step1: broker1 as leader, broker2 as follower
         // append epoch 2, each epoch will be stored on one file
@@ -511,6 +524,9 @@ public class AutoSwitchHATest {
         await().atMost(Duration.ofSeconds(30)).until(
             () -> messageCount * 2 == getMessageCount(messageStore2));
 
+        messageStore2.shutdown();
+        messageStore2.destroy();
+
         // Step2: restart broker3
         messageStore3.shutdown();
         messageStore3.destroy();
@@ -520,22 +536,21 @@ public class AutoSwitchHATest {
         assertTrue(messageStore3.load());
         messageStore3.start();
 
-        // Put message on master
-        for (int i = 0; i < messageCount; i++) {
-            messageStore1.putMessage(buildMessage());
-        }
-
+        System.out.println("========================================");
         // Step3: add new broker3, link to broker1.
         // Due to broker3 request sync from lastFile, so it only synced 10 msg from offset 10;
         messageStore3.getHaService().changeToSlave("", 2, 3L);
         messageStore3.getHaService().updateHaMasterAddress("127.0.0.1:7000");
 
-        //await().atMost(Duration.ofSeconds(30)).until(new Callable<Boolean>() {
-        //    @Override
-        //    public Boolean call() {
-        //        System.out.println(getMessageCount(messageStore3));
-        //        return false;
-        //    }
-        //});
+        TimeUnit.SECONDS.sleep(6);
+        // Put message on master
+        for (int i = 0; i < messageCount; i++) {
+            messageStore1.putMessage(buildMessage());
+        }
+
+        // Sync from last file, but not start from mapped file first
+        // Message total count is 20
+        await().pollInterval(Duration.ofSeconds(1)).atMost(Duration.ofSeconds(30)).until(
+            () -> 20 == getMessageCount(messageStore3, 10));
     }
 }
