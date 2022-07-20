@@ -113,7 +113,7 @@ public class AutoSwitchHAService implements HAService {
 
     @Override
     public void init(final DefaultMessageStore defaultMessageStore) throws IOException {
-        this.epochCache = new EpochFileStore(defaultMessageStore.getMessageStoreConfig().getStorePathEpochFile());
+        this.epochCache = new EpochStoreService(defaultMessageStore.getMessageStoreConfig().getStorePathEpochFile());
         this.epochCache.initStateFromFile();
         this.defaultMessageStore = defaultMessageStore;
         this.groupTransferService = new GroupTransferService(this, defaultMessageStore);

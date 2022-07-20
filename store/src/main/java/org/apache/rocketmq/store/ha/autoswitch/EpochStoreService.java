@@ -33,10 +33,7 @@ import org.apache.rocketmq.common.utils.CheckpointFile;
 import org.apache.rocketmq.logging.InternalLogger;
 import org.apache.rocketmq.logging.InternalLoggerFactory;
 
-/**
- * Cache for epochFile. Mapping (Epoch -> StartOffset)
- */
-public class EpochFileStore implements EpochStore {
+public class EpochStoreService implements EpochStore {
 
     private static final InternalLogger log = InternalLoggerFactory.getLogger(LoggerName.STORE_LOGGER_NAME);
 
@@ -46,12 +43,12 @@ public class EpochFileStore implements EpochStore {
     private final TreeMap<Long, EpochEntry> epochMap;
     private final CheckpointFile<EpochEntry> checkpoint;
 
-    public EpochFileStore() {
+    public EpochStoreService() {
         this.epochMap = new TreeMap<>();
         this.checkpoint = null;
     }
 
-    public EpochFileStore(final String filePath) {
+    public EpochStoreService(final String filePath) {
         this.epochMap = new TreeMap<>();
         this.checkpoint = new CheckpointFile<>(filePath, new EpochEntrySerializer());
     }

@@ -14,6 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 package org.apache.rocketmq.store.ha.autoswitch;
 
 import java.io.File;
@@ -30,7 +31,7 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
-public class EpochFileStoreTest {
+public class EpochStoreServiceTest {
 
     private EpochStore epochStore;
     private EpochStore epochStore2;
@@ -41,8 +42,8 @@ public class EpochFileStoreTest {
     public void init() {
         this.path = Paths.get(System.getProperty("user.home"), "test", "epoch.ckpt").toString();
         this.path2 = Paths.get(System.getProperty("user.home"), "test", "epoch2.ckpt").toString();
-        this.epochStore = new EpochFileStore(path);
-        this.epochStore2 = new EpochFileStore(path2);
+        this.epochStore = new EpochStoreService(path);
+        this.epochStore2 = new EpochStoreService(path2);
         assertTrue(this.epochStore.tryAppendEpochEntry(new EpochEntry(1, 100)));
         assertTrue(this.epochStore.tryAppendEpochEntry(new EpochEntry(2, 300)));
         assertTrue(this.epochStore.tryAppendEpochEntry(new EpochEntry(3, 500)));
@@ -56,7 +57,7 @@ public class EpochFileStoreTest {
 
     @Test
     public void testFilePersist() {
-        this.epochStore = new EpochFileStore(path);
+        this.epochStore = new EpochStoreService(path);
         assertTrue(this.epochStore.initStateFromFile());
 
         EpochEntry entry = this.epochStore.findEpochEntryByEpoch(2);
@@ -105,8 +106,7 @@ public class EpochFileStoreTest {
 
     @Test
     public void testFindConsistentPointSample1() {
-        this.path2 = Paths.get(File.separator + "tmp", "EpochCheckpoint2").toString();
-        this.epochStore2 = new EpochFileStore(path2);
+        this.epochStore2 = new EpochStoreService(path2);
         assertTrue(this.epochStore2.tryAppendEpochEntry(new EpochEntry(1, 100)));
         assertTrue(this.epochStore2.tryAppendEpochEntry(new EpochEntry(2, 300)));
         assertTrue(this.epochStore2.tryAppendEpochEntry(new EpochEntry(3, 450)));
@@ -122,15 +122,14 @@ public class EpochFileStoreTest {
     private EpochStore setLastEpochEndOffset(EpochStore epochStore, long lastOffset) {
         List<EpochEntry> entries = epochStore.getAllEntries();
         entries.get(entries.size() - 1).setEndOffset(lastOffset);
-        epochStore = new EpochFileStore();
+        epochStore = new EpochStoreService();
         epochStore.initStateFromEntries(entries);
         return epochStore;
     }
 
     @Test
     public void testFindConsistentPointSample2() {
-        this.path2 = Paths.get(File.separator + "tmp", "EpochCheckpoint2").toString();
-        this.epochStore2 = new EpochFileStore(path2);
+        this.epochStore2 = new EpochStoreService(path2);
         assertTrue(this.epochStore2.tryAppendEpochEntry(new EpochEntry(1, 100)));
         assertTrue(this.epochStore2.tryAppendEpochEntry(new EpochEntry(2, 300)));
         assertTrue(this.epochStore2.tryAppendEpochEntry(new EpochEntry(3, 500)));
@@ -147,8 +146,7 @@ public class EpochFileStoreTest {
 
     @Test
     public void testFindConsistentPointSample3() {
-        this.path2 = Paths.get(File.separator + "tmp", "EpochCheckpoint2").toString();
-        this.epochStore2 = new EpochFileStore(path2);
+        this.epochStore2 = new EpochStoreService(path2);
         assertTrue(this.epochStore2.tryAppendEpochEntry(new EpochEntry(1, 200)));
         assertTrue(this.epochStore2.tryAppendEpochEntry(new EpochEntry(2, 500)));
         /**
@@ -162,8 +160,7 @@ public class EpochFileStoreTest {
 
     @Test
     public void testFindConsistentPointSample4() {
-        this.path2 = Paths.get(File.separator + "tmp", "EpochCheckpoint2").toString();
-        this.epochStore2 = new EpochFileStore(path2);
+        this.epochStore2 = new EpochStoreService(path2);
         assertTrue(this.epochStore2.tryAppendEpochEntry(new EpochEntry(1, 100)));
         assertTrue(this.epochStore2.tryAppendEpochEntry(new EpochEntry(2, 300)));
         assertTrue(this.epochStore2.tryAppendEpochEntry(new EpochEntry(3, 500)));

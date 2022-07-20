@@ -342,15 +342,14 @@ public class AutoSwitchHAConnection implements HAConnection {
             pushCommitLogData.setEpochStartOffset(currentTransferEpochEntry.getStartOffset());
             pushCommitLogData.setConfirmOffset(haService.computeConfirmOffset());
             pushCommitLogData.setStartOffset(currentTransferOffset);
-            haMessage.appendBody(pushCommitLogData.encode());
 
             System.out.printf("transfer data, epoch=%d, start=%d, size=%d, master confirm=%d%n",
                 currentTransferEpochEntry.getEpoch(), currentTransferOffset, maxTransferSize,
                 pushCommitLogData.getConfirmOffset());
 
+            haMessage.appendBody(pushCommitLogData.encode());
             if (maxTransferSize > 0) {
                 haMessage.appendBody(currentTransferBuffer.getByteBuffer());
-                haMessage.setBodyLength(32 + maxTransferSize);
             }
 
             ChannelFuture future = channel.writeAndFlush(haMessage);

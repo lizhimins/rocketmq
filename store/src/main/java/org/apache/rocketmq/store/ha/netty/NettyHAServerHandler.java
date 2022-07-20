@@ -67,7 +67,6 @@ public class NettyHAServerHandler extends SimpleChannelInboundHandler<HAMessage>
      */
     public void confirmTruncate(HAMessage message, Channel channel) {
         ConfirmTruncate confirmTruncate = RemotingSerializable.decode(message.getBytes(), ConfirmTruncate.class);
-        System.out.println("master receive truncate offset: " + confirmTruncate.getCommitLogStartOffset());
         nettyHAService.confirmTruncate(channel, confirmTruncate.getCommitLogStartOffset());
     }
 

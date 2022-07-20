@@ -20,24 +20,54 @@ package org.apache.rocketmq.store.ha.autoswitch;
 import java.util.List;
 import org.apache.rocketmq.common.EpochEntry;
 
+/**
+ * Cache for epochFile. Mapping (Epoch -> StartOffset)
+ */
 public interface EpochStore {
 
-    boolean initStateFromFile();
-
+    /**
+     * Load information from the entry List, and the content is temporary
+     */
     void initStateFromEntries(final List<EpochEntry> entries);
 
+    /**
+     * Load information from the file, and the content will be persistent when it is modified
+     */
+    boolean initStateFromFile();
+
+    /**
+     * Append new epoch entry to entry list tail
+     */
     boolean tryAppendEpochEntry(final EpochEntry entry);
 
+    /**
+     * Return the list of the entries as a deep copy
+     */
     List<EpochEntry> getAllEntries();
 
-    EpochEntry getLastEntry();
-
+    /**
+     * Search epoch entry by epoch
+     */
     EpochEntry findEpochEntryByEpoch(final long epoch);
 
-    EpochEntry findEpochEntryByOffset(final long offset);
-
+    /**
+     * Search epoch entry by epoch
+     */
     EpochEntry findCeilingEntryByEpoch(final long epoch);
 
+    /**
+     * Search epoch entry by log offset
+     */
+    EpochEntry findEpochEntryByOffset(final long offset);
+
+    /**
+     * Return last entry
+     */
+    EpochEntry getLastEntry();
+
+    /**
+     * Return last epoch in last entry
+     */
     long getLastEpoch();
 
     /**

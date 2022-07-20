@@ -32,9 +32,6 @@ import io.netty.channel.socket.nio.NioSocketChannel;
 import java.io.IOException;
 import java.net.SocketAddress;
 import java.nio.ByteBuffer;
-import java.nio.channels.SelectionKey;
-import java.nio.channels.Selector;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 import org.apache.commons.lang3.StringUtils;
@@ -54,8 +51,6 @@ import org.apache.rocketmq.store.ha.HAClient;
 import org.apache.rocketmq.store.ha.HAConnectionState;
 import org.apache.rocketmq.store.ha.file.MoveAndDiscardTruncateStrategy;
 import org.apache.rocketmq.store.ha.file.TruncateStrategy;
-import org.apache.rocketmq.store.ha.io.AbstractHAReader;
-import org.apache.rocketmq.store.ha.io.HAWriter;
 import org.apache.rocketmq.store.ha.netty.HAMessage;
 import org.apache.rocketmq.store.ha.netty.HAMessageType;
 import org.apache.rocketmq.store.ha.netty.NettyHAClientHandler;
@@ -486,10 +481,10 @@ public class AutoSwitchHAClient extends ServiceThread implements HAClient {
         }
 
         // TODO: set max phy commitLog offset
-        final EpochStore masterEpochCache = new EpochFileStore();
+        final EpochStore masterEpochCache = new EpochStoreService();
         masterEpochCache.initStateFromEntries(masterEpochEntries);
 
-        final EpochStore localEpochCache = new EpochFileStore();
+        final EpochStore localEpochCache = new EpochStoreService();
         final List<EpochEntry> localEpochEntries = this.epochCache.getAllEntries();
         localEpochCache.initStateFromEntries(localEpochEntries);
 
