@@ -525,7 +525,6 @@ public class AutoSwitchHAServiceTest {
         messageStore3.getHaService().changeToSlave("", 2, 3L);
         messageStore3.getHaService().updateHaMasterAddress("127.0.0.1:7000");
 
-        TimeUnit.SECONDS.sleep(6);
         // Put message on master
         for (int i = 0; i < messageCount; i++) {
             messageStore1.putMessage(buildMessage());
@@ -534,6 +533,6 @@ public class AutoSwitchHAServiceTest {
         // Sync from last file, but not start from mapped file first
         // Message total count is 20
         await().pollInterval(Duration.ofSeconds(1)).atMost(Duration.ofSeconds(30)).until(
-            () -> 20 == getMessageCount(messageStore3, 10));
+            () -> 10 == getMessageCount(messageStore3, 20));
     }
 }

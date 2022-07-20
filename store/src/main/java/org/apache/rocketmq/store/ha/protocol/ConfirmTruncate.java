@@ -2,10 +2,21 @@ package org.apache.rocketmq.store.ha.protocol;
 
 public class ConfirmTruncate {
 
+    private boolean syncFromLastFile;
+
     private Long commitLogStartOffset;
 
-    public ConfirmTruncate(Long commitLogStartOffset) {
+    public ConfirmTruncate(boolean syncFromLastFile, Long commitLogStartOffset) {
+        this.syncFromLastFile = syncFromLastFile;
         this.commitLogStartOffset = commitLogStartOffset;
+    }
+
+    public boolean isSyncFromLastFile() {
+        return syncFromLastFile;
+    }
+
+    public void setSyncFromLastFile(boolean syncFromLastFile) {
+        this.syncFromLastFile = syncFromLastFile;
     }
 
     public Long getCommitLogStartOffset() {
@@ -19,7 +30,8 @@ public class ConfirmTruncate {
     @Override
     public String toString() {
         return "ConfirmTruncate{" +
-            "truncateCommitLogOffset=" + commitLogStartOffset +
+            "syncFromLastFile=" + syncFromLastFile +
+            ", commitLogStartOffset=" + commitLogStartOffset +
             '}';
     }
 }

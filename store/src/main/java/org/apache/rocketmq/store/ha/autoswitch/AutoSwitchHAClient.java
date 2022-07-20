@@ -400,7 +400,8 @@ public class AutoSwitchHAClient extends ServiceThread implements HAClient {
     }
 
     private void sendConfirmTruncateToMaster(long startOffset) {
-        ConfirmTruncate confirmTruncate = new ConfirmTruncate(startOffset);
+        boolean syncFromLastFile = this.messageStore.getMessageStoreConfig().isSyncFromLastFile();
+        ConfirmTruncate confirmTruncate = new ConfirmTruncate(syncFromLastFile, startOffset);
         HAMessage haMessage = new HAMessage(HAMessageType.CONFIRM_TRUNCATE, currentMasterEpoch,
             RemotingSerializable.encode(confirmTruncate));
         this.lastWriteTimestamp = System.currentTimeMillis();
@@ -533,9 +534,9 @@ public class AutoSwitchHAClient extends ServiceThread implements HAClient {
                 currentBlockStartOffset, byteBuffer.array(), 32, byteBuffer.remaining());
         }
 
-        System.out.println("client confirm offset1: " + haService.getLocalAddress() + " " + haService.getConfirmOffset());
+//        System.out.println("client confirm offset1: " + haService.getLocalAddress() + " " + haService.getConfirmOffset());
         this.haService.updateConfirmOffset(Math.min(replicaConfirmOffset, this.messageStore.getMaxPhyOffset()));
-        System.out.println("client confirm offset2: " + haService.getLocalAddress() + " " + haService.getConfirmOffset());
+//        System.out.println("client confirm offset2: " + haService.getLocalAddress() + " " + haService.getConfirmOffset());
 
         // If epoch changed to bigger, last epoch record would be terminated
         if (this.currentReceivedEpoch < currentBlockEpoch) {

@@ -70,6 +70,7 @@ import org.apache.rocketmq.store.ha.file.TruncateStrategy;
 import org.apache.rocketmq.store.ha.netty.NettyHADecoder;
 import org.apache.rocketmq.store.ha.netty.NettyHAEncoder;
 import org.apache.rocketmq.store.ha.netty.NettyHAServerHandler;
+import org.apache.rocketmq.store.ha.protocol.ConfirmTruncate;
 import org.apache.rocketmq.store.ha.protocol.HandshakeMaster;
 import org.apache.rocketmq.store.ha.protocol.HandshakeResult;
 import org.apache.rocketmq.store.ha.protocol.HandshakeSlave;
@@ -498,9 +499,10 @@ public class AutoSwitchHAService implements HAService {
         return handshakeMaster;
     }
 
-    public void confirmTruncate(Channel channel, long slaveOffset) {
+    public void confirmTruncate(Channel channel, ConfirmTruncate confirmTruncate) {
         HAConnection haConnection = this.connectionMap.get(channel);
         if (haConnection != null) {
+            long slaveOffset = confirmTruncate.getCommitLogStartOffset();
             long transferStart = slaveOffset;
             long phyMinOffset = defaultMessageStore.getCommitLog().getMinOffset();
             long phyMaxOffset = defaultMessageStore.getCommitLog().getMaxOffset();
@@ -515,10 +517,12 @@ public class AutoSwitchHAService implements HAService {
 
             // We must ensure that the starting point of syncing log
             // must be the startOffset of a file (maybe the last file, or the minOffset)
-            final MessageStoreConfig config = this.defaultMessageStore.getMessageStoreConfig();
-            transferStart = transferStart - (transferStart % config.getMappedFileSizeCommitLog());
-            if (transferStart < 0) {
-                transferStart = 0;
+            if (confirmTruncate.isSyncFromLastFile()) {
+                final MessageStoreConfig config = this.defaultMessageStore.getMessageStoreConfig();
+                transferStart = transferStart - (transferStart % config.getMappedFileSizeCommitLog());
+                if (transferStart < 0) {
+                    transferStart = 0;
+                }
             }
 
             System.out.println("receive client confirm truncate, start offset " + slaveOffset);
