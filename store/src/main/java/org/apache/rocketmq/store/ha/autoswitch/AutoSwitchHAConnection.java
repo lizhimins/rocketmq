@@ -46,7 +46,7 @@ public class AutoSwitchHAConnection implements HAConnection {
     private final NettyTransferService transferService;
 
     private volatile HAConnectionState currentState = HAConnectionState.READY;
-    private volatile long currentTransferOffset = -1L;
+    private long currentTransferOffset = -1L;
     private EpochEntry currentTransferEpochEntry = null;
     private SelectMappedBufferResult currentTransferBuffer;
 
@@ -248,32 +248,25 @@ public class AutoSwitchHAConnection implements HAConnection {
 
         private void pushCommitLogDataToSlave0() {
             currentTransferBuffer = haService.getDefaultMessageStore().getCommitLogData(currentTransferOffset);
-            if (currentTransferBuffer == null) {
-                doNettyTransferData(0);
-                waitForRunning(1000);
-                return;
-            }
 
             int size = this.getNextTransferDataSize();
-            if (size < 0) {
+            if (size <= 0) {
+                doNettyTransferData(0);
                 this.releaseData();
                 this.waitForRunning(100);
                 return;
             }
 
-            currentTransferOffset = currentTransferBuffer.getStartOffset();
             // We must ensure that the transmitted logs are within the same epoch
             // currentTransferEpoch == last epoch && endOffset = Long.MAX_VALUE
+            currentTransferOffset = currentTransferBuffer.getStartOffset();
             final long currentEpochEndOffset = currentTransferEpochEntry.getEndOffset();
             boolean separated = currentTransferOffset + size > currentEpochEndOffset;
+
+            System.out.println("sep: " + separated + " separated success, start=" + currentTransferOffset + ", size=" + size);
+
             if (separated) {
                 size = (int) (currentEpochEndOffset - currentTransferOffset);
-                currentTransferBuffer.getByteBuffer().limit(size);
-            }
-
-            doNettyTransferData(size);
-
-            if (separated) {
                 long currentEpoch = currentTransferEpochEntry.getEpoch();
                 currentTransferEpochEntry = epochCache.findCeilingEntryByEpoch(currentEpoch);
                 if (currentTransferEpochEntry == null) {
@@ -282,6 +275,8 @@ public class AutoSwitchHAConnection implements HAConnection {
                 }
             }
 
+            currentTransferBuffer.getByteBuffer().limit(size);
+            doNettyTransferData(size);
             currentTransferOffset += size;
         }
 
@@ -324,8 +319,10 @@ public class AutoSwitchHAConnection implements HAConnection {
         }
 
         protected void releaseData() {
-            currentTransferBuffer.release();
-            currentTransferBuffer = null;
+            if (currentTransferBuffer != null) {
+                currentTransferBuffer.release();
+                currentTransferBuffer = null;
+            }
         }
     }
 }

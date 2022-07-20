@@ -514,10 +514,9 @@ public class AutoSwitchHAClient extends ServiceThread implements HAClient {
 
     public void doPutCommitLog(PushCommitLogData pushCommitLogData, ByteBuffer byteBuffer) {
         long currentBlockEpoch = pushCommitLogData.getEpoch();
-        long confirmOffset = pushCommitLogData.getConfirmOffset();
-        long masterOffset = pushCommitLogData.getStartOffset();
-        long epochStartOffset = pushCommitLogData.getEpochStartOffset();
-        long slavePhyOffset = this.messageStore.getMaxPhyOffset();
+        long currentBlockStartOffset = pushCommitLogData.getStartOffset();
+        long currentEpochStartOffset = pushCommitLogData.getEpochStartOffset();
+        long replicaConfirmOffset = pushCommitLogData.getConfirmOffset();
 
 //        if (slavePhyOffset != 0) {
 //            if (slavePhyOffset != masterOffset) {
@@ -529,19 +528,22 @@ public class AutoSwitchHAClient extends ServiceThread implements HAClient {
 
         // Must put data first
         if (byteBuffer.hasRemaining()) {
+//            System.out.println(String.format("append to commit log, block start=%d", currentBlockStartOffset));
             this.messageStore.appendToCommitLog(
-                masterOffset, byteBuffer.array(), 32, byteBuffer.remaining());
+                currentBlockStartOffset, byteBuffer.array(), 32, byteBuffer.remaining());
         }
 
-        System.out.println("client print confirm offset before update: " + haService.getLocalAddress() + " " + haService.getConfirmOffset());
-        this.haService.updateConfirmOffset(Math.min(confirmOffset, this.messageStore.getMaxPhyOffset()));
-        System.out.println("client print confirm offset  after update: " + haService.getLocalAddress() + " " + haService.getConfirmOffset());
+        System.out.println("client confirm offset1: " + haService.getLocalAddress() + " " + haService.getConfirmOffset());
+        this.haService.updateConfirmOffset(Math.min(replicaConfirmOffset, this.messageStore.getMaxPhyOffset()));
+        System.out.println("client confirm offset2: " + haService.getLocalAddress() + " " + haService.getConfirmOffset());
 
         // If epoch changed to bigger, last epoch record would be terminated
         if (this.currentReceivedEpoch < currentBlockEpoch) {
-            System.out.println("put new epoch to self, client current=" + this.currentReceivedEpoch + ", block=" + currentBlockEpoch + ", block start=" + epochStartOffset);
+            System.out.println("client receive new epoch, current="
+                + this.currentReceivedEpoch + ", block=" + currentBlockEpoch + ", block start=" + currentEpochStartOffset);
+
             this.currentReceivedEpoch = currentBlockEpoch;
-            this.epochCache.tryAppendEpochEntry(new EpochEntry(currentBlockEpoch, epochStartOffset));
+            this.epochCache.tryAppendEpochEntry(new EpochEntry(currentBlockEpoch, currentEpochStartOffset));
         }
 
         this.currentTransferOffset = this.messageStore.getMaxPhyOffset();
