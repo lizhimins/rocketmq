@@ -501,7 +501,6 @@ public class AutoSwitchHAService implements HAService {
     public void confirmTruncate(Channel channel, long slaveOffset) {
         HAConnection haConnection = this.connectionMap.get(channel);
         if (haConnection != null) {
-
             long transferStart = slaveOffset;
             long phyMinOffset = defaultMessageStore.getCommitLog().getMinOffset();
             long phyMaxOffset = defaultMessageStore.getCommitLog().getMaxOffset();
@@ -522,13 +521,13 @@ public class AutoSwitchHAService implements HAService {
                 transferStart = 0;
             }
 
+            System.out.println("receive client confirm truncate, start offset " + slaveOffset);
+            LOGGER.info("receive client confirm truncate, start offset:{}, start:{}", slaveOffset, transferStart);
+
             ((AutoSwitchHAConnection) haConnection).setCurrentTransferOffset(transferStart);
-            System.out.println("receive client confirm truncate, request start offset " + slaveOffset);
-            LOGGER.info("receive client confirm truncate, request start offset:{}, start:{}",
-                slaveOffset, transferStart);
             ((AutoSwitchHAConnection) haConnection).changeCurrentState(HAConnectionState.TRANSFER);
         } else {
-            LOGGER.error("confirm failed");
+            LOGGER.error("receive client confirm truncate error, connection lost");
         }
     }
 

@@ -96,7 +96,7 @@ public class AutoSwitchHAConnection implements HAConnection {
     private final NettyTransferService transferService;
 
     private volatile HAConnectionState currentState = HAConnectionState.READY;
-    private long currentTransferOffset = -1L;
+    private volatile long currentTransferOffset = -1L;
     private EpochEntry currentTransferEpochEntry = null;
     private SelectMappedBufferResult currentTransferBuffer;
 

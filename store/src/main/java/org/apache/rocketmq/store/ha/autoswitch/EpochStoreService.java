@@ -19,7 +19,6 @@ package org.apache.rocketmq.store.ha.autoswitch;
 
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
@@ -75,13 +74,14 @@ public class EpochStoreService implements EpochStore {
         try {
             final List<EpochEntry> entries = this.checkpoint.read();
             initEntries(entries);
+            log.info("Init epoch entries from epochFile, epoch list {}", this.epochMap);
             return true;
         } catch (final IOException e) {
-            log.error("Error happened when init epoch entries from epochFile", e);
-            return false;
+            log.error("Init epoch entries from epochFile error", e);
         } finally {
             this.writeLock.unlock();
         }
+        return false;
     }
 
     @Override
@@ -103,8 +103,8 @@ public class EpochStoreService implements EpochStore {
                 final EpochEntry lastEntry = this.epochMap.lastEntry().getValue();
                 if (lastEntry.getEpoch() >= entry.getEpoch()
                     || lastEntry.getStartOffset() >= entry.getStartOffset()) {
-                    log.error("The appending entry's is not latest, " +
-                        "so append failed, last={}, append={}", entry, lastEntry);
+                    log.error("Append new epoch entry error, this entry is not latest, " +
+                        "so append failed, current last entry={}, append entry={}", entry, lastEntry);
                     return false;
                 }
                 lastEntry.setEndOffset(entry.getStartOffset());
@@ -199,7 +199,7 @@ public class EpochStoreService implements EpochStore {
     public long findLastConsistentPoint(final EpochStore compareEpoch) {
         this.readLock.lock();
         try {
-            long consistentOffset = -1;
+            long consistentOffset = -1L;
             final Map<Long, EpochEntry> descendingMap = new TreeMap<>(this.epochMap).descendingMap();
             for (Map.Entry<Long, EpochEntry> curLocalEntry : descendingMap.entrySet()) {
                 final EpochEntry compareEntry = compareEpoch.findEpochEntryByEpoch(curLocalEntry.getKey());

@@ -338,11 +338,11 @@ public class AutoSwitchHAClient extends ServiceThread implements HAClient {
     }
 
     private boolean checkConnectionTimeout() {
-        if (isTimeToReportOffset()) {
-            System.out.println("detect connection timeout, maybe rebuild connection");
-            LOGGER.info("schedule to report slave offset: {}", this.currentTransferOffset);
-            return false;
-        }
+//        if (isTimeToReportOffset()) {
+//            System.out.println("detect connection timeout, last=" + this.lastWriteTimestamp + " " + System.currentTimeMillis());
+//            LOGGER.info("schedule to report slave offset: {}", this.currentTransferOffset);
+//            return false;
+//        }
         return true;
     }
 
@@ -380,6 +380,7 @@ public class AutoSwitchHAClient extends ServiceThread implements HAClient {
     public synchronized void doConsistencyRepairWithMaster(List<EpochEntry> entryList) {
         channelPromise.setSuccess();
         if (!doTruncateFiles(entryList)) {
+            this.closeMaster();
             return;
         }
 
@@ -490,11 +491,12 @@ public class AutoSwitchHAClient extends ServiceThread implements HAClient {
 
         // If truncateOffset < 0, means we can't find a consistent point
         final long truncateOffset = localEpochCache.findLastConsistentPoint(masterEpochCache);
-        if (truncateOffset < 0) {
-            LOGGER.error("Failed to find a consistent point between masterEpoch:{} and slaveEpoch:{}",
-                masterEpochEntries, localEpochEntries);
-            return false;
-        }
+//        if (truncateOffset < 0) {
+//            System.out.println("tr error");
+//            LOGGER.error("Failed to find a consistent point between masterEpoch:{} and slaveEpoch:{}",
+//                masterEpochEntries, localEpochEntries);
+//            return false;
+//        }
 
         // Truncate invalid msg first
         if (0 > truncateStrategy.truncateInvalidMsg(messageStore, truncateOffset)) {
