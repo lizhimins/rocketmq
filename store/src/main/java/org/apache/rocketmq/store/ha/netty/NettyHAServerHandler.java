@@ -73,8 +73,8 @@ public class NettyHAServerHandler extends SimpleChannelInboundHandler<HAMessage>
 
     public void pushCommitLogAck(HAMessage message, Channel channel) {
         PushCommitLogAck pushCommitLogAck = RemotingSerializable.decode(message.getBytes(), PushCommitLogAck.class);
-        System.out.println("master receive ack offset: " + pushCommitLogAck.getConfirmOffset()
-            + " count: " + nettyHAService.getConnectionCount());
+//        System.out.println("master receive ack offset: " + pushCommitLogAck.getConfirmOffset()
+//            + " count: " + nettyHAService.getConnectionCount());
         nettyHAService.pushCommitLogDataAck(channel, pushCommitLogAck);
     }
 
@@ -92,9 +92,9 @@ public class NettyHAServerHandler extends SimpleChannelInboundHandler<HAMessage>
             return;
         }
 
-        if (!message.getType().equals(HAMessageType.PUSH_ACK)) {
-            System.out.println(message.getType());
-        }
+//        if (!message.getType().equals(HAMessageType.PUSH_ACK)) {
+//            System.out.println(message.getType());
+//        }
 
         Channel channel = ctx.channel();
         switch (message.getType()) {

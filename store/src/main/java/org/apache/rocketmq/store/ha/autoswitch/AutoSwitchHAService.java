@@ -164,8 +164,8 @@ public class AutoSwitchHAService implements HAService {
 
         future = bootstrap.bind(port).addListener((ChannelFutureListener) future1 -> {
             if (future1.isSuccess()) {
-                LOGGER.info("Netty HAService start listen at " + port);
-                System.out.println("Netty HAService start listen at " + port);
+                LOGGER.info("Server start netty ha service and start listen at " + port);
+                // System.out.println("Server start netty ha service and start listen at " + port);
             } else {
                 System.out.println("start failed");
             }
@@ -408,8 +408,8 @@ public class AutoSwitchHAService implements HAService {
             setSyncStateSet(currentSyncStateSet);
             // Notify the upper layer that syncStateSet changed.
             notifySyncStateSetChanged(currentSyncStateSet);
-            System.out.printf("expand in sync state set %s, slaveAckOffset %d%n",
-                currentSyncStateSet, slaveAckOffset);
+            // System.out.printf("expand in sync state set %s, slaveAckOffset %d%n", currentSyncStateSet, slaveAckOffset);
+            LOGGER.info("expand in sync state set {}, slaveAckOffset {}", currentSyncStateSet, slaveAckOffset);
         }
     }
 
@@ -525,7 +525,7 @@ public class AutoSwitchHAService implements HAService {
                 }
             }
 
-            System.out.println("receive client confirm truncate, start offset " + slaveOffset);
+            // System.out.println("receive client confirm truncate, start offset " + slaveOffset);
             LOGGER.info("receive client confirm truncate, start offset:{}, start:{}", slaveOffset, transferStart);
 
             ((AutoSwitchHAConnection) haConnection).setCurrentTransferOffset(transferStart);

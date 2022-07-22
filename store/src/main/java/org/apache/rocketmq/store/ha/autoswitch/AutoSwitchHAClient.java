@@ -205,7 +205,7 @@ public class AutoSwitchHAClient extends ServiceThread implements HAClient {
         // close channel
         if (future != null && future.channel() != null) {
             try {
-                System.out.println("channel close by client");
+                // System.out.println("channel close by client");
                 future.channel().close().sync();
                 future = null;
             } catch (InterruptedException e) {
@@ -316,7 +316,7 @@ public class AutoSwitchHAClient extends ServiceThread implements HAClient {
                     changeCurrentState(HAConnectionState.HANDSHAKE);
                     return true;
                 } else {
-                    System.out.println("handshake failed");
+//                    System.out.println("handshake failed");
                 }
                 channelPromise = null;
                 if (!receiveResult) {
@@ -416,8 +416,8 @@ public class AutoSwitchHAClient extends ServiceThread implements HAClient {
             RemotingSerializable.encode(pushCommitLogAck));
         this.lastWriteTimestamp = System.currentTimeMillis();
         future.channel().writeAndFlush(haMessage);
-        System.out.printf("send ack, offset=%d, async role=%s%n",
-            this.currentTransferOffset, messageStore.getMessageStoreConfig().isAsyncLearner());
+//        System.out.printf("send ack, offset=%d, async role=%s%n",
+//            this.currentTransferOffset, messageStore.getMessageStoreConfig().isAsyncLearner());
     }
 
     @Override

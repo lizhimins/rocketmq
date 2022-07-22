@@ -228,6 +228,7 @@ public class DefaultHAClient extends ServiceThread implements HAClient {
         return result;
     }
 
+    @Override
     public void changeCurrentState(HAConnectionState currentState) {
         log.info("change state to {}", currentState);
         this.currentState = currentState;
@@ -254,6 +255,7 @@ public class DefaultHAClient extends ServiceThread implements HAClient {
         return this.socketChannel != null;
     }
 
+    @Override
     public void closeMaster() {
         if (null != this.socketChannel) {
             try {
@@ -268,7 +270,7 @@ public class DefaultHAClient extends ServiceThread implements HAClient {
                 this.socketChannel = null;
 
                 log.info("HAClient close connection with master {}", this.masterHaAddress.get());
-                this.changeCurrentState(HAConnectionState.READY);
+//                this.changeCurrentState(HAConnectionState.READY);
             } catch (IOException e) {
                 log.warn("closeMaster exception. ", e);
             }

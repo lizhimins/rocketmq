@@ -32,7 +32,6 @@ public class NettyHAClientHandler extends ChannelInboundHandlerAdapter {
     public void channelUnregistered(ChannelHandlerContext ctx) throws Exception {
         System.out.println("client disconnect to server " + ctx.channel().remoteAddress() + " " + ctx.channel().id());
         nettyHAClient.changePromise(false);
-        nettyHAClient.changeCurrentState(HAConnectionState.READY);
         super.channelUnregistered(ctx);
     }
 
@@ -96,7 +95,7 @@ public class NettyHAClientHandler extends ChannelInboundHandlerAdapter {
             return;
         }
 
-        System.out.println(message.getType());
+//        System.out.println(message.getType());
         switch (message.getType()) {
             case MASTER_HANDSHAKE:
                 masterHandshake(message);

@@ -263,7 +263,7 @@ public class AutoSwitchHAConnection implements HAConnection {
             final long currentEpochEndOffset = currentTransferEpochEntry.getEndOffset();
             boolean separated = currentTransferOffset + size > currentEpochEndOffset;
 
-            System.out.println("sep: " + separated + " separated success, start=" + currentTransferOffset + ", size=" + size);
+//            System.out.println("sep: " + separated + " separated success, start=" + currentTransferOffset + ", size=" + size);
 
             if (separated) {
                 size = (int) (currentEpochEndOffset - currentTransferOffset);
@@ -288,9 +288,9 @@ public class AutoSwitchHAConnection implements HAConnection {
             pushCommitLogData.setConfirmOffset(haService.computeConfirmOffset());
             pushCommitLogData.setStartOffset(currentTransferOffset);
 
-            System.out.printf("transfer data, epoch=%d, start=%d, size=%d, master confirm=%d%n",
-                currentTransferEpochEntry.getEpoch(), currentTransferOffset, maxTransferSize,
-                pushCommitLogData.getConfirmOffset());
+//            System.out.printf("transfer data, epoch=%d, start=%d, size=%d, master confirm=%d%n",
+//                currentTransferEpochEntry.getEpoch(), currentTransferOffset, maxTransferSize,
+//                pushCommitLogData.getConfirmOffset());
 
             haMessage.appendBody(pushCommitLogData.encode());
             if (maxTransferSize > 0) {

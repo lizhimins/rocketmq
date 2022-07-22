@@ -195,12 +195,12 @@ public class AutoSwitchHAServiceTest {
             if (GetMessageStatus.FOUND.equals(result.getStatus())) {
                 foundMessage += result.getMessageCount();
             }
-            System.out.print("queueId: " + i + ", message: " + result.getMessageCount() + "\n");
+//            System.out.print("queueId: " + i + ", message: " + result.getMessageCount() + "\n");
             result.release();
         }
-        System.out.printf("min: %d, max: %d, test found message total: %d, confirm offset: %d%n",
-            messageStore.getMinPhyOffset(), messageStore.getMaxPhyOffset(), foundMessage,
-            ((AutoSwitchHAService) messageStore.getHaService()).getConfirmOffset());
+//        System.out.printf("min: %d, max: %d, test found message total: %d, confirm offset: %d%n",
+//            messageStore.getMinPhyOffset(), messageStore.getMaxPhyOffset(), foundMessage,
+//            ((AutoSwitchHAService) messageStore.getHaService()).getConfirmOffset());
         return foundMessage;
     }
 
