@@ -525,7 +525,7 @@ public class AutoSwitchHAService implements HAService {
                 }
             }
 
-            // System.out.println("receive client confirm truncate, start offset " + slaveOffset);
+            System.out.println("receive client confirm truncate, start offset " + slaveOffset);
             LOGGER.info("receive client confirm truncate, start offset:{}, start:{}", slaveOffset, transferStart);
 
             ((AutoSwitchHAConnection) haConnection).setCurrentTransferOffset(transferStart);
@@ -568,8 +568,11 @@ public class AutoSwitchHAService implements HAService {
 
     public void removeConnection(Channel channel) {
         HAConnection haConnection = this.connectionMap.remove(channel);
+        if (haConnection != null) {
+            System.out.println("server unregister client " + channel.id());
+            haConnection.shutdown();
+        }
         //this.haConnectionStateNotificationService.checkConnectionStateAndNotify(haConnection);
-        haConnection.shutdown();
     }
 
     public EpochStore getEpochCache() {

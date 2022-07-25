@@ -205,6 +205,7 @@ public class AutoSwitchHAConnection implements HAConnection {
                             if (this.pushCommitLogDataToSlave()) {
                                 this.waitForRunning(10);
                             } else {
+                                System.out.println("server exit");
                                 close();
                             }
                             continue;
@@ -276,6 +277,7 @@ public class AutoSwitchHAConnection implements HAConnection {
             }
 
             currentTransferBuffer.getByteBuffer().limit(size);
+
             doNettyTransferData(size);
             currentTransferOffset += size;
         }
@@ -288,20 +290,32 @@ public class AutoSwitchHAConnection implements HAConnection {
             pushCommitLogData.setConfirmOffset(haService.computeConfirmOffset());
             pushCommitLogData.setStartOffset(currentTransferOffset);
 
-//            System.out.printf("transfer data, epoch=%d, start=%d, size=%d, master confirm=%d%n",
-//                currentTransferEpochEntry.getEpoch(), currentTransferOffset, maxTransferSize,
-//                pushCommitLogData.getConfirmOffset());
-
             haMessage.appendBody(pushCommitLogData.encode());
+
             if (maxTransferSize > 0) {
                 haMessage.appendBody(currentTransferBuffer.getByteBuffer());
             }
 
+//            {
+//                int size = currentTransferBuffer != null && currentTransferBuffer.getByteBuffer() != null ?
+//                    currentTransferBuffer.getByteBuffer().remaining() : 0;
+//
+//                System.out.printf("transfer begin, epoch-offset: %d-%d, confirm: %d, block: %d-%d, length: %d%n",
+//                    pushCommitLogData.getEpoch(), pushCommitLogData.getEpochStartOffset(),
+//                    pushCommitLogData.getConfirmOffset(), pushCommitLogData.getStartOffset(),
+//                    pushCommitLogData.getStartOffset() + size, size);
+//            }
+
             ChannelFuture future = channel.writeAndFlush(haMessage);
             future.addListener((ChannelFutureListener) future1 -> {
                 if (future1.isSuccess()) {
-                    //LOGGER.info("transfer data, " + maxTransferSize);
-                    //System.out.println("transfer success, " + maxTransferSize);
+                    if (maxTransferSize > 0) {
+                        System.out.printf("transfer data, epoch-offset: %d-%d, confirm: %d, block: %d-%d, length: %d%n",
+                            pushCommitLogData.getEpoch(), pushCommitLogData.getEpochStartOffset(),
+                            pushCommitLogData.getConfirmOffset(), pushCommitLogData.getStartOffset(),
+                            pushCommitLogData.getStartOffset() + maxTransferSize, maxTransferSize);
+                    }
+//                    System.out.println("transfer success, " + maxTransferSize);
                 } else {
                     System.out.println("transfer error, " + maxTransferSize);
                 }
@@ -313,6 +327,7 @@ public class AutoSwitchHAConnection implements HAConnection {
                     releaseData();
                 }
             } catch (InterruptedException e) {
+                System.out.println("InterruptedException, " + e);
                 LOGGER.error("Netty transfer data error", e);
                 waitForRunning(100);
             }

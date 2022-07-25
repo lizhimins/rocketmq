@@ -477,7 +477,7 @@ public class AutoSwitchHAClient extends ServiceThread implements HAClient {
 
         // If epochMap is empty, means the broker is a new replicas
         if (this.epochCache.getAllEntries().size() == 0) {
-            System.out.println("Slave local epochCache is empty, skip truncate log");
+            System.out.println("client skip truncate commitlog");
             LOGGER.info("Slave local epochCache is empty, skip truncate log");
             return true;
         }
@@ -489,15 +489,15 @@ public class AutoSwitchHAClient extends ServiceThread implements HAClient {
         final EpochStore localEpochCache = new EpochStoreService();
         final List<EpochEntry> localEpochEntries = this.epochCache.getAllEntries();
         localEpochCache.initStateFromEntries(localEpochEntries);
+        localEpochCache.setLastEpochEntryEndOffset(this.messageStore.getMaxPhyOffset());
 
         // If truncateOffset < 0, means we can't find a consistent point
         final long truncateOffset = localEpochCache.findLastConsistentPoint(masterEpochCache);
-//        if (truncateOffset < 0) {
-//            System.out.println("tr error");
-//            LOGGER.error("Failed to find a consistent point between masterEpoch:{} and slaveEpoch:{}",
-//                masterEpochEntries, localEpochEntries);
-//            return false;
-//        }
+        if (truncateOffset < 0) {
+            LOGGER.error("Failed to find a consistent point between masterEpoch:{} and slaveEpoch:{}",
+                masterEpochEntries, localEpochEntries);
+            return true;
+        }
 
         // Truncate invalid msg first
         if (0 > truncateStrategy.truncateInvalidMsg(messageStore, truncateOffset)) {

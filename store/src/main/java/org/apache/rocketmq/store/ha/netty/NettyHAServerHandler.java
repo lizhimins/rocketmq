@@ -30,7 +30,6 @@ public class NettyHAServerHandler extends SimpleChannelInboundHandler<HAMessage>
 
     @Override
     public void channelUnregistered(ChannelHandlerContext ctx) throws Exception {
-        System.out.println("server unregister client" + ctx.channel().id());
         nettyHAService.removeConnection(ctx.channel());
         super.channelUnregistered(ctx);
     }
@@ -67,7 +66,7 @@ public class NettyHAServerHandler extends SimpleChannelInboundHandler<HAMessage>
      */
     public void confirmTruncate(HAMessage message, Channel channel) {
         ConfirmTruncate confirmTruncate = RemotingSerializable.decode(message.getBytes(), ConfirmTruncate.class);
-        // System.out.println("master receive truncate offset: " + confirmTruncate.getCommitLogStartOffset());
+        System.out.println("master receive truncate offset: " + confirmTruncate.getCommitLogStartOffset());
         nettyHAService.confirmTruncate(channel, confirmTruncate);
     }
 
