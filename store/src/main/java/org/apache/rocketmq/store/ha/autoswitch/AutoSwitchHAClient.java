@@ -192,7 +192,7 @@ public class AutoSwitchHAClient extends ServiceThread implements HAClient {
 
     @Override
     public void changeCurrentState(HAConnectionState haConnectionState) {
-        System.out.println("client change state: " + this.currentState + " => " + haConnectionState);
+//        System.out.println("client change state: " + this.currentState + " => " + haConnectionState);
         LOGGER.info("change state to {}", haConnectionState);
         this.currentState = haConnectionState;
     }
@@ -278,8 +278,8 @@ public class AutoSwitchHAClient extends ServiceThread implements HAClient {
         SocketAddress socketAddress = RemotingUtil.string2SocketAddress(this.masterHaAddress.get());
         future = bootstrap.connect(socketAddress).addListener((ChannelFutureListener) future -> {
             if (future.isSuccess()) {
-                System.out.println("client connect to server successfully! " +
-                    this.messageStore.getBrokerConfig().getBrokerName() + " " + socketAddress + " " + future.channel().id());
+//                System.out.println("client connect to server successfully! " +
+//                    this.messageStore.getBrokerConfig().getBrokerName() + " " + socketAddress + " " + future.channel().id());
                 LOGGER.info("client connect to server successfully!");
             } else {
                 System.out.println("remote: " + future.channel().remoteAddress() + ", local: " + future.channel().localAddress() + " " + future.cause().toString());
@@ -477,7 +477,7 @@ public class AutoSwitchHAClient extends ServiceThread implements HAClient {
 
         // If epochMap is empty, means the broker is a new replicas
         if (this.epochCache.getAllEntries().size() == 0) {
-            System.out.println("client skip truncate commitlog");
+//            System.out.println("client skip truncate commitlog");
             LOGGER.info("Slave local epochCache is empty, skip truncate log");
             return true;
         }

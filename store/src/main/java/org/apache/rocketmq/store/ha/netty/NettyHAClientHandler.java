@@ -30,7 +30,7 @@ public class NettyHAClientHandler extends ChannelInboundHandlerAdapter {
 
     @Override
     public void channelUnregistered(ChannelHandlerContext ctx) throws Exception {
-        System.out.println("client disconnect to server " + ctx.channel().remoteAddress() + " " + ctx.channel().id());
+//        System.out.println("client disconnect to server " + ctx.channel().remoteAddress() + " " + ctx.channel().id());
         nettyHAClient.changePromise(false);
         super.channelUnregistered(ctx);
     }
