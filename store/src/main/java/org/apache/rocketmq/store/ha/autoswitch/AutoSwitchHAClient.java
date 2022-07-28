@@ -473,7 +473,7 @@ public class AutoSwitchHAClient extends ServiceThread implements HAClient {
      */
     private boolean doTruncateFiles(List<EpochEntry> masterEpochEntries) {
 
-        System.out.println("client receive master epoch: " + masterEpochEntries);
+//        System.out.println("client receive master epoch: " + masterEpochEntries);
 
         // If epochMap is empty, means the broker is a new replicas
         if (this.epochCache.getAllEntries().size() == 0) {
