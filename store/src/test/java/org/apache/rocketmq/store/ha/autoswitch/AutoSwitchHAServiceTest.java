@@ -11,14 +11,11 @@ import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.apache.rocketmq.common.BrokerConfig;
 import org.apache.rocketmq.common.MixAll;
-import org.apache.rocketmq.common.UtilAll;
 import org.apache.rocketmq.common.message.MessageDecoder;
 import org.apache.rocketmq.common.message.MessageExtBrokerInner;
-import org.apache.rocketmq.store.ConsumeQueue;
 import org.apache.rocketmq.store.DefaultMessageStore;
 import org.apache.rocketmq.store.GetMessageResult;
 import org.apache.rocketmq.store.GetMessageStatus;
@@ -40,7 +37,6 @@ import org.junit.Test;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
 public class AutoSwitchHAServiceTest {
@@ -52,22 +48,23 @@ public class AutoSwitchHAServiceTest {
     private static final String CHECKPOINT_NAME = "epoch.ckpt";
     private static final int DEFAULT_MAPPED_FILE_SIZE = 1024 * 1024;
 
-    private int queueTotal = 4;
+    private static int MESSAGE_QUEUE_TOTAL = 4;
     private final AtomicInteger queueId = new AtomicInteger(0);
     private final String messageBodyString = "Once, there was a chance for me!";
     private final byte[] messageBody = messageBodyString.getBytes();
     private final BrokerStatsManager brokerStatsManager =
-        new BrokerStatsManager("HASimpleTest", true);
-    private final String storePathRootParentDir =
-        Paths.get(System.getProperty("user.home"), "store").toString();
-    private final String storePathRootDir =
-        Paths.get(storePathRootParentDir, UUID.randomUUID().toString().replace("-", "")).toString();
+        new BrokerStatsManager("haSimpleTestCluster", true);
+
+    private final String userHomeDir = System.getProperty("user.home");
+    private final String randomParentDir = UUID.randomUUID().toString().replace("-", "");
+    private final String storePathRootParentDir = Paths.get(userHomeDir, "store-test").toString();
+    private final String storePathRootDir = Paths.get(storePathRootParentDir, randomParentDir).toString();
 
     private SocketAddress bornHost;
     private SocketAddress storeHost;
 
-    // Broker HA port 7000 7001 7002
-    // Broker port    8000 8001 8002
+    // Broker haService port [7000, 7001, 7002]
+    // Broker remoting port  [8000, 8001, 8002]
     private DefaultMessageStore messageStore1;
     private DefaultMessageStore messageStore2;
     private DefaultMessageStore messageStore3;
@@ -82,7 +79,7 @@ public class AutoSwitchHAServiceTest {
         MessageStoreConfig messageStoreConfig = new MessageStoreConfig();
         messageStoreConfig.setBrokerRole(BrokerRole.SLAVE);
 
-        String storePath = storePathRootDir + File.separator + BROKER_NAME + "-" + brokerId;
+        String storePath = Paths.get(storePathRootDir, BROKER_NAME + "-" + brokerId).toString();
         messageStoreConfig.setStorePathRootDir(storePath);
         messageStoreConfig.setStorePathCommitLog(storePath + File.separator + COMMIT_LOG);
         messageStoreConfig.setStorePathEpochFile(storePath + File.separator + CHECKPOINT_NAME);
@@ -91,12 +88,12 @@ public class AutoSwitchHAServiceTest {
         messageStoreConfig.setInSyncReplicas(1);
 
         messageStoreConfig.setMappedFileSizeCommitLog(mappedFileSize);
-        messageStoreConfig.setMappedFileSizeConsumeQueue(1024 * 1024);
+        messageStoreConfig.setMappedFileSizeConsumeQueue(1200);
         messageStoreConfig.setMaxHashSlotNum(10000);
         messageStoreConfig.setMaxIndexNum(100 * 100);
         messageStoreConfig.setFlushDiskType(FlushDiskType.SYNC_FLUSH);
         messageStoreConfig.setFlushIntervalConsumeQueue(1);
-
+        messageStoreConfig.setFlushConsumeQueueLeastPages(0);
         return messageStoreConfig;
     }
 
@@ -122,7 +119,7 @@ public class AutoSwitchHAServiceTest {
         msg.setTags("TAG1");
         msg.setBody(messageBody);
         msg.setKeys(String.valueOf(System.currentTimeMillis()));
-        msg.setQueueId(Math.abs(queueId.getAndIncrement()) % queueTotal);
+        msg.setQueueId(Math.abs(queueId.getAndIncrement()) % MESSAGE_QUEUE_TOTAL);
         msg.setSysFlag(0);
         msg.setBornTimestamp(System.currentTimeMillis());
         msg.setStoreHost(storeHost);
@@ -180,9 +177,6 @@ public class AutoSwitchHAServiceTest {
             messageStore3.shutdown();
             messageStore3.destroy();
         }
-
-        File file = new File(storePathRootParentDir);
-        UtilAll.deleteFile(file);
     }
 
     private int getMessageCount(final DefaultMessageStore messageStore) {
@@ -193,7 +187,7 @@ public class AutoSwitchHAServiceTest {
         int foundMessage = 0;
 
         StringBuilder sb = new StringBuilder();
-        for (int i = 0; i < queueTotal; i++) {
+        for (int i = 0; i < MESSAGE_QUEUE_TOTAL; i++) {
             GetMessageResult result = messageStore.getMessage(
                 GROUP, TOPIC, i, startIndex, 1024 * 1024, null);
             assertThat(result).isNotNull();
@@ -206,10 +200,36 @@ public class AutoSwitchHAServiceTest {
             result.release();
         }
 
-        System.out.printf("min: %d, max: %d, test found message total: %d, confirm offset: %d, %s%n",
-            messageStore.getMinPhyOffset(), messageStore.getMaxPhyOffset(), foundMessage,
-            ((AutoSwitchHAService) messageStore.getHaService()).getConfirmOffset(), sb.toString());
+//        System.out.printf("message store offset: %d-%d, found: %d, count: %d, distribution: %s%n",
+//            messageStore.getMinPhyOffset(), messageStore.getMaxPhyOffset(), foundMessage,
+//            ((AutoSwitchHAService) messageStore.getHaService()).getConfirmOffset(), sb);
+
         return foundMessage;
+    }
+
+    @Test
+    public void testSingleBrokerStore() throws Exception {
+        initMessageStore(DEFAULT_MAPPED_FILE_SIZE);
+        MESSAGE_QUEUE_TOTAL = 1;
+        int totalPutMessageNums = 10;
+        this.messageStore1.getHaService().changeToMaster(1);
+
+        // Put message on master
+        for (int i = 0; i < totalPutMessageNums; i++) {
+            PutMessageResult result = this.messageStore1.putMessage(buildMessage());
+            Assert.assertEquals(result.getPutMessageStatus(), PutMessageStatus.PUT_OK);
+        }
+
+        this.messageStore1.getHaService().changeToMaster(2);
+
+        // Put message on master
+        for (int i = 0; i < totalPutMessageNums; i++) {
+            PutMessageResult result = this.messageStore1.putMessage(buildMessage());
+            Assert.assertEquals(result.getPutMessageStatus(), PutMessageStatus.PUT_OK);
+        }
+
+        await().pollInterval(Duration.ofSeconds(1)).atMost(Duration.ofSeconds(30)).until(
+            () -> 20 == getMessageCount(messageStore1));
     }
 
     @Test
@@ -407,7 +427,6 @@ public class AutoSwitchHAServiceTest {
         messageStore3.getHaService().changeToSlave("", 1, 3L);
         messageStore3.getHaService().updateHaMasterAddress("127.0.0.1:7000");
 
-        System.out.println("==========================================33");
         await().atMost(Duration.ofSeconds(30)).until(
             () -> messageCount == getMessageCount(messageStore3));
     }
@@ -415,7 +434,7 @@ public class AutoSwitchHAServiceTest {
     @Test
     public void testTruncateCommitLogAndAddBroker() throws Exception {
 
-        queueTotal = 1;
+        MESSAGE_QUEUE_TOTAL = 1;
 
         // Noted that 10 msg 's total size = 1570
         // Init the mappedFileSize = 1700, one file only be used to store 10 msg.
@@ -444,12 +463,12 @@ public class AutoSwitchHAServiceTest {
         haService.truncateEpochFilePrefix(1570);
         assertEquals(1, haService.getEpochEntries().size());
 
-        ((ConsumeQueue) this.messageStore1.getConsumeQueue(TOPIC, 0)).correctMinOffset(1570);
+        (this.messageStore1.getConsumeQueue(TOPIC, 0)).correctMinOffset(1570);
 
         await().pollInterval(Duration.ofSeconds(1)).atMost(Duration.ofSeconds(30)).until(
             () -> 10 == getMessageCount(messageStore1, 10));
 
-        System.out.println("==============================");
+//        System.out.println("==============================");
         // Step4: add broker3 as slave, only have 10 msg from offset 10, broker3 copy from first file
         messageStore3.getHaService().changeToSlave("", 2, 3L);
         messageStore3.getHaService().updateHaMasterAddress("127.0.0.1:7000");
@@ -457,7 +476,6 @@ public class AutoSwitchHAServiceTest {
         await().pollInterval(Duration.ofSeconds(1)).atMost(Duration.ofSeconds(30)).until(
             () -> 10 == getMessageCount(messageStore3, 10));
 
-        System.out.println("1213123123123");
         System.out.println(((AutoSwitchHAService) messageStore3.getHaService()).getEpochEntries());
     }
 
@@ -474,16 +492,17 @@ public class AutoSwitchHAServiceTest {
         // store2: <Epoch1, 0, 1570> <Epoch2, 1570, 3270> <Epoch3, 3400, 4970>
         // store3:                   <Epoch2, 1570, 3270> <Epoch3, 3400, 4970>
 
-        System.out.println("=====================");
+//        System.out.println("=====================");
         changeMasterAndPutMessage(3, this.messageStore2, "127.0.0.1:7001", this.messageStore3, 3, 10);
         await().pollInterval(Duration.ofSeconds(1)).atMost(Duration.ofSeconds(30)).until(
             () -> 30 == getMessageCount(messageStore2, 0));
 
-        ConsumeQueueInterface consumeQueue = messageStore3.getConsumeQueue(TOPIC, 0);
-        System.out.println(consumeQueue.getMinOffsetInQueue() + " " + consumeQueue.getMaxOffsetInQueue());
-
         await().pollInterval(Duration.ofSeconds(1)).atMost(Duration.ofSeconds(30)).until(
             () -> 20 == getMessageCount(messageStore3, 10));
+
+        ConsumeQueueInterface consumeQueue = messageStore3.getConsumeQueue(TOPIC, 0);
+        Assert.assertEquals(10, consumeQueue.getMinOffsetInQueue());
+        Assert.assertEquals(30, consumeQueue.getMaxOffsetInQueue());
 
         //System.out.println(((AutoSwitchHAService) messageStore3.getHaService()).getEpochEntries().toString());
         //System.out.println(messageStore3.getMinPhyOffset());
@@ -505,7 +524,7 @@ public class AutoSwitchHAServiceTest {
     @Test
     public void testAddBrokerAndSyncFromLastFile() throws Exception {
         initMessageStore(1700);
-        queueTotal = 1;
+        MESSAGE_QUEUE_TOTAL = 1;
 
         // Step1: broker1 as leader, broker2 as follower
         // append epoch 2, each epoch will be stored on one file
@@ -513,7 +532,7 @@ public class AutoSwitchHAServiceTest {
         int messageCount = 10;
         changeMasterAndPutMessage(1, this.messageStore1, "127.0.0.1:7000", this.messageStore2, 1, messageCount);
         changeMasterAndPutMessage(2, this.messageStore1, "127.0.0.1:7000", this.messageStore2, 1, messageCount);
-        await().pollInterval(Duration.ofSeconds(1)).atMost(Duration.ofSeconds(30)).until(
+        await().pollInterval(Duration.ofMillis(100)).atMost(Duration.ofSeconds(30)).until(
             () -> messageCount * 2 == getMessageCount(messageStore2));
 
         messageStore2.shutdown();
@@ -545,12 +564,13 @@ public class AutoSwitchHAServiceTest {
 
         // Put message on master
         for (int i = 0; i < messageCount; i++) {
-            messageStore1.putMessage(buildMessage());
+            PutMessageResult result = this.messageStore1.putMessage(buildMessage());
+            Assert.assertEquals(result.getPutMessageStatus(), PutMessageStatus.PUT_OK);
         }
 
         // Sync from last file, but not start from mapped file first
         // Message total count is 20
         await().pollInterval(Duration.ofSeconds(1)).atMost(Duration.ofSeconds(30)).until(
-            () -> 10 == getMessageCount(messageStore3, 20));
+            () -> 20 == getMessageCount(messageStore3, 10));
     }
 }

@@ -226,7 +226,7 @@ public class EpochStoreService implements EpochStore {
     public long findLastConsistentPoint(final EpochStore compareEpoch) {
         this.readLock.lock();
         try {
-            long consistentOffset = -1;
+            long consistentOffset = -1L;
             final Map<Long, EpochEntry> descendingMap = new TreeMap<>(this.epochMap).descendingMap();
             for (Map.Entry<Long, EpochEntry> curLocalEntry : descendingMap.entrySet()) {
                 final EpochEntry compareEntry = compareEpoch.findEpochEntryByEpoch(curLocalEntry.getKey());
@@ -258,7 +258,10 @@ public class EpochStoreService implements EpochStore {
         this.writeLock.lock();
         try {
             this.epochMap.entrySet().removeIf(entry -> predict.test(entry.getValue()));
-            final EpochEntry entry = getLastEntry();
+            if (this.epochMap.isEmpty()) {
+                return;
+            }
+            final EpochEntry entry = this.epochMap.lastEntry().getValue();
             if (entry != null) {
                 entry.setEndOffset(Long.MAX_VALUE);
             }

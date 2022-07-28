@@ -309,12 +309,12 @@ public class AutoSwitchHAConnection implements HAConnection {
             ChannelFuture future = channel.writeAndFlush(haMessage);
             future.addListener((ChannelFutureListener) future1 -> {
                 if (future1.isSuccess()) {
-                    if (maxTransferSize > 0) {
-                        System.out.printf("transfer data, epoch-offset: %d-%d, confirm: %d, block: %d-%d, length: %d%n",
-                            pushCommitLogData.getEpoch(), pushCommitLogData.getEpochStartOffset(),
-                            pushCommitLogData.getConfirmOffset(), pushCommitLogData.getStartOffset(),
-                            pushCommitLogData.getStartOffset() + maxTransferSize, maxTransferSize);
-                    }
+//                    if (maxTransferSize > 0) {
+//                        System.out.printf("transfer data, epoch-offset: %d-%d, confirm: %d, block: %d-%d, length: %d%n",
+//                            pushCommitLogData.getEpoch(), pushCommitLogData.getEpochStartOffset(),
+//                            pushCommitLogData.getConfirmOffset(), pushCommitLogData.getStartOffset(),
+//                            pushCommitLogData.getStartOffset() + maxTransferSize, maxTransferSize);
+//                    }
 //                    System.out.println("transfer success, " + maxTransferSize);
                 } else {
                     System.out.println("transfer error, " + maxTransferSize);

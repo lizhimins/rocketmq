@@ -494,21 +494,19 @@ public class AutoSwitchHAClient extends ServiceThread implements HAClient {
         // If truncateOffset < 0, means we can't find a consistent point
         final long truncateOffset = localEpochCache.findLastConsistentPoint(masterEpochCache);
         if (truncateOffset < 0) {
+            System.out.println("not found a consistent point between epoch");
             LOGGER.error("Failed to find a consistent point between masterEpoch:{} and slaveEpoch:{}",
                 masterEpochEntries, localEpochEntries);
-            return true;
         }
 
         // Truncate invalid msg first
-        if (0 > truncateStrategy.truncateInvalidMsg(messageStore, truncateOffset)) {
-            LOGGER.error("Failed to truncate slave log to {}", truncateOffset);
-            return false;
+//        System.out.println("start truncate, offset: " + truncateOffset);
+        if (truncateStrategy.truncateInvalidMsg(messageStore) >= 0) {
+            this.epochCache.truncateSuffixByOffset(truncateOffset);
+            LOGGER.info("Truncate slave log to {} success, change to transfer state", truncateOffset);
         }
 
-        // Truncate epoch
-        this.epochCache.truncateSuffixByOffset(truncateOffset);
-        LOGGER.info("Truncate slave log to {} success, change to transfer state", truncateOffset);
-
+        this.currentReceivedEpoch = this.epochCache.getLastEpoch();
         this.currentTransferOffset = truncateOffset;
         return true;
     }
@@ -518,6 +516,13 @@ public class AutoSwitchHAClient extends ServiceThread implements HAClient {
         long currentBlockStartOffset = pushCommitLogData.getStartOffset();
         long currentEpochStartOffset = pushCommitLogData.getEpochStartOffset();
         long replicaConfirmOffset = pushCommitLogData.getConfirmOffset();
+
+//        int remaining = byteBuffer.remaining();
+
+//        System.out.printf("receive data, epoch-offset: %d-%d, confirm: %d, block: %d-%d, length: %d%n",
+//                pushCommitLogData.getEpoch(), pushCommitLogData.getEpochStartOffset(),
+//                pushCommitLogData.getConfirmOffset(), pushCommitLogData.getStartOffset(),
+//                pushCommitLogData.getStartOffset() + remaining, remaining);
 
 //        if (slavePhyOffset != 0) {
 //            if (slavePhyOffset != masterOffset) {
@@ -534,19 +539,18 @@ public class AutoSwitchHAClient extends ServiceThread implements HAClient {
                 currentBlockStartOffset, byteBuffer.array(), 32, byteBuffer.remaining());
         }
 
-//        System.out.println("client confirm offset1: " + haService.getLocalAddress() + " " + haService.getConfirmOffset());
         this.haService.updateConfirmOffset(Math.min(replicaConfirmOffset, this.messageStore.getMaxPhyOffset()));
-//        System.out.println("client confirm offset2: " + haService.getLocalAddress() + " " + haService.getConfirmOffset());
 
         // If epoch changed to bigger, last epoch record would be terminated
         if (this.currentReceivedEpoch < currentBlockEpoch) {
-            System.out.println("client receive new epoch, current="
-                + this.currentReceivedEpoch + ", block=" + currentBlockEpoch + ", block start=" + currentEpochStartOffset);
+            System.out.printf("client receive new epoch, epoch-startOffset=%d-%d, current=%d%n",
+                currentBlockEpoch, currentEpochStartOffset, this.currentReceivedEpoch);
 
             this.currentReceivedEpoch = currentBlockEpoch;
             this.epochCache.tryAppendEpochEntry(new EpochEntry(currentBlockEpoch, currentEpochStartOffset));
         }
 
+        // System.out.println("current slave offset, min:" +  this.messageStore.getMinPhyOffset() + ", max:" + this.messageStore.getMaxPhyOffset());
         this.currentTransferOffset = this.messageStore.getMaxPhyOffset();
     }
 }

@@ -4,5 +4,5 @@ import org.apache.rocketmq.store.DefaultMessageStore;
 
 public interface TruncateStrategy {
 
-    long truncateInvalidMsg(DefaultMessageStore defaultMessageStore, long truncateOffset);
+    long truncateInvalidMsg(DefaultMessageStore defaultMessageStore);
 }

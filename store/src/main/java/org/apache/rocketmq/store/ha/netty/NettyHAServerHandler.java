@@ -66,7 +66,7 @@ public class NettyHAServerHandler extends SimpleChannelInboundHandler<HAMessage>
      */
     public void confirmTruncate(HAMessage message, Channel channel) {
         ConfirmTruncate confirmTruncate = RemotingSerializable.decode(message.getBytes(), ConfirmTruncate.class);
-        System.out.println("master receive truncate offset: " + confirmTruncate.getCommitLogStartOffset());
+//        System.out.println("master receive truncate offset: " + confirmTruncate.getCommitLogStartOffset());
         nettyHAService.confirmTruncate(channel, confirmTruncate);
     }
 
@@ -84,8 +84,8 @@ public class NettyHAServerHandler extends SimpleChannelInboundHandler<HAMessage>
         }
 
         if (nettyHAService.getCurrentMasterEpoch() != message.getEpoch()) {
-            System.out.printf("server epoch not match, currentMaster=%s, client=%s%n",
-                nettyHAService.getCurrentMasterEpoch(), message.getEpoch());
+//            System.out.printf("server epoch not match, currentMaster=%s, client=%s%n",
+//                nettyHAService.getCurrentMasterEpoch(), message.getEpoch());
             log.error("epoch not match, connection epoch:{}", message.getEpoch());
             RemotingUtil.closeChannel(ctx.channel());
             return;

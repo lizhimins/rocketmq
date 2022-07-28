@@ -223,9 +223,12 @@ public class AutoSwitchHAService implements HAService {
         long minPhyOffset = this.defaultMessageStore.getMinPhyOffset();
 
         // Master truncate dirty file
-        final long truncateSize = truncateStrategy.truncateInvalidMsg(defaultMessageStore, maxPhyOffset);
+        final long truncateOffset = truncateStrategy.truncateInvalidMsg(defaultMessageStore);
+
         LOGGER.info("Broker truncate msg file, store minPhyOffset:{}, maxPhyOffset:{}, " +
-            "newMasterEpoch:{}, truncate size:{}", minPhyOffset, maxPhyOffset, masterEpoch, truncateSize);
+            "newMasterEpoch:{}, truncate offset:{}", minPhyOffset, maxPhyOffset, masterEpoch, truncateOffset);
+
+        updateConfirmOffset(computeConfirmOffset());
 
         // Correct epoch store
         this.epochCache.truncateSuffixByEpoch(masterEpoch);
@@ -233,6 +236,19 @@ public class AutoSwitchHAService implements HAService {
         this.epochCache.tryAppendEpochEntry(new EpochEntry(masterEpoch, maxPhyOffset));
 
         this.currentMasterEpoch = masterEpoch;
+
+        // Waiting consume queue dispatch
+        while (defaultMessageStore.dispatchBehindBytes() > 0) {
+            try {
+                System.out.println("wait dispatch");
+                Thread.sleep(100);
+            } catch (Exception ignored) {
+
+            }
+        }
+
+        LOGGER.info("TruncateOffset is {}, confirmOffset is {}, maxPhyOffset is {}",
+            truncateOffset, getConfirmOffset(), this.defaultMessageStore.getMaxPhyOffset());
 
         // Rollback index
         this.defaultMessageStore.recoverTopicQueueTable();
@@ -245,10 +261,26 @@ public class AutoSwitchHAService implements HAService {
     }
 
     @Override
-    public boolean changeToSlave(String newMasterAddr, int newMasterEpoch, Long slaveId) {
+    public synchronized boolean changeToSlave(String newMasterAddr, int newMasterEpoch, Long slaveId) {
         try {
             destroyConnections();
             setSyncStateSet(new HashSet<>());
+
+//            /**
+//             *  1. Finish dispatching the messages fall behind, then to start other services.
+//             *  2. DLedger committedPos may be missing, so here just require dispatchBehindBytes <= 0
+//             */
+//            while (true) {
+//                long dispatchBehindBytes = defaultMessageStore.dispatchBehindBytes();
+//                if (dispatchBehindBytes <= 0) {
+//                    break;
+//                }
+//                System.out.printf("dispatch behind: %d%n" + dispatchBehindBytes);
+//                Thread.sleep(20);
+//                // LOGGER.info("Try to finish doing reput the messages fall behind during the starting, reputOffset={} maxOffset={} behind={}", this.reputMessageService.getReputFromOffset(), this.getMaxPhyOffset(), this.dispatchBehindBytes());
+//            }
+
+//            System.out.println("dispatch behind: " + defaultMessageStore.dispatchBehindBytes());
 
             if (this.haClient == null) {
                 this.haClient = new AutoSwitchHAClient(this);
@@ -424,15 +456,12 @@ public class AutoSwitchHAService implements HAService {
         final Set<String> currentSyncStateSet = getSyncStateSet();
         long confirmOffset = this.defaultMessageStore.getMaxPhyOffset();
 
-        StringBuilder printData = new StringBuilder(confirmOffset + " ");
         for (HAConnection connection : this.connectionMap.values()) {
             final String slaveAddress = ((AutoSwitchHAConnection) connection).getSlaveAddress();
             if (currentSyncStateSet.contains(slaveAddress)) {
                 confirmOffset = Math.min(confirmOffset, connection.getSlaveAckOffset());
-                printData.append(connection.getSlaveAckOffset()).append(" ");
             }
         }
-        //System.out.println("compute: " + printData);
         return confirmOffset;
     }
 
@@ -525,7 +554,7 @@ public class AutoSwitchHAService implements HAService {
                 }
             }
 
-            System.out.println("receive client confirm truncate, start offset " + slaveOffset);
+//            System.out.println("receive client confirm truncate, start offset " + slaveOffset);
             LOGGER.info("receive client confirm truncate, start offset:{}, start:{}", slaveOffset, transferStart);
 
             ((AutoSwitchHAConnection) haConnection).setCurrentTransferOffset(transferStart);
@@ -569,7 +598,7 @@ public class AutoSwitchHAService implements HAService {
     public void removeConnection(Channel channel) {
         HAConnection haConnection = this.connectionMap.remove(channel);
         if (haConnection != null) {
-            System.out.println("server unregister client " + channel.id());
+//            System.out.println("server unregister client " + channel.id());
             haConnection.shutdown();
         }
         //this.haConnectionStateNotificationService.checkConnectionStateAndNotify(haConnection);
