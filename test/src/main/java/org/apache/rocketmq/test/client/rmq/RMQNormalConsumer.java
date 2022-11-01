@@ -25,7 +25,8 @@ import org.apache.rocketmq.test.listener.AbstractListener;
 import org.apache.rocketmq.test.util.RandomUtil;
 
 public class RMQNormalConsumer extends AbstractMQConsumer {
-    private static Logger logger = Logger.getLogger(RMQNormalConsumer.class);
+
+    private static final Logger logger = Logger.getLogger(RMQNormalConsumer.class);
     protected DefaultMQPushConsumer consumer = null;
 
     public RMQNormalConsumer(String nsAddr, String topic, String subExpression,
@@ -33,18 +34,22 @@ public class RMQNormalConsumer extends AbstractMQConsumer {
         super(nsAddr, topic, subExpression, consumerGroup, listener);
     }
 
+    @Override
     public AbstractListener getListener() {
         return listener;
     }
 
+    @Override
     public void setListener(AbstractListener listener) {
         this.listener = listener;
     }
 
+    @Override
     public void create() {
         create(false);
     }
 
+    @Override
     public void create(boolean useTLS) {
         consumer = new DefaultMQPushConsumer(consumerGroup);
         consumer.setInstanceName(RandomUtil.getStringByUUID());
@@ -60,6 +65,7 @@ public class RMQNormalConsumer extends AbstractMQConsumer {
         consumer.setUseTLS(useTLS);
     }
 
+    @Override
     public void start() {
         try {
             consumer.start();
@@ -79,6 +85,7 @@ public class RMQNormalConsumer extends AbstractMQConsumer {
         }
     }
 
+    @Override
     public void shutdown() {
         consumer.shutdown();
     }
