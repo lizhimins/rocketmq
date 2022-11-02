@@ -41,9 +41,17 @@ public class RMQPopConsumer extends RMQNormalConsumer {
 
     private RMQPopClient client;
 
+    private int maxNum = 16;
+
     public RMQPopConsumer(String nsAddr, String topic, String subExpression,
         String consumerGroup, AbstractListener listener) {
         super(nsAddr, topic, subExpression, consumerGroup, listener);
+    }
+
+    public RMQPopConsumer(String nsAddr, String topic, String subExpression,
+        String consumerGroup, AbstractListener listener, int maxNum) {
+        super(nsAddr, topic, subExpression, consumerGroup, listener);
+        this.maxNum = maxNum;
     }
 
     @Override
@@ -66,7 +74,7 @@ public class RMQPopConsumer extends RMQNormalConsumer {
         ExecutionException, TimeoutException {
 
         CompletableFuture<PopResult> future = this.client.popMessageAsync(
-            brokerAddr, mq, 5000, 16, consumerGroup, invisibleTime, true,
+            brokerAddr, mq, invisibleTime, maxNum, consumerGroup, timeout, true,
             ConsumeInitMode.MIN, false, ExpressionType.TAG, "*");
 
         return future.get();
@@ -77,11 +85,10 @@ public class RMQPopConsumer extends RMQNormalConsumer {
     }
 
     public PopResult popOrderly(String brokerAddr, MessageQueue mq, long invisibleTime, long timeout)
-        throws InterruptedException, RemotingException, MQClientException, MQBrokerException,
-        ExecutionException, TimeoutException {
+        throws InterruptedException, ExecutionException {
 
         CompletableFuture<PopResult> future = this.client.popMessageAsync(
-            brokerAddr, mq, 5000, 16, consumerGroup, invisibleTime, true,
+            brokerAddr, mq, invisibleTime, maxNum, consumerGroup, timeout, true,
             ConsumeInitMode.MIN, true, ExpressionType.TAG, "*");
 
         return future.get();
