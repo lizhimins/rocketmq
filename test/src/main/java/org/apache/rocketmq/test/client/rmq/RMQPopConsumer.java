@@ -19,10 +19,8 @@ package org.apache.rocketmq.test.client.rmq;
 
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import org.apache.log4j.Logger;
-import org.apache.rocketmq.client.consumer.AckCallback;
 import org.apache.rocketmq.client.consumer.AckResult;
 import org.apache.rocketmq.client.consumer.PopResult;
 import org.apache.rocketmq.client.exception.MQBrokerException;
@@ -74,7 +72,7 @@ public class RMQPopConsumer extends RMQNormalConsumer {
         return future.get();
     }
 
-    public PopResult popOrderly(String brokerAddr, MessageQueue mq)throws Exception {
+    public PopResult popOrderly(String brokerAddr, MessageQueue mq) throws Exception {
         return this.popOrderly(brokerAddr, mq, DEFAULT_INVISIBLE_TIME, 5000);
     }
 
