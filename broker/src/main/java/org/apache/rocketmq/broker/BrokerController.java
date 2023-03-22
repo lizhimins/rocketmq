@@ -764,6 +764,19 @@ public class BrokerController {
                 LOG.error("BrokerController#initialize: unexpected error occurs", e);
             }
         }
+
+        return result && load();
+    }
+
+    public boolean load() throws CloneNotSupportedException {
+
+        boolean result = true;
+
+        if (messageStore != null) {
+            registerMessageStoreHook();
+            result = this.messageStore.load();
+        }
+
         if (messageStore != null) {
             registerMessageStoreHook();
             result = result && this.messageStore.load();

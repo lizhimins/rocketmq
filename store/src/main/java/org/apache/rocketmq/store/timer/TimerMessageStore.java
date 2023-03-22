@@ -69,15 +69,24 @@ import org.apache.rocketmq.store.stats.BrokerStatsManager;
 import org.apache.rocketmq.store.util.PerfCounter;
 
 public class TimerMessageStore {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(LoggerName.STORE_LOGGER_NAME);
+
+    public static final int INITIAL = 0, RUNNING = 1, HAULT = 2, SHUTDOWN = 3;
+    private volatile int state = INITIAL;
+
     public static final String TIMER_TOPIC = TopicValidator.SYSTEM_TOPIC_PREFIX + "wheel_timer";
     public static final String TIMER_OUT_MS = MessageConst.PROPERTY_TIMER_OUT_MS;
     public static final String TIMER_ENQUEUE_MS = MessageConst.PROPERTY_TIMER_ENQUEUE_MS;
     public static final String TIMER_DEQUEUE_MS = MessageConst.PROPERTY_TIMER_DEQUEUE_MS;
     public static final String TIMER_ROLL_TIMES = MessageConst.PROPERTY_TIMER_ROLL_TIMES;
     public static final String TIMER_DELETE_UNIQUE_KEY = MessageConst.PROPERTY_TIMER_DEL_UNIQKEY;
+
     public static final Random RANDOM = new Random();
     public static final int PUT_OK = 0, PUT_NEED_RETRY = 1, PUT_NO_RETRY = 2;
     public static final int DAY_SECS = 24 * 3600;
+    public static final int DEFAULT_CAPACITY = 1024;
+
     // The total days in the timer wheel when precision is 1000ms.
     // If the broker shutdown last more than the configured days, will cause message loss
     public static final int TIMER_WHEEL_TTL_DAY = 7;
@@ -87,7 +96,6 @@ public class TimerMessageStore {
     public static final int MAGIC_DELETE = 1 << 2;
     public boolean debug = false;
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(LoggerName.STORE_LOGGER_NAME);
     private final PerfCounter.Ticks perfs = new PerfCounter.Ticks(LOGGER);
     private final BlockingQueue<TimerRequest> enqueuePutQueue;
     private final BlockingQueue<List<TimerRequest>> dequeueGetQueue;
@@ -95,8 +103,6 @@ public class TimerMessageStore {
 
     private final ByteBuffer timerLogBuffer = ByteBuffer.allocate(4 * 1024);
     private final ThreadLocal<ByteBuffer> bufferLocal;
-    public static final int INITIAL = 0, RUNNING = 1, HAULT = 2, SHUTDOWN = 3;
-    private volatile int state = INITIAL;
     private final ScheduledExecutorService scheduler;
 
     private final MessageStore messageStore;
@@ -104,13 +110,13 @@ public class TimerMessageStore {
     private final TimerLog timerLog;
     private final TimerCheckpoint timerCheckpoint;
 
-    private final TimerEnqueueGetService enqueueGetService;
-    private final TimerEnqueuePutService enqueuePutService;
-    private final TimerDequeueWarmService dequeueWarmService;
-    private final TimerDequeueGetService dequeueGetService;
-    private final TimerDequeuePutMessageService[] dequeuePutMessageServices;
-    private final TimerDequeueGetMessageService[] dequeueGetMessageServices;
-    private final TimerFlushService timerFlushService;
+    private ServiceThread enqueueGetService;
+    private ServiceThread enqueuePutService;
+    private ServiceThread dequeueWarmService;
+    private ServiceThread dequeueGetService;
+    private AbstractStateService[] dequeuePutMessageServices;
+    private AbstractStateService[] dequeueGetMessageServices;
+    private ServiceThread timerFlushService;
 
     private volatile long currReadTimeMs;
     private volatile long currWriteTimeMs;
@@ -130,10 +136,11 @@ public class TimerMessageStore {
     private final int slotsTotal;
     private final int precisionMs;
     private final MessageStoreConfig storeConfig;
-    private volatile BrokerRole lastBrokerRole = BrokerRole.SLAVE;
     private TimerMetrics timerMetrics;
     private long lastTimeOfCheckMetrics = System.currentTimeMillis();
     private AtomicInteger frequency = new AtomicInteger(0);
+
+    private volatile BrokerRole lastBrokerRole = BrokerRole.SLAVE;
     //the dequeue is an asynchronous process, use this flag to track if the status has changed
     private boolean dequeueStatusChangeFlag = false;
     private long shouldStartTime;
@@ -146,72 +153,80 @@ public class TimerMessageStore {
     public TimerMessageStore(final MessageStore messageStore, final MessageStoreConfig storeConfig,
         TimerCheckpoint timerCheckpoint, TimerMetrics timerMetrics,
         final BrokerStatsManager brokerStatsManager) throws IOException {
+
         this.messageStore = messageStore;
         this.storeConfig = storeConfig;
         this.commitLogFileSize = storeConfig.getMappedFileSizeCommitLog();
         this.timerLogFileSize = storeConfig.getMappedFileSizeTimerLog();
         this.precisionMs = storeConfig.getTimerPrecisionMs();
+
         // TimerWheel contains the fixed number of slots regardless of precision.
         this.slotsTotal = TIMER_WHEEL_TTL_DAY * DAY_SECS;
-        this.timerWheel = new TimerWheel(getTimerWheelPath(storeConfig.getStorePathRootDir()),
-            this.slotsTotal, precisionMs);
+        this.timerWheel = new TimerWheel(
+            getTimerWheelPath(storeConfig.getStorePathRootDir()), this.slotsTotal, precisionMs);
         this.timerLog = new TimerLog(getTimerLogPath(storeConfig.getStorePathRootDir()), timerLogFileSize);
         this.timerMetrics = timerMetrics;
         this.timerCheckpoint = timerCheckpoint;
         this.lastBrokerRole = storeConfig.getBrokerRole();
 
         if (messageStore instanceof DefaultMessageStore) {
-            scheduler =
-                Executors.newSingleThreadScheduledExecutor(new ThreadFactoryImpl("TimerScheduledThread", ((DefaultMessageStore) messageStore).getBrokerIdentity()));
+            scheduler = Executors.newSingleThreadScheduledExecutor(
+                new ThreadFactoryImpl("TimerScheduledThread",
+                    ((DefaultMessageStore) messageStore).getBrokerIdentity()));
         } else {
-            scheduler = Executors.newSingleThreadScheduledExecutor(new ThreadFactoryImpl("TimerScheduledThread"));
+            scheduler = Executors.newSingleThreadScheduledExecutor(
+                new ThreadFactoryImpl("TimerScheduledThread"));
         }
+
         // timerRollWindow contains the fixed number of slots regardless of precision.
-        if (storeConfig.getTimerRollWindowSlot() > slotsTotal - TIMER_BLANK_SLOTS || storeConfig.getTimerRollWindowSlot() < 2) {
+        if (storeConfig.getTimerRollWindowSlot() > slotsTotal - TIMER_BLANK_SLOTS
+            || storeConfig.getTimerRollWindowSlot() < 2) {
             this.timerRollWindowSlots = slotsTotal - TIMER_BLANK_SLOTS;
         } else {
             this.timerRollWindowSlots = storeConfig.getTimerRollWindowSlot();
         }
+
         bufferLocal = new ThreadLocal<ByteBuffer>() {
             @Override
             protected ByteBuffer initialValue() {
                 return ByteBuffer.allocateDirect(storeConfig.getMaxMessageSize() + 100);
             }
         };
+
+        if (storeConfig.isTimerEnableDisruptor()) {
+            enqueuePutQueue = new DisruptorBlockingQueue<>(DEFAULT_CAPACITY);
+            dequeueGetQueue = new DisruptorBlockingQueue<>(DEFAULT_CAPACITY);
+            dequeuePutQueue = new DisruptorBlockingQueue<>(DEFAULT_CAPACITY);
+        } else {
+            enqueuePutQueue = new LinkedBlockingDeque<>(DEFAULT_CAPACITY);
+            dequeueGetQueue = new LinkedBlockingDeque<>(DEFAULT_CAPACITY);
+            dequeuePutQueue = new LinkedBlockingDeque<>(DEFAULT_CAPACITY);
+        }
+        this.brokerStatsManager = brokerStatsManager;
+    }
+
+    public void initService() {
         enqueueGetService = new TimerEnqueueGetService();
         enqueuePutService = new TimerEnqueuePutService();
         dequeueWarmService = new TimerDequeueWarmService();
         dequeueGetService = new TimerDequeueGetService();
         timerFlushService = new TimerFlushService();
-        int getThreadNum = storeConfig.getTimerGetMessageThreadNum();
-        if (getThreadNum <= 0) {
-            getThreadNum = 1;
-        }
+
+        int getThreadNum = Math.max(storeConfig.getTimerGetMessageThreadNum(), 1);
         dequeueGetMessageServices = new TimerDequeueGetMessageService[getThreadNum];
         for (int i = 0; i < dequeueGetMessageServices.length; i++) {
             dequeueGetMessageServices[i] = new TimerDequeueGetMessageService();
         }
-        int putThreadNum = storeConfig.getTimerPutMessageThreadNum();
-        if (putThreadNum <= 0) {
-            putThreadNum = 1;
-        }
+
+        int putThreadNum = Math.max(storeConfig.getTimerGetMessageThreadNum(), 1);
         dequeuePutMessageServices = new TimerDequeuePutMessageService[putThreadNum];
         for (int i = 0; i < dequeuePutMessageServices.length; i++) {
             dequeuePutMessageServices[i] = new TimerDequeuePutMessageService();
         }
-        if (storeConfig.isTimerEnableDisruptor()) {
-            enqueuePutQueue = new DisruptorBlockingQueue<>(1024);
-            dequeueGetQueue = new DisruptorBlockingQueue<>(1024);
-            dequeuePutQueue = new DisruptorBlockingQueue<>(1024);
-        } else {
-            enqueuePutQueue = new LinkedBlockingDeque<>(1024);
-            dequeueGetQueue = new LinkedBlockingDeque<>(1024);
-            dequeuePutQueue = new LinkedBlockingDeque<>(1024);
-        }
-        this.brokerStatsManager = brokerStatsManager;
     }
 
     public boolean load() {
+        this.initService();
         boolean load = timerLog.load();
         load = load && this.timerMetrics.load();
         recover();
@@ -1237,7 +1252,7 @@ public class TimerMessageStore {
 
     }
 
-    class TimerEnqueueGetService extends ServiceThread {
+    public class TimerEnqueueGetService extends ServiceThread {
 
         @Override public String getServiceName() {
             String brokerIdentifier = "";
@@ -1263,7 +1278,7 @@ public class TimerMessageStore {
         }
     }
 
-    class TimerEnqueuePutService extends ServiceThread {
+    public class TimerEnqueuePutService extends ServiceThread {
 
         @Override public String getServiceName() {
             String brokerIdentifier = "";
@@ -1345,7 +1360,7 @@ public class TimerMessageStore {
         }
     }
 
-    class TimerDequeueGetService extends ServiceThread {
+    public class TimerDequeueGetService extends ServiceThread {
 
         @Override public String getServiceName() {
             String brokerIdentifier = "";
@@ -1389,7 +1404,7 @@ public class TimerMessageStore {
         }
     }
 
-    class TimerDequeuePutMessageService extends AbstractStateService {
+    public class TimerDequeuePutMessageService extends AbstractStateService {
 
         @Override public String getServiceName() {
             String brokerIdentifier = "";
@@ -1458,7 +1473,7 @@ public class TimerMessageStore {
         }
     }
 
-    class TimerDequeueGetMessageService extends AbstractStateService {
+    public class TimerDequeueGetMessageService extends AbstractStateService {
 
         @Override public String getServiceName() {
             String brokerIdentifier = "";
@@ -1540,7 +1555,7 @@ public class TimerMessageStore {
         }
     }
 
-    class TimerDequeueWarmService extends ServiceThread {
+    public class TimerDequeueWarmService extends ServiceThread {
 
         @Override
         public String getServiceName() {
@@ -1575,7 +1590,7 @@ public class TimerMessageStore {
         return (magic & MAGIC_DELETE) != 0;
     }
 
-    class TimerFlushService extends ServiceThread {
+    public class TimerFlushService extends ServiceThread {
         private final SimpleDateFormat sdf = new SimpleDateFormat("MM-dd HH:mm:ss");
 
         @Override public String getServiceName() {
@@ -1739,5 +1754,75 @@ public class TimerMessageStore {
 
     public int getPrecisionMs() {
         return precisionMs;
+    }
+
+    public ServiceThread getEnqueueGetService() {
+        return enqueueGetService;
+    }
+
+    public void setEnqueueGetService(ServiceThread enqueueGetService) {
+        this.enqueueGetService = enqueueGetService;
+    }
+
+    public ServiceThread getEnqueuePutService() {
+        return enqueuePutService;
+    }
+
+    public void setEnqueuePutService(ServiceThread enqueuePutService) {
+        this.enqueuePutService = enqueuePutService;
+    }
+
+    public ServiceThread getDequeueWarmService() {
+        return dequeueWarmService;
+    }
+
+    public void setDequeueWarmService(ServiceThread dequeueWarmService) {
+        this.dequeueWarmService = dequeueWarmService;
+    }
+
+    public ServiceThread getDequeueGetService() {
+        return dequeueGetService;
+    }
+
+    public void setDequeueGetService(ServiceThread dequeueGetService) {
+        this.dequeueGetService = dequeueGetService;
+    }
+
+    public AbstractStateService[] getDequeuePutMessageServices() {
+        return dequeuePutMessageServices;
+    }
+
+    public void setDequeuePutMessageServices(
+        AbstractStateService[] dequeuePutMessageServices) {
+        this.dequeuePutMessageServices = dequeuePutMessageServices;
+    }
+
+    public AbstractStateService[] getDequeueGetMessageServices() {
+        return dequeueGetMessageServices;
+    }
+
+    public void setDequeueGetMessageServices(
+        AbstractStateService[] dequeueGetMessageServices) {
+        this.dequeueGetMessageServices = dequeueGetMessageServices;
+    }
+
+    public ServiceThread getTimerFlushService() {
+        return timerFlushService;
+    }
+
+    public void setTimerFlushService(ServiceThread timerFlushService) {
+        this.timerFlushService = timerFlushService;
+    }
+
+    public void setTimerMetrics(TimerMetrics timerMetrics) {
+        this.timerMetrics = timerMetrics;
+    }
+
+    public AtomicInteger getFrequency() {
+        return frequency;
+    }
+
+    public void setFrequency(AtomicInteger frequency) {
+        this.frequency = frequency;
     }
 }
