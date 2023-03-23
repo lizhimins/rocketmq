@@ -777,11 +777,6 @@ public class BrokerController {
             result = this.messageStore.load();
         }
 
-        if (messageStore != null) {
-            registerMessageStoreHook();
-            result = result && this.messageStore.load();
-        }
-
         if (messageStoreConfig.isTimerWheelEnable()) {
             result = result && this.timerMessageStore.load();
         }
