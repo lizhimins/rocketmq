@@ -96,9 +96,9 @@ public class TimerMessageStore {
     public static final int MAGIC_DELETE = 1 << 2;
     public boolean debug = false;
 
+    protected static final String ENQUEUE_PUT = "enqueue_put";
+    protected static final String DEQUEUE_PUT = "dequeue_put";
     protected final PerfCounter.Ticks perfCounterTicks = new PerfCounter.Ticks(LOGGER);
-    protected final String ENQUEUE_PUT = "enqueue_put";
-    protected final String DEQUEUE_PUT = "dequeue_put";
 
     protected final BlockingQueue<TimerRequest> enqueuePutQueue;
     protected final BlockingQueue<List<TimerRequest>> dequeueGetQueue;
@@ -115,7 +115,6 @@ public class TimerMessageStore {
 
     private TimerEnqueueGetService enqueueGetService;
     private TimerEnqueuePutService enqueuePutService;
-
     private TimerDequeueWarmService dequeueWarmService;
     private TimerDequeueGetService dequeueGetService;
     private TimerDequeuePutMessageService[] dequeuePutMessageServices;
@@ -660,6 +659,7 @@ public class TimerMessageStore {
                         // use CQ offset, not offset in Message
                         msgExt.setQueueOffset(offset + (i / ConsumeQueue.CQ_STORE_UNIT_SIZE));
                         TimerRequest timerRequest = new TimerRequest(offsetPy, sizePy, delayedTime, System.currentTimeMillis(), MAGIC_DEFAULT, msgExt);
+                        // System.out.printf("build enqueue request, %s%n", timerRequest);
                         while (!enqueuePutQueue.offer(timerRequest, 3, TimeUnit.SECONDS)) {
                             if (!isRunningEnqueue()) {
                                 return false;
@@ -1256,12 +1256,9 @@ public class TimerMessageStore {
 
     public class TimerEnqueueGetService extends ServiceThread {
 
-        @Override public String getServiceName() {
-            String brokerIdentifier = "";
-            if (TimerMessageStore.this.messageStore instanceof DefaultMessageStore && ((DefaultMessageStore) TimerMessageStore.this.messageStore).getBrokerConfig().isInBrokerContainer()) {
-                brokerIdentifier = ((DefaultMessageStore) TimerMessageStore.this.messageStore).getBrokerConfig().getIdentifier();
-            }
-            return brokerIdentifier + this.getClass().getSimpleName();
+        @Override
+        public String getServiceName() {
+            return getServiceThreadName() + this.getClass().getSimpleName();
         }
 
         @Override
@@ -1280,7 +1277,7 @@ public class TimerMessageStore {
         }
     }
 
-    protected String getServiceThreadName() {
+    public String getServiceThreadName() {
         String brokerIdentifier = "";
         if (TimerMessageStore.this.messageStore instanceof DefaultMessageStore) {
             DefaultMessageStore messageStore = (DefaultMessageStore) TimerMessageStore.this.messageStore;
@@ -1321,7 +1318,7 @@ public class TimerMessageStore {
             return trs;
         }
 
-        protected void putRequestToTimerWheel(TimerRequest req) {
+        protected void putMessageToTimerWheel(TimerRequest req) {
             try {
                 perfCounterTicks.startTick(ENQUEUE_PUT);
                 DefaultStoreMetricsManager.incTimerEnqueueCount(getRealTopic(req.getMsg()));
@@ -1343,35 +1340,39 @@ public class TimerMessageStore {
             }
         }
 
+        protected void fetchAndPutTimerRequest() throws Exception {
+            long tmpCommitQueueOffset = currQueueOffset;
+            List<TimerRequest> trs = this.fetchTimerRequests();
+            if (CollectionUtils.isEmpty(trs)) {
+                commitQueueOffset = tmpCommitQueueOffset;
+                maybeMoveWriteTime();
+                return;
+            }
+
+            while (!isStopped()) {
+                CountDownLatch latch = new CountDownLatch(trs.size());
+                for (TimerRequest req : trs) {
+                    req.setLatch(latch);
+                    this.putMessageToTimerWheel(req);
+                }
+                checkDequeueLatch(latch, -1);
+                boolean allSuccess = trs.stream().allMatch(TimerRequest::isSucc);
+                if (allSuccess) {
+                    break;
+                } else {
+                    holdMomentForUnknownError();
+                }
+            }
+            commitQueueOffset = trs.get(trs.size() - 1).getMsg().getQueueOffset();
+            maybeMoveWriteTime();
+        }
+
         @Override
         public void run() {
             TimerMessageStore.LOGGER.info(this.getServiceName() + " service start");
             while (!this.isStopped() || enqueuePutQueue.size() != 0) {
                 try {
-                    long tmpCommitQueueOffset = currQueueOffset;
-                    List<TimerRequest> trs = this.fetchTimerRequests();
-                    if (CollectionUtils.isEmpty(trs)) {
-                        commitQueueOffset = tmpCommitQueueOffset;
-                        maybeMoveWriteTime();
-                        continue;
-                    }
-
-                    while (!isStopped()) {
-                        CountDownLatch latch = new CountDownLatch(trs.size());
-                        for (TimerRequest req : trs) {
-                            req.setLatch(latch);
-                            this.putRequestToTimerWheel(req);
-                        }
-                        checkDequeueLatch(latch, -1);
-                        boolean allSuccess = trs.stream().allMatch(TimerRequest::isSucc);
-                        if (allSuccess) {
-                            break;
-                        } else {
-                            holdMomentForUnknownError();
-                        }
-                    }
-                    commitQueueOffset = trs.get(trs.size() - 1).getMsg().getQueueOffset();
-                    maybeMoveWriteTime();
+                    fetchAndPutTimerRequest();
                 } catch (Throwable e) {
                     TimerMessageStore.LOGGER.error("Unknown error", e);
                 }
@@ -1398,7 +1399,7 @@ public class TimerMessageStore {
                         continue;
                     }
                     if (-1 == TimerMessageStore.this.dequeue()) {
-                        waitForRunning(100 * precisionMs / 1000);
+                        waitForRunning(100L * precisionMs / 1000);
                     }
                 } catch (Throwable e) {
                     TimerMessageStore.LOGGER.error("Error occurred in " + getServiceName(), e);
@@ -1828,5 +1829,9 @@ public class TimerMessageStore {
 
     public void setFrequency(AtomicInteger frequency) {
         this.frequency = frequency;
+    }
+
+    public TimerCheckpoint getTimerCheckpoint() {
+        return timerCheckpoint;
     }
 }

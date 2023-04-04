@@ -28,19 +28,22 @@ import org.apache.rocketmq.tieredstore.util.MessageBufferUtil;
 import org.apache.rocketmq.tieredstore.util.TieredStoreUtil;
 
 public class TieredCommitLog {
+
     private static final Logger logger = LoggerFactory.getLogger(TieredStoreUtil.TIERED_STORE_LOGGER_NAME);
-    public static final int CODA_SIZE = 4 /* item size: int, 4 bytes */
-        + 4 /* magic code: int, 4 bytes */
-        + 8 /* max store timestamp: long, 8 bytes */;
+
+    /**
+     * item size: int, 4 bytes
+     * magic code: int, 4 bytes
+     * max store timestamp: long, 8 bytes
+     */
+    public static final int CODA_SIZE = 4 + 8 + 4;
     public static final int BLANK_MAGIC_CODE = 0xBBCCDDEE ^ 1880681586 + 8;
 
-    private final MessageQueue messageQueue;
     private final TieredMessageStoreConfig storeConfig;
     private final TieredFileQueue fileQueue;
 
     public TieredCommitLog(MessageQueue messageQueue, TieredMessageStoreConfig storeConfig)
         throws ClassNotFoundException, NoSuchMethodException {
-        this.messageQueue = messageQueue;
         this.storeConfig = storeConfig;
         this.fileQueue = new TieredFileQueue(TieredFileSegment.FileSegmentType.COMMIT_LOG, messageQueue, storeConfig);
         if (fileQueue.getBaseOffset() == -1) {

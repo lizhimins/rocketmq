@@ -550,6 +550,8 @@ public class DefaultMessageStore implements MessageStore {
             }
         }
 
+        // System.out.printf("store put topic: %s %s%n", msg.getTopic(), msg);
+
         if (msg.getProperties().containsKey(MessageConst.PROPERTY_INNER_NUM)
             && !MessageSysFlag.check(msg.getSysFlag(), MessageSysFlag.INNER_BATCH_FLAG)) {
             LOGGER.warn("[BUG]The message had property {} but is not an inner batch", MessageConst.PROPERTY_INNER_NUM);
