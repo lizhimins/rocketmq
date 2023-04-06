@@ -22,23 +22,22 @@ import org.apache.rocketmq.common.message.MessageQueue;
 import org.apache.rocketmq.tieredstore.provider.TieredFileSegment;
 
 public interface TieredMetadataStore {
+
     /**
      * Topic metadata operation
      *
      * @see TopicMetadata
      */
-    void setMaxTopicId(int maxTopicId);
+    void setTopicSequenceNumber(long topicSequenceNumber);
 
     @Nullable
     TopicMetadata getTopic(String topic);
 
-    void iterateTopic(Consumer<TopicMetadata> callback);
-
     TopicMetadata addTopic(String topic, long reserveTime);
 
-    void updateTopicReserveTime(String topic, long reserveTime);
+    void updateTopic(TopicMetadata topicMetadata);
 
-    void updateTopicStatus(String topic, int status);
+    void iterateTopic(Consumer<TopicMetadata> callback);
 
     void deleteTopic(String topic);
 
@@ -50,11 +49,11 @@ public interface TieredMetadataStore {
     @Nullable
     QueueMetadata getQueue(MessageQueue queue);
 
-    void iterateQueue(String topic, Consumer<QueueMetadata> callback);
-
     QueueMetadata addQueue(MessageQueue queue, long baseOffset);
 
-    void updateQueue(QueueMetadata metadata);
+    void updateQueue(QueueMetadata queueMetadata);
+
+    void iterateQueue(String topic, Consumer<QueueMetadata> callback);
 
     void deleteQueue(MessageQueue queue);
 
@@ -66,14 +65,11 @@ public interface TieredMetadataStore {
     @Nullable
     FileSegmentMetadata getFileSegment(TieredFileSegment fileSegment);
 
-    void iterateFileSegment(Consumer<FileSegmentMetadata> callback);
-
-    void iterateFileSegment(TieredFileSegment.FileSegmentType type, String topic, int queueId,
-        Consumer<FileSegmentMetadata> callback);
-
     FileSegmentMetadata updateFileSegment(TieredFileSegment fileSegment);
 
-    void deleteFileSegment(MessageQueue mq);
+    void iterateFileSegment(Consumer<FileSegmentMetadata> callback);
+
+    void iterateFileSegment(String filePath, Consumer<FileSegmentMetadata> callback);
 
     void deleteFileSegment(TieredFileSegment fileSegment);
 

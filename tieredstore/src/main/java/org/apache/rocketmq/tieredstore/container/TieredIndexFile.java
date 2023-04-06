@@ -271,14 +271,14 @@ public class TieredIndexFile {
                 future = tmpFuture.thenApply(indexBuffer -> {
                     List<Pair<Long, ByteBuffer>> result = new ArrayList<>();
                     if (indexBuffer != null) {
-                        result.add(Pair.of(fileSegment.getBeginTimestamp(), indexBuffer));
+                        result.add(Pair.of(fileSegment.getMinTimestamp(), indexBuffer));
                     }
                     return result;
                 });
             } else {
                 future = future.thenCombine(tmpFuture, (indexList, indexBuffer) -> {
                     if (indexBuffer != null) {
-                        indexList.add(Pair.of(fileSegment.getBeginTimestamp(), indexBuffer));
+                        indexList.add(Pair.of(fileSegment.getMinTimestamp(), indexBuffer));
                     }
                     return indexList;
                 });

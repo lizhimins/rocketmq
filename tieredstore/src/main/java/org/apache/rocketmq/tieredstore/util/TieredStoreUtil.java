@@ -16,6 +16,7 @@
  */
 package org.apache.rocketmq.tieredstore.util;
 
+import java.io.File;
 import java.lang.reflect.Constructor;
 import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
@@ -25,6 +26,7 @@ import java.text.NumberFormat;
 import java.util.LinkedList;
 import java.util.List;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.rocketmq.common.message.MessageQueue;
 import org.apache.rocketmq.common.topic.TopicValidator;
 import org.apache.rocketmq.logging.org.slf4j.Logger;
 import org.apache.rocketmq.logging.org.slf4j.LoggerFactory;
@@ -32,6 +34,7 @@ import org.apache.rocketmq.tieredstore.common.TieredMessageStoreConfig;
 import org.apache.rocketmq.tieredstore.metadata.TieredMetadataStore;
 
 public class TieredStoreUtil {
+
     private static final Logger logger = LoggerFactory.getLogger(TieredStoreUtil.TIERED_STORE_LOGGER_NAME);
 
     public static final long BYTE = 1L;
@@ -153,5 +156,9 @@ public class TieredStoreUtil {
             }
         }
         return metadataStoreInstance;
+    }
+
+    public static String toPath(MessageQueue mq) {
+        return mq.getBrokerName() + File.separator + mq.getTopic() + File.separator + mq.getQueueId();
     }
 }

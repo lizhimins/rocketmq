@@ -50,6 +50,7 @@ import org.apache.rocketmq.tieredstore.util.MessageBufferUtil;
 import org.apache.rocketmq.tieredstore.util.TieredStoreUtil;
 
 public class TieredMessageQueueContainer {
+
     private static final Logger LOGGER = LoggerFactory.getLogger(TieredStoreUtil.TIERED_STORE_LOGGER_NAME);
 
     private volatile boolean closed = false;
@@ -94,8 +95,10 @@ public class TieredMessageQueueContainer {
         }
         this.dispatchOffset = queueMetadata.getMaxOffset();
 
-        this.commitLog = new TieredCommitLog(messageQueue, storeConfig);
+        TieredFileQueueFactory fileQueueFactory = new TieredFileQueueFactory(storeConfig);
+        this.commitLog = fileQueueFactory.createTieredStoreCommitLog(TieredStoreUtil.toPath(messageQueue));
         this.consumeQueue = new TieredConsumeQueue(messageQueue, storeConfig);
+
         if (!consumeQueue.isInitialized() && this.dispatchOffset != -1) {
             consumeQueue.setBaseOffset(this.dispatchOffset * TieredConsumeQueue.CONSUME_QUEUE_STORE_UNIT_SIZE);
         }

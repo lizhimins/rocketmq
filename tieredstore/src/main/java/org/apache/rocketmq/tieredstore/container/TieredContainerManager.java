@@ -177,7 +177,7 @@ public class TieredContainerManager {
             for (Future<?> future : futureList) {
                 future.get();
             }
-            metadataStore.setMaxTopicId(maxTopicId.get() + 1);
+            metadataStore.setTopicSequenceNumber(maxTopicId.get() + 1);
         } catch (Exception e) {
             logger.error("load mq container from metadata failed", e);
             return false;

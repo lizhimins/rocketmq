@@ -28,6 +28,7 @@ import org.apache.rocketmq.common.message.MessageQueue;
 import org.apache.rocketmq.tieredstore.TieredStoreTestUtil;
 import org.apache.rocketmq.tieredstore.common.TieredMessageStoreConfig;
 import org.apache.rocketmq.tieredstore.provider.TieredFileSegment;
+import org.apache.rocketmq.tieredstore.util.TieredStoreUtil;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
@@ -55,7 +56,8 @@ public class PosixFileSegmentTest {
 
     @Test
     public void testCommitAndRead() throws IOException {
-        PosixFileSegment fileSegment = new PosixFileSegment(TieredFileSegment.FileSegmentType.CONSUME_QUEUE, mq, 0, storeConfig);
+        PosixFileSegment fileSegment = new PosixFileSegment(
+            storeConfig, TieredFileSegment.FileSegmentType.CONSUME_QUEUE, TieredStoreUtil.toPath(mq), 0);
         byte[] source = new byte[4096];
         new Random().nextBytes(source);
         ByteBuffer buffer = ByteBuffer.wrap(source);

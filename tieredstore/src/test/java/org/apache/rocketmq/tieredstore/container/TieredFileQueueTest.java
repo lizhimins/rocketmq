@@ -189,7 +189,7 @@ public class TieredFileQueueTest {
             queue, 100, storeConfig);
         fileSegment1.initPosition(fileSegment1.getSize() - 100);
         fileSegment1.setFull(false);
-        fileSegment1.setEndTimestamp(System.currentTimeMillis() - 1);
+        fileSegment1.setMaxTimestamp(System.currentTimeMillis() - 1);
         metadataStore.updateFileSegment(fileSegment1);
         metadataStore.updateFileSegment(fileSegment1);
 
@@ -198,7 +198,7 @@ public class TieredFileQueueTest {
         TieredFileSegment fileSegment2 = new MemoryFileSegment(TieredFileSegment.FileSegmentType.CONSUME_QUEUE,
             queue, 1100, storeConfig);
         fileSegment2.initPosition(fileSegment2.getSize());
-        fileSegment2.setEndTimestamp(System.currentTimeMillis() + 1);
+        fileSegment2.setMaxTimestamp(System.currentTimeMillis() + 1);
         metadataStore.updateFileSegment(fileSegment2);
         metadataStore.updateFileSegment(fileSegment2);
 

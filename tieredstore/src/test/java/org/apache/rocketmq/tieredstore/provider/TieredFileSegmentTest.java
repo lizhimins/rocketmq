@@ -54,8 +54,8 @@ public class TieredFileSegmentTest {
 
         Assert.assertEquals(baseOffset, segment.getBaseOffset());
         Assert.assertEquals(baseOffset + lastSize + MessageBufferUtilTest.MSG_LEN * 3, segment.getMaxOffset());
-        Assert.assertEquals(0, segment.getBeginTimestamp());
-        Assert.assertEquals(msg3StoreTime, segment.getEndTimestamp());
+        Assert.assertEquals(0, segment.getMinTimestamp());
+        Assert.assertEquals(msg3StoreTime, segment.getMaxTimestamp());
 
         segment.setFull();
         segment.commit();
@@ -96,8 +96,8 @@ public class TieredFileSegmentTest {
         segment.append(buildConsumeQueue(baseOffset + MessageBufferUtilTest.MSG_LEN * 2), cqItem3Timestamp);
 
         Assert.assertEquals(baseOffset + lastSize + TieredConsumeQueue.CONSUME_QUEUE_STORE_UNIT_SIZE * 3, segment.getMaxOffset());
-        Assert.assertEquals(0, segment.getBeginTimestamp());
-        Assert.assertEquals(cqItem3Timestamp, segment.getEndTimestamp());
+        Assert.assertEquals(0, segment.getMinTimestamp());
+        Assert.assertEquals(cqItem3Timestamp, segment.getMaxTimestamp());
 
         segment.commit();
         Assert.assertEquals(segment.getMaxOffset(), segment.getCommitOffset());

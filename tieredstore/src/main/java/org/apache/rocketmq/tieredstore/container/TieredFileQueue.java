@@ -16,7 +16,6 @@
  */
 package org.apache.rocketmq.tieredstore.container;
 
-import java.lang.reflect.Constructor;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -34,38 +33,44 @@ import org.apache.rocketmq.logging.org.slf4j.Logger;
 import org.apache.rocketmq.logging.org.slf4j.LoggerFactory;
 import org.apache.rocketmq.tieredstore.common.AppendResult;
 import org.apache.rocketmq.tieredstore.common.BoundaryType;
-import org.apache.rocketmq.tieredstore.common.TieredMessageStoreConfig;
 import org.apache.rocketmq.tieredstore.exception.TieredStoreErrorCode;
 import org.apache.rocketmq.tieredstore.exception.TieredStoreException;
 import org.apache.rocketmq.tieredstore.metadata.FileSegmentMetadata;
 import org.apache.rocketmq.tieredstore.metadata.TieredMetadataStore;
+import org.apache.rocketmq.tieredstore.provider.FileSegmentFactory;
 import org.apache.rocketmq.tieredstore.provider.TieredFileSegment;
 import org.apache.rocketmq.tieredstore.util.TieredStoreUtil;
 
 public class TieredFileQueue {
+
     private static final Logger logger = LoggerFactory.getLogger(TieredStoreUtil.TIERED_STORE_LOGGER_NAME);
 
-    private final TieredFileSegment.FileSegmentType fileType;
-    private final MessageQueue messageQueue;
+    private final String filePath;
     private long baseOffset = -1;
-    private final TieredMessageStoreConfig storeConfig;
+
+    private final MessageQueue messageQueue;
+    private final TieredFileSegment.FileSegmentType fileType;
     private final TieredMetadataStore metadataStore;
 
-    protected final List<TieredFileSegment> fileSegmentList = new ArrayList<>();
-    protected final List<TieredFileSegment> needCommitFileSegmentList = new CopyOnWriteArrayList<>();
+    private final List<TieredFileSegment> fileSegmentList = new ArrayList<>();
+    private final List<TieredFileSegment> needCommitFileSegmentList = new CopyOnWriteArrayList<>();
     private final ReentrantReadWriteLock fileSegmentLock = new ReentrantReadWriteLock();
 
-    private final Constructor<? extends TieredFileSegment> fileSegmentConstructor;
+    private final FileSegmentFactory fileSegmentFactory;
 
-    public TieredFileQueue(TieredFileSegment.FileSegmentType fileType, MessageQueue messageQueue,
-        TieredMessageStoreConfig storeConfig) throws ClassNotFoundException, NoSuchMethodException {
+    public TieredFileQueue(FileSegmentFactory fileSegmentFactory, FileSegmentMetadata segmentMetadata,
+        TieredFileSegment.FileSegmentType fileType, String filePath)
+        throws ClassNotFoundException, NoSuchMethodException {
+
+        this.fileSegmentFactory = fileSegmentFactory;
         this.fileType = fileType;
-        this.messageQueue = messageQueue;
-        this.storeConfig = storeConfig;
-        this.metadataStore = TieredStoreUtil.getMetadataStore(storeConfig);
-        Class<? extends TieredFileSegment> clazz = Class.forName(storeConfig.getTieredBackendServiceProvider()).asSubclass(TieredFileSegment.class);
-        fileSegmentConstructor = clazz.getConstructor(TieredFileSegment.FileSegmentType.class, MessageQueue.class, Long.TYPE, TieredMessageStoreConfig.class);
+        this.filePath = filePath;
+
+        // todo
+        this.messageQueue = new MessageQueue();
+        this.metadataStore = fileSegmentFactory.getMetadataStore();
         loadFromMetadata();
+
         if (fileType != TieredFileSegment.FileSegmentType.INDEX) {
             checkAndFixFileSize();
         }
@@ -130,7 +135,7 @@ public class TieredFileQueue {
         }
     }
 
-    protected void loadFromMetadata() {
+    protected void loadFromMetadata(FileSegmentMetadata metadata) {
         fileSegmentList.clear();
         needCommitFileSegmentList.clear();
 
@@ -140,14 +145,15 @@ public class TieredFileQueue {
             }
             TieredFileSegment segment = newSegment(metadata.getBaseOffset(), false);
             segment.initPosition(metadata.getSize());
-            segment.setBeginTimestamp(metadata.getBeginTimestamp());
-            segment.setEndTimestamp(metadata.getEndTimestamp());
+            segment.setMinTimestamp(metadata.getBeginTimestamp());
+            segment.setMaxTimestamp(metadata.getEndTimestamp());
             if (metadata.getStatus() == FileSegmentMetadata.STATUS_SEALED) {
                 segment.setFull(false);
             }
             // TODO check coda/size
             fileSegmentList.add(segment);
         });
+
         if (!fileSegmentList.isEmpty()) {
             fileSegmentList.sort(Comparator.comparingLong(TieredFileSegment::getBaseOffset));
             baseOffset = fileSegmentList.get(0).getBaseOffset();
@@ -192,7 +198,7 @@ public class TieredFileQueue {
     private TieredFileSegment newSegment(long baseOffset, boolean createMetadata) {
         TieredFileSegment segment = null;
         try {
-            segment = fileSegmentConstructor.newInstance(fileType, messageQueue, baseOffset, storeConfig);
+            segment = fileSegmentFactory.createCommitLogFileSegment(filePath, baseOffset);
             if (fileType != TieredFileSegment.FileSegmentType.INDEX) {
                 segment.createFile();
             }
@@ -284,8 +290,8 @@ public class TieredFileQueue {
         fileSegmentLock.readLock().lock();
         try {
             List<TieredFileSegment> segmentList = fileSegmentList.stream()
-                .sorted(boundaryType == BoundaryType.UPPER ? Comparator.comparingLong(TieredFileSegment::getEndTimestamp) : Comparator.comparingLong(TieredFileSegment::getBeginTimestamp))
-                .filter(segment -> boundaryType == BoundaryType.UPPER ? segment.getEndTimestamp() >= timestamp : segment.getBeginTimestamp() <= timestamp)
+                .sorted(boundaryType == BoundaryType.UPPER ? Comparator.comparingLong(TieredFileSegment::getMaxTimestamp) : Comparator.comparingLong(TieredFileSegment::getMinTimestamp))
+                .filter(segment -> boundaryType == BoundaryType.UPPER ? segment.getMaxTimestamp() >= timestamp : segment.getMinTimestamp() <= timestamp)
                 .collect(Collectors.toList());
             if (!segmentList.isEmpty()) {
                 return boundaryType == BoundaryType.UPPER ? segmentList.get(0) : segmentList.get(segmentList.size() - 1);
@@ -300,7 +306,7 @@ public class TieredFileQueue {
         fileSegmentLock.readLock().lock();
         try {
             return fileSegmentList.stream()
-                .filter(segment -> Math.max(beginTime, segment.getBeginTimestamp()) <= Math.min(endTime, segment.getEndTimestamp()))
+                .filter(segment -> Math.max(beginTime, segment.getMinTimestamp()) <= Math.min(endTime, segment.getMaxTimestamp()))
                 .collect(Collectors.toList());
         } finally {
             fileSegmentLock.readLock().unlock();

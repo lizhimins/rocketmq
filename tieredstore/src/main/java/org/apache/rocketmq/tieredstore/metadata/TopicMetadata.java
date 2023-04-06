@@ -17,25 +17,26 @@
 package org.apache.rocketmq.tieredstore.metadata;
 
 public class TopicMetadata {
-    private int topicId;
-    String topic;
-    long reserveTime;
-    int status;
-    long updateTimestamp;
+
+    private long topicId;
+    private String topic;
+    private int status;
+    private long reserveTime;
+    private long updateTimestamp;
 
     // default constructor is used by fastjson
     public TopicMetadata() {
 
     }
 
-    public TopicMetadata(int topicId, String topic, long reserveTime) {
+    public TopicMetadata(long topicId, String topic, long reserveTime) {
         this.topicId = topicId;
         this.topic = topic;
         this.reserveTime = reserveTime;
         this.updateTimestamp = System.currentTimeMillis();
     }
 
-    public int getTopicId() {
+    public long getTopicId() {
         return topicId;
     }
 

@@ -65,7 +65,7 @@ public class TieredConsumeQueue {
     }
 
     public long getEndTimestamp() {
-        return fileQueue.getFileToWrite().getEndTimestamp();
+        return fileQueue.getFileToWrite().getMaxTimestamp();
     }
 
     public AppendResult append(final long offset, final int size, final long tagsCode, long timeStamp) {

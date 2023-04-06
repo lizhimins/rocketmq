@@ -23,6 +23,7 @@ import org.apache.rocketmq.logging.org.slf4j.Logger;
 import org.apache.rocketmq.logging.org.slf4j.LoggerFactory;
 import org.apache.rocketmq.tieredstore.common.AppendResult;
 import org.apache.rocketmq.tieredstore.common.TieredMessageStoreConfig;
+import org.apache.rocketmq.tieredstore.provider.FileSegmentFactory;
 import org.apache.rocketmq.tieredstore.provider.TieredFileSegment;
 import org.apache.rocketmq.tieredstore.util.MessageBufferUtil;
 import org.apache.rocketmq.tieredstore.util.TieredStoreUtil;
@@ -42,10 +43,12 @@ public class TieredCommitLog {
     private final TieredMessageStoreConfig storeConfig;
     private final TieredFileQueue fileQueue;
 
-    public TieredCommitLog(MessageQueue messageQueue, TieredMessageStoreConfig storeConfig)
+    public TieredCommitLog(FileSegmentFactory fileSegmentFactory, String filePath)
         throws ClassNotFoundException, NoSuchMethodException {
-        this.storeConfig = storeConfig;
-        this.fileQueue = new TieredFileQueue(TieredFileSegment.FileSegmentType.COMMIT_LOG, messageQueue, storeConfig);
+
+        this.storeConfig = fileSegmentFactory.getStoreConfig();
+        this.fileQueue = fileSegmentFactory.createCommitLogFileSegment(filePath);
+            new TieredFileQueue(TieredFileSegment.FileSegmentType.COMMIT_LOG, messageQueue, storeConfig);
         if (fileQueue.getBaseOffset() == -1) {
             fileQueue.setBaseOffset(0);
         }
@@ -72,12 +75,12 @@ public class TieredCommitLog {
         if (firstIndexFile == null) {
             return -1;
         }
-        long beginTimestamp = firstIndexFile.getBeginTimestamp();
+        long beginTimestamp = firstIndexFile.getMinTimestamp();
         return beginTimestamp != Long.MAX_VALUE ? beginTimestamp : -1;
     }
 
     public long getEndTimestamp() {
-        return fileQueue.getFileToWrite().getEndTimestamp();
+        return fileQueue.getFileToWrite().getMaxTimestamp();
     }
 
     public AppendResult append(ByteBuffer byteBuf) {
@@ -108,7 +111,7 @@ public class TieredCommitLog {
         }
         TieredFileSegment fileSegment = fileQueue.getFileToWrite();
         try {
-            if (System.currentTimeMillis() - fileSegment.getEndTimestamp() > (long) storeConfig.getCommitLogRollingInterval() * 60 * 60 * 1000
+            if (System.currentTimeMillis() - fileSegment.getMaxTimestamp() > (long) storeConfig.getCommitLogRollingInterval() * 60 * 60 * 1000
                 && fileSegment.getSize() > storeConfig.getCommitLogRollingMinimumSize()) {
                 fileQueue.rollingNewFile();
             }
