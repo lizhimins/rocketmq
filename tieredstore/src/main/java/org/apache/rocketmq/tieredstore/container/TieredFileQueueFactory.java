@@ -17,16 +17,11 @@
 
 package org.apache.rocketmq.tieredstore.container;
 
-import org.apache.rocketmq.logging.org.slf4j.Logger;
-import org.apache.rocketmq.logging.org.slf4j.LoggerFactory;
 import org.apache.rocketmq.tieredstore.common.TieredMessageStoreConfig;
 import org.apache.rocketmq.tieredstore.provider.FileSegmentFactory;
 import org.apache.rocketmq.tieredstore.provider.TieredFileSegment;
-import org.apache.rocketmq.tieredstore.util.TieredStoreUtil;
 
 public class TieredFileQueueFactory {
-
-    private static final Logger log = LoggerFactory.getLogger(TieredStoreUtil.TIERED_STORE_LOGGER_NAME);
 
     private final FileSegmentFactory fileSegmentFactory;
     private final TieredMessageStoreConfig storeConfig;
@@ -38,15 +33,20 @@ public class TieredFileQueueFactory {
         this.fileSegmentFactory = new FileSegmentFactory(storeConfig);
     }
 
-    public TieredCommitLog createTieredStoreCommitLog(String filePath)
-        throws ClassNotFoundException, NoSuchMethodException {
-
-        return new TieredCommitLog(fileSegmentFactory, TieredFileSegment.FileSegmentType.COMMIT_LOG, filePath);
+    public TieredMessageStoreConfig getStoreConfig() {
+        return storeConfig;
     }
 
-    public TieredFileQueue createTieredStoreConsumeQueue(String filePath)
-        throws ClassNotFoundException, NoSuchMethodException {
+    public TieredFileQueue createQueueForCommitLog(String filePath) {
+        return new TieredFileQueue(fileSegmentFactory, TieredFileSegment.FileSegmentType.COMMIT_LOG, filePath);
+    }
 
+    public TieredFileQueue createQueueForConsumeQueue(String filePath) {
         return new TieredFileQueue(fileSegmentFactory, TieredFileSegment.FileSegmentType.CONSUME_QUEUE, filePath);
+    }
+
+    public TieredFileQueue createQueueForIndexFile(String filePath) {
+        return new TieredFileQueue(fileSegmentFactory, TieredFileSegment.FileSegmentType.INDEX, filePath);
+        // new MessageQueue(TieredStoreUtil.RMQ_SYS_TIERED_STORE_INDEX_TOPIC, storeConfig.getBrokerName(), 0), storeConfig);
     }
 }

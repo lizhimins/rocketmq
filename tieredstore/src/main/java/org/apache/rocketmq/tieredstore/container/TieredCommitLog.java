@@ -43,15 +43,9 @@ public class TieredCommitLog {
     private final TieredMessageStoreConfig storeConfig;
     private final TieredFileQueue fileQueue;
 
-    public TieredCommitLog(FileSegmentFactory fileSegmentFactory, String filePath)
-        throws ClassNotFoundException, NoSuchMethodException {
-
-        this.storeConfig = fileSegmentFactory.getStoreConfig();
-        this.fileQueue = fileSegmentFactory.createCommitLogFileSegment(filePath);
-            new TieredFileQueue(TieredFileSegment.FileSegmentType.COMMIT_LOG, messageQueue, storeConfig);
-        if (fileQueue.getBaseOffset() == -1) {
-            fileQueue.setBaseOffset(0);
-        }
+    public TieredCommitLog(TieredFileQueueFactory fileQueueFactory, String filePath) {
+        this.storeConfig = fileQueueFactory.getStoreConfig();
+        this.fileQueue = fileQueueFactory.createQueueForCommitLog(filePath);
     }
 
     public long getMinOffset() {
@@ -73,7 +67,7 @@ public class TieredCommitLog {
     public long getBeginTimestamp() {
         TieredFileSegment firstIndexFile = fileQueue.getFileByIndex(0);
         if (firstIndexFile == null) {
-            return -1;
+            return -1L;
         }
         long beginTimestamp = firstIndexFile.getMinTimestamp();
         return beginTimestamp != Long.MAX_VALUE ? beginTimestamp : -1;
@@ -105,13 +99,13 @@ public class TieredCommitLog {
 
     public void destroyExpiredFile() {
         fileQueue.destroyExpiredFile();
-
         if (fileQueue.getFileSegmentCount() == 0) {
             return;
         }
         TieredFileSegment fileSegment = fileQueue.getFileToWrite();
         try {
-            if (System.currentTimeMillis() - fileSegment.getMaxTimestamp() > (long) storeConfig.getCommitLogRollingInterval() * 60 * 60 * 1000
+            if (System.currentTimeMillis() - fileSegment.getMaxTimestamp() >
+                (long) storeConfig.getCommitLogRollingInterval() * 60 * 60 * 1000
                 && fileSegment.getSize() > storeConfig.getCommitLogRollingMinimumSize()) {
                 fileQueue.rollingNewFile();
             }

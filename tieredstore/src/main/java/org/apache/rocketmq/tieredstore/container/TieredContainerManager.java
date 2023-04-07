@@ -25,6 +25,7 @@ import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 import javax.annotation.Nullable;
 import org.apache.rocketmq.common.message.MessageQueue;
 import org.apache.rocketmq.logging.org.slf4j.Logger;
@@ -35,13 +36,23 @@ import org.apache.rocketmq.tieredstore.metadata.TieredMetadataStore;
 import org.apache.rocketmq.tieredstore.util.TieredStoreUtil;
 
 public class TieredContainerManager {
+
     private static final Logger logger = LoggerFactory.getLogger(TieredStoreUtil.TIERED_STORE_LOGGER_NAME);
-    private volatile static TieredContainerManager instance;
-    private volatile static TieredIndexFile indexFile;
-    private final ConcurrentMap<MessageQueue, TieredMessageQueueContainer> messageQueueContainerMap;
+
+    private static volatile TieredContainerManager instance;
+    private static volatile TieredIndexFile indexFile;
 
     private final TieredMetadataStore metadataStore;
     private final TieredMessageStoreConfig storeConfig;
+    private final ConcurrentMap<MessageQueue, TieredMessageQueueContainer> messageQueueContainerMap;
+
+    public TieredContainerManager(TieredMessageStoreConfig storeConfig) {
+        this.storeConfig = storeConfig;
+        this.metadataStore = TieredStoreUtil.getMetadataStore(storeConfig);
+        this.messageQueueContainerMap = new ConcurrentHashMap<>();
+        this.doScheduleTask();
+    }
+
 
     public static TieredContainerManager getInstance(TieredMessageStoreConfig storeConfig) {
         if (storeConfig == null) {
@@ -71,7 +82,9 @@ public class TieredContainerManager {
             synchronized (TieredContainerManager.class) {
                 if (indexFile == null) {
                     try {
-                        indexFile = new TieredIndexFile(storeConfig);
+                        String filePath = TieredStoreUtil.toPath(new MessageQueue(
+                            TieredStoreUtil.RMQ_SYS_TIERED_STORE_INDEX_TOPIC, storeConfig.getBrokerName(), 0));
+                        indexFile = new TieredIndexFile(new TieredFileQueueFactory(storeConfig), filePath);
                     } catch (Exception e) {
                         logger.error("TieredContainerManager#getIndexFile: create index file failed", e);
                     }
@@ -81,11 +94,7 @@ public class TieredContainerManager {
         return indexFile;
     }
 
-    public TieredContainerManager(TieredMessageStoreConfig storeConfig) {
-        this.storeConfig = storeConfig;
-        this.metadataStore = TieredStoreUtil.getMetadataStore(storeConfig);
-        this.messageQueueContainerMap = new ConcurrentHashMap<>();
-
+    private void doScheduleTask() {
         TieredStoreExecutor.COMMON_SCHEDULED_EXECUTOR.scheduleWithFixedDelay(() -> {
             try {
                 Random random = new Random();
@@ -153,19 +162,21 @@ public class TieredContainerManager {
 
     public boolean load() {
         try {
-            AtomicInteger maxTopicId = new AtomicInteger();
+            AtomicLong topicSequenceNumber = new AtomicLong();
             List<Future<?>> futureList = new ArrayList<>();
             messageQueueContainerMap.clear();
             metadataStore.iterateTopic(topicMetadata -> {
-                maxTopicId.set(Math.max(maxTopicId.get(), topicMetadata.getTopicId()));
+                topicSequenceNumber.set(Math.max(topicSequenceNumber.get(), topicMetadata.getTopicId()));
                 Future<?> future = TieredStoreExecutor.DISPATCH_EXECUTOR.submit(() -> {
                     if (topicMetadata.getStatus() != 0) {
                         return;
                     }
-
                     try {
                         metadataStore.iterateQueue(topicMetadata.getTopic(),
-                            queueMetadata -> getOrCreateMQContainer(new MessageQueue(topicMetadata.getTopic(), storeConfig.getBrokerName(), queueMetadata.getQueue().getQueueId())));
+                            queueMetadata -> getOrCreateMQContainer(
+                                new MessageQueue(topicMetadata.getTopic(),
+                                    storeConfig.getBrokerName(),
+                                    queueMetadata.getQueue().getQueueId())));
                     } catch (Exception e) {
                         logger.error("load mq container from metadata failed", e);
                     }
@@ -173,11 +184,11 @@ public class TieredContainerManager {
                 futureList.add(future);
             });
 
-            // wait for load metadata
+            // Wait for load all metadata done
             for (Future<?> future : futureList) {
                 future.get();
             }
-            metadataStore.setTopicSequenceNumber(maxTopicId.get() + 1);
+            metadataStore.setTopicSequenceNumber(topicSequenceNumber.incrementAndGet());
         } catch (Exception e) {
             logger.error("load mq container from metadata failed", e);
             return false;

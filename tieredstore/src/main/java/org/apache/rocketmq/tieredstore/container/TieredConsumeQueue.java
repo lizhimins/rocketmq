@@ -20,24 +20,31 @@ import java.nio.ByteBuffer;
 import java.util.concurrent.CompletableFuture;
 import org.apache.commons.lang3.tuple.Pair;
 import org.apache.rocketmq.common.message.MessageQueue;
+import org.apache.rocketmq.logging.org.slf4j.Logger;
+import org.apache.rocketmq.logging.org.slf4j.LoggerFactory;
 import org.apache.rocketmq.tieredstore.common.AppendResult;
 import org.apache.rocketmq.tieredstore.common.BoundaryType;
 import org.apache.rocketmq.tieredstore.common.TieredMessageStoreConfig;
 import org.apache.rocketmq.tieredstore.provider.TieredFileSegment;
+import org.apache.rocketmq.tieredstore.util.TieredStoreUtil;
 
 public class TieredConsumeQueue {
-    public static final int CONSUME_QUEUE_STORE_UNIT_SIZE = 8 /* commit log offset: long, 8 bytes */
-        + 4 /* message size: int, 4 bytes */
-        + 8 /* tag hash code: long, 8 bytes */;
-    private final MessageQueue messageQueue;
+
+    private static final Logger log = LoggerFactory.getLogger(TieredStoreUtil.TIERED_STORE_LOGGER_NAME);
+
+    /**
+     * commit log offset: long, 8 bytes
+     * message size: int, 4 bytes
+     * tag hash code: long, 8 bytes
+     */
+    public static final int CONSUME_QUEUE_STORE_UNIT_SIZE = 8;
+
     private final TieredMessageStoreConfig storeConfig;
     private final TieredFileQueue fileQueue;
 
-
-    public TieredConsumeQueue(MessageQueue messageQueue, TieredMessageStoreConfig storeConfig) throws ClassNotFoundException, NoSuchMethodException {
-        this.messageQueue = messageQueue;
-        this.storeConfig = storeConfig;
-        this.fileQueue = new TieredFileQueue(TieredFileSegment.FileSegmentType.CONSUME_QUEUE, messageQueue, storeConfig);
+    public TieredConsumeQueue(TieredFileQueueFactory fileQueueFactory, String filePath) {
+        this.storeConfig = fileQueueFactory.getStoreConfig();
+        this.fileQueue = fileQueueFactory.createQueueForConsumeQueue(filePath);
     }
 
     public boolean isInitialized() {
