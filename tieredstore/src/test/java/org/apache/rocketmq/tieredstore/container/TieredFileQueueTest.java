@@ -34,17 +34,22 @@ import org.junit.Before;
 import org.junit.Test;
 
 public class TieredFileQueueTest {
+
     private TieredMessageStoreConfig storeConfig;
     private MessageQueue queue;
 
-    private final String storePath = FileUtils.getTempDirectory() + File.separator + "tiered_store_unit_test" + UUID.randomUUID();
+    private final String storePath =
+        FileUtils.getTempDirectory() + File.separator + "tiered_store_unit_test" + UUID.randomUUID();
+
+    private TieredFileQueueFactory fileQueueFactory;
 
     @Before
-    public void setUp() {
+    public void setUp() throws ClassNotFoundException, NoSuchMethodException {
         storeConfig = new TieredMessageStoreConfig();
         storeConfig.setStorePathRootDir(storePath);
         storeConfig.setTieredBackendServiceProvider("org.apache.rocketmq.tieredstore.mock.MemoryFileSegment");
         queue = new MessageQueue("TieredFileQueueTest", storeConfig.getBrokerName(), 0);
+        fileQueueFactory = new TieredFileQueueFactory(storeConfig);
     }
 
     @After
@@ -55,8 +60,7 @@ public class TieredFileQueueTest {
 
     @Test
     public void testGetFileSegment() throws ClassNotFoundException, NoSuchMethodException {
-        TieredFileQueue fileQueue = new TieredFileQueue(TieredFileSegment.FileSegmentType.COMMIT_LOG,
-            queue, storeConfig);
+        TieredFileQueue fileQueue = fileQueueFactory.createQueueForCommitLog(TieredStoreUtil.toPath(queue));
         fileQueue.setBaseOffset(0);
         TieredFileSegment segment1 = fileQueue.getFileToWrite();
         segment1.initPosition(1000);
@@ -77,8 +81,7 @@ public class TieredFileQueueTest {
 
     @Test
     public void testAppendAndRead() throws ClassNotFoundException, NoSuchMethodException {
-        TieredFileQueue fileQueue = new TieredFileQueue(TieredFileSegment.FileSegmentType.CONSUME_QUEUE,
-            queue, storeConfig);
+        TieredFileQueue fileQueue = fileQueueFactory.createQueueForConsumeQueue(TieredStoreUtil.toPath(queue));
         fileQueue.setBaseOffset(0);
         Assert.assertEquals(0, fileQueue.getMinOffset());
         Assert.assertEquals(0, fileQueue.getCommitMsgQueueOffset());
@@ -128,9 +131,8 @@ public class TieredFileQueueTest {
             queue, 1100, storeConfig);
         metadataStore.updateFileSegment(fileSegment2);
 
-        TieredFileQueue fileQueue = new TieredFileQueue(TieredFileSegment.FileSegmentType.COMMIT_LOG,
-            queue, storeConfig);
-        Assert.assertEquals(2, fileQueue.needCommitFileSegmentList.size());
+        TieredFileQueue fileQueue = fileQueueFactory.createQueueForCommitLog(TieredStoreUtil.toPath(queue));
+        Assert.assertEquals(2, fileQueue.getNeedCommitFileSegmentList().size());
         TieredFileSegment file1 = fileQueue.getFileByIndex(0);
         Assert.assertNotNull(file1);
         Assert.assertEquals(100, file1.getBaseOffset());
@@ -162,9 +164,8 @@ public class TieredFileQueueTest {
         metadataStore.updateFileSegment(fileSegment2);
         metadataStore.updateFileSegment(fileSegment2);
 
-        TieredFileQueue fileQueue = new TieredFileQueue(TieredFileSegment.FileSegmentType.CONSUME_QUEUE,
-            queue, storeConfig);
-        Assert.assertEquals(1, fileQueue.needCommitFileSegmentList.size());
+        TieredFileQueue fileQueue = fileQueueFactory.createQueueForConsumeQueue(TieredStoreUtil.toPath(queue));
+        Assert.assertEquals(1, fileQueue.getNeedCommitFileSegmentList().size());
 
         fileSegment1 = fileQueue.getFileByIndex(0);
         Assert.assertTrue(fileSegment1.isFull());
@@ -175,10 +176,10 @@ public class TieredFileQueueTest {
 
         fileSegment2.setFull();
         fileQueue.commit(true);
-        Assert.assertEquals(0, fileQueue.needCommitFileSegmentList.size());
+        Assert.assertEquals(0, fileQueue.getNeedCommitFileSegmentList().size());
 
         fileQueue.getFileToWrite();
-        Assert.assertEquals(1, fileQueue.needCommitFileSegmentList.size());
+        Assert.assertEquals(1, fileQueue.getNeedCommitFileSegmentList().size());
     }
 
     @Test
@@ -202,8 +203,7 @@ public class TieredFileQueueTest {
         metadataStore.updateFileSegment(fileSegment2);
         metadataStore.updateFileSegment(fileSegment2);
 
-        TieredFileQueue fileQueue = new TieredFileQueue(TieredFileSegment.FileSegmentType.CONSUME_QUEUE,
-            queue, storeConfig);
+        TieredFileQueue fileQueue = fileQueueFactory.createQueueForConsumeQueue(TieredStoreUtil.toPath(queue));
         Assert.assertEquals(2, fileQueue.getFileSegmentCount());
 
         fileQueue.cleanExpiredFile(file1CreateTimeStamp);
@@ -228,8 +228,7 @@ public class TieredFileQueueTest {
         fileSegment1.initPosition(fileSegment1.getSize() - 100);
         metadataStore.updateFileSegment(fileSegment1);
 
-        TieredFileQueue fileQueue = new TieredFileQueue(TieredFileSegment.FileSegmentType.CONSUME_QUEUE,
-            queue, storeConfig);
+        TieredFileQueue fileQueue = fileQueueFactory.createQueueForConsumeQueue(TieredStoreUtil.toPath(queue));
         Assert.assertEquals(1, fileQueue.getFileSegmentCount());
 
         fileQueue.rollingNewFile();

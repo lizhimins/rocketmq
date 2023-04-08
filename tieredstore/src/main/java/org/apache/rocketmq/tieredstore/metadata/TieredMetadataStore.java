@@ -71,7 +71,9 @@ public interface TieredMetadataStore {
 
     void iterateFileSegment(String filePath, Consumer<FileSegmentMetadata> callback);
 
-    void deleteFileSegment(TieredFileSegment fileSegment);
+    void deleteFileSegment(String filePath);
+
+    void deleteFileSegment(String filePath, TieredFileSegment.FileSegmentType fileType, long baseOffset);
 
     /**
      * Clean all metadata

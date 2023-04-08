@@ -517,7 +517,7 @@ public class TieredMessageFetcher {
         TieredIndexFile indexFile = TieredContainerManager.getIndexFile(storeConfig);
 
         int hashCode = TieredIndexFile.indexKeyHashMethod(TieredIndexFile.buildKey(topic, key));
-        int topicId;
+        long topicId;
         try {
             TopicMetadata topicMetadata = metadataStore.getTopic(topic);
             if (topicMetadata == null) {

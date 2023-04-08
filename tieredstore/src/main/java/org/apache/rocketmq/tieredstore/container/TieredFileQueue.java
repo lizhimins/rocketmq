@@ -16,6 +16,7 @@
  */
 package org.apache.rocketmq.tieredstore.container;
 
+import com.google.common.annotations.VisibleForTesting;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -413,6 +414,11 @@ public class TieredFileQueue {
         }
     }
 
+    @VisibleForTesting
+    protected List<TieredFileSegment> getNeedCommitFileSegmentList() {
+        return needCommitFileSegmentList;
+    }
+
     public void destroyExpiredFile() {
         try {
             tieredMetadataStore.iterateFileSegment(filePath, metadata -> {
@@ -421,7 +427,7 @@ public class TieredFileQueue {
                         TieredFileSegment fileSegment = newSegment(metadata.getBaseOffset(), false);
                         fileSegment.destroyFile();
                         if (!fileSegment.exists()) {
-                            tieredMetadataStore.deleteFileSegment(fileSegment);
+                            tieredMetadataStore.deleteFileSegment(fileSegment.getPath());
                             logger.info("expired file {} is been destroyed", fileSegment.getPath());
                         }
                     } catch (Exception e) {

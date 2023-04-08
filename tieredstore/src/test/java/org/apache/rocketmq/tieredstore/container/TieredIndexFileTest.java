@@ -38,6 +38,7 @@ import org.junit.Ignore;
 import org.junit.Test;
 
 public class TieredIndexFileTest {
+
     private MessageQueue mq;
     private TieredMessageStoreConfig storeConfig;
 
@@ -66,7 +67,8 @@ public class TieredIndexFileTest {
         // skip this test on windows
         Assume.assumeFalse(SystemUtils.IS_OS_WINDOWS);
 
-        TieredIndexFile indexFile = new TieredIndexFile(storeConfig);
+        TieredFileQueueFactory fileQueueFactory = new TieredFileQueueFactory(storeConfig);
+        TieredIndexFile indexFile = new TieredIndexFile(fileQueueFactory, storePath);
         indexFile.append(mq, 0, "key3", 3, 300, 1000);
         indexFile.append(mq, 0, "key2", 2, 200, 1100);
         indexFile.append(mq, 0, "key1", 1, 100, 1200);

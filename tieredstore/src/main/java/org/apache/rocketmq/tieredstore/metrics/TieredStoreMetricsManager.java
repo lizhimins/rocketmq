@@ -75,6 +75,7 @@ import static org.apache.rocketmq.tieredstore.metrics.TieredStoreMetricsConstant
 import static org.apache.rocketmq.tieredstore.metrics.TieredStoreMetricsConstant.STORAGE_MEDIUM_BLOB;
 
 public class TieredStoreMetricsManager {
+
     private static final Logger logger = LoggerFactory.getLogger(TieredStoreUtil.TIERED_STORE_LOGGER_NAME);
     public static Supplier<AttributesBuilder> attributesBuilderSupplier;
     private static String storageMedium = STORAGE_MEDIUM_BLOB;
@@ -282,8 +283,10 @@ public class TieredStoreMetricsManager {
                 try {
                     TieredMetadataStore metadataStore = TieredStoreUtil.getMetadataStore(storeConfig);
                     metadataStore.iterateFileSegment(fileSegment -> {
-                        Map<TieredFileSegment.FileSegmentType, Long> subMap = topicFileSizeMap.computeIfAbsent(fileSegment.getQueue().getTopic(), k -> new HashMap<>());
-                        TieredFileSegment.FileSegmentType fileSegmentType = TieredFileSegment.FileSegmentType.valueOf(fileSegment.getType());
+                        Map<TieredFileSegment.FileSegmentType, Long> subMap =
+                            topicFileSizeMap.computeIfAbsent(fileSegment.getPath(), k -> new HashMap<>());
+                        TieredFileSegment.FileSegmentType fileSegmentType =
+                            TieredFileSegment.FileSegmentType.valueOf(fileSegment.getType());
                         Long size = subMap.computeIfAbsent(fileSegmentType, k -> 0L);
                         subMap.put(fileSegmentType, size + fileSegment.getSize());
                     });

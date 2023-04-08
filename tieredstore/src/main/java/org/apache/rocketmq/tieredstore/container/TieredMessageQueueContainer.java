@@ -56,7 +56,7 @@ public class TieredMessageQueueContainer {
     private volatile boolean closed = false;
 
     private final MessageQueue messageQueue;
-    private final int topicId;
+    private final long topicSequenceNumber;
     private final TieredMessageStoreConfig storeConfig;
     private final TieredMetadataStore metadataStore;
     private final TieredCommitLog commitLog;
@@ -84,7 +84,7 @@ public class TieredMessageQueueContainer {
             // TODO specify reserveTime for each topic
             topicMetadata = metadataStore.addTopic(messageQueue.getTopic(), -1L);
         }
-        this.topicId = topicMetadata.getTopicId();
+        this.topicSequenceNumber = topicMetadata.getTopicId();
 
         queueMetadata = metadataStore.getQueue(messageQueue);
         if (queueMetadata == null) {
@@ -96,8 +96,8 @@ public class TieredMessageQueueContainer {
         this.dispatchOffset = queueMetadata.getMaxOffset();
 
         TieredFileQueueFactory fileQueueFactory = new TieredFileQueueFactory(storeConfig);
-        this.commitLog = fileQueueFactory.createTieredStoreCommitLog(TieredStoreUtil.toPath(messageQueue));
-        this.consumeQueue = new TieredConsumeQueue(messageQueue, storeConfig);
+        this.commitLog = new TieredCommitLog(fileQueueFactory, TieredStoreUtil.toPath(messageQueue));
+        this.consumeQueue = new TieredConsumeQueue(fileQueueFactory, TieredStoreUtil.toPath(messageQueue));
 
         if (!consumeQueue.isInitialized() && this.dispatchOffset != -1) {
             consumeQueue.setBaseOffset(this.dispatchOffset * TieredConsumeQueue.CONSUME_QUEUE_STORE_UNIT_SIZE);
@@ -370,19 +370,17 @@ public class TieredMessageQueueContainer {
         return consumeQueue.append(request.getCommitLogOffset(), request.getMsgSize(), request.getTagsCode(), request.getStoreTimestamp(), commit);
     }
 
+    /**
+     * Building indexes with offsetId is no longer supported because offsetId has changed in tiered storage
+     */
     public AppendResult appendIndexFile(DispatchRequest request) {
         if (closed) {
             return AppendResult.FILE_CLOSED;
         }
 
-        // building indexes with offsetId is no longer supported because offsetId has changed in tiered storage
-//        AppendResult result = indexFile.append(messageQueue, request.getOffsetId(), request.getCommitLogOffset(), request.getMsgSize(), request.getStoreTimestamp());
-//        if (result != AppendResult.SUCCESS) {
-//            return result;
-//        }
-
         if (StringUtils.isNotBlank(request.getUniqKey())) {
-            AppendResult result = indexFile.append(messageQueue, topicId, request.getUniqKey(), request.getCommitLogOffset(), request.getMsgSize(), request.getStoreTimestamp());
+            AppendResult result = indexFile.append(messageQueue, (int) topicSequenceNumber,
+                request.getUniqKey(), request.getCommitLogOffset(), request.getMsgSize(), request.getStoreTimestamp());
             if (result != AppendResult.SUCCESS) {
                 return result;
             }
@@ -390,13 +388,13 @@ public class TieredMessageQueueContainer {
 
         for (String key : request.getKeys().split(MessageConst.KEY_SEPARATOR)) {
             if (StringUtils.isNotBlank(key)) {
-                AppendResult result = indexFile.append(messageQueue, topicId, key, request.getCommitLogOffset(), request.getMsgSize(), request.getStoreTimestamp());
+                AppendResult result = indexFile.append(messageQueue, (int) topicSequenceNumber,
+                    key, request.getCommitLogOffset(), request.getMsgSize(), request.getStoreTimestamp());
                 if (result != AppendResult.SUCCESS) {
                     return result;
                 }
             }
         }
-
         return AppendResult.SUCCESS;
     }
 
@@ -537,7 +535,7 @@ public class TieredMessageQueueContainer {
         commitLog.destroy();
         consumeQueue.destroy();
         try {
-            metadataStore.deleteFileSegment(messageQueue);
+            metadataStore.deleteFileSegment(TieredStoreUtil.toPath(messageQueue));
             metadataStore.deleteQueue(messageQueue);
         } catch (Exception e) {
             LOGGER.error("TieredMessageQueueContainer#destroy: clean metadata failed: ", e);

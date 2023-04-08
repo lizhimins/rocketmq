@@ -306,21 +306,26 @@ public class TieredMetadataManager extends ConfigManager implements TieredMetada
     }
 
     @Override
-    public void deleteFileSegment(TieredFileSegment fileSegment) {
-        switch (fileSegment.getFileType()) {
+    public void deleteFileSegment(String filePath) {
+
+    }
+
+    @Override
+    public void deleteFileSegment(String filePath, TieredFileSegment.FileSegmentType fileType, long baseOffset) {
+        switch (fileType) {
             case COMMIT_LOG:
-                if (commitLogFileSegmentTable.containsKey(fileSegment.getPath())) {
-                    commitLogFileSegmentTable.get(fileSegment.getPath()).remove(fileSegment.getBaseOffset());
+                if (commitLogFileSegmentTable.containsKey(filePath)) {
+                    commitLogFileSegmentTable.get(filePath).remove(baseOffset);
                 }
                 break;
             case CONSUME_QUEUE:
-                if (consumeQueueFileSegmentTable.containsKey(fileSegment.getPath())) {
-                    consumeQueueFileSegmentTable.get(fileSegment.getPath()).remove(fileSegment.getBaseOffset());
+                if (consumeQueueFileSegmentTable.containsKey(filePath)) {
+                    consumeQueueFileSegmentTable.get(filePath).remove(baseOffset);
                 }
                 break;
             case INDEX:
-                if (indexFileSegmentTable.containsKey(fileSegment.getPath())) {
-                    indexFileSegmentTable.get(fileSegment.getPath()).remove(fileSegment.getBaseOffset());
+                if (indexFileSegmentTable.containsKey(filePath)) {
+                    indexFileSegmentTable.get(filePath).remove(baseOffset);
                 }
                 break;
         }

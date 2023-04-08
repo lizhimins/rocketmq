@@ -53,6 +53,7 @@ import org.apache.rocketmq.tieredstore.metrics.TieredStoreMetricsManager;
 import org.apache.rocketmq.tieredstore.util.TieredStoreUtil;
 
 public class TieredMessageStore extends AbstractPluginMessageStore {
+
     protected static final Logger logger = LoggerFactory.getLogger(TieredStoreUtil.TIERED_STORE_LOGGER_NAME);
     protected final TieredMessageFetcher fetcher;
     protected final TieredDispatcher dispatcher;
@@ -402,11 +403,12 @@ public class TieredMessageStore extends AbstractPluginMessageStore {
                 containerManager.destroyContainer(mq);
                 try {
                     metadataStore.deleteQueue(mq);
-                    metadataStore.deleteFileSegment(mq);
+                    metadataStore.deleteFileSegment(TieredStoreUtil.toPath(mq));
                 } catch (Exception e) {
                     throw new IllegalStateException(e);
                 }
-                logger.info("TieredMessageStore#destroyContainer: destroy container success: topic: {}, queueId: {}", mq.getTopic(), mq.getQueueId());
+                logger.info("TieredMessageStore#destroyContainer: " +
+                    "destroy container success: topic: {}, queueId: {}", mq.getTopic(), mq.getQueueId());
             }
         });
         metadataStore.deleteTopic(topicMetadata.getTopic());
