@@ -20,8 +20,9 @@ import java.util.Objects;
 import org.apache.rocketmq.tieredstore.container.TieredMessageQueueContainer;
 
 public class MessageCacheKey {
-    private TieredMessageQueueContainer container;
-    private long offset;
+
+    private final TieredMessageQueueContainer container;
+    private final long offset;
 
     public MessageCacheKey(TieredMessageQueueContainer container, long offset) {
         this.container = container;

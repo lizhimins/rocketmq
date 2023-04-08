@@ -40,7 +40,7 @@ import org.apache.rocketmq.store.MessageFilter;
 import org.apache.rocketmq.store.QueryMessageResult;
 import org.apache.rocketmq.store.SelectMappedBufferResult;
 import org.apache.rocketmq.tieredstore.common.BoundaryType;
-import org.apache.rocketmq.tieredstore.common.InflightRequestFuture;
+import org.apache.rocketmq.tieredstore.common.InFlightRequestFuture;
 import org.apache.rocketmq.tieredstore.common.MessageCacheKey;
 import org.apache.rocketmq.tieredstore.common.SelectMappedBufferResultWrapper;
 import org.apache.rocketmq.tieredstore.common.TieredMessageStoreConfig;
@@ -142,7 +142,7 @@ public class TieredMessageFetcher {
         MessageQueue mq = container.getMessageQueue();
         // make sure there is only one inflight request per group and request range
         int prefetchBatchSize = Math.min(maxMsgNums * container.getReadAheadFactor(), storeConfig.getReadAheadMessageCountThreshold());
-        InflightRequestFuture inflightRequest = container.getInflightRequest(group, nextBeginOffset, prefetchBatchSize);
+        InFlightRequestFuture inflightRequest = container.getInflightRequest(group, nextBeginOffset, prefetchBatchSize);
         if (!inflightRequest.isAllDone()) {
             return;
         }

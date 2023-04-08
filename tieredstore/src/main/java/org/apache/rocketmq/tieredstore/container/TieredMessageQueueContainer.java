@@ -39,8 +39,8 @@ import org.apache.rocketmq.logging.org.slf4j.LoggerFactory;
 import org.apache.rocketmq.store.DispatchRequest;
 import org.apache.rocketmq.tieredstore.common.AppendResult;
 import org.apache.rocketmq.tieredstore.common.BoundaryType;
-import org.apache.rocketmq.tieredstore.common.InflightRequestFuture;
-import org.apache.rocketmq.tieredstore.common.InflightRequestKey;
+import org.apache.rocketmq.tieredstore.common.InFlightRequestFuture;
+import org.apache.rocketmq.tieredstore.common.InFlightRequestKey;
 import org.apache.rocketmq.tieredstore.common.TieredMessageStoreConfig;
 import org.apache.rocketmq.tieredstore.metadata.QueueMetadata;
 import org.apache.rocketmq.tieredstore.metadata.TieredMetadataStore;
@@ -71,7 +71,7 @@ public class TieredMessageQueueContainer {
 
     private int readAheadFactor;
     private final Cache<String, Long> groupOffsetCache;
-    private final ConcurrentMap<InflightRequestKey, InflightRequestFuture> inFlightRequestMap;
+    private final ConcurrentMap<InFlightRequestKey, InFlightRequestFuture> inFlightRequestMap;
 
     public TieredMessageQueueContainer(MessageQueue messageQueue, TieredMessageStoreConfig storeConfig)
         throws ClassNotFoundException, NoSuchMethodException {
@@ -109,7 +109,7 @@ public class TieredMessageQueueContainer {
             .expireAfterWrite(2, TimeUnit.MINUTES)
             .removalListener((key, value, cause) -> {
                 if (cause.equals(RemovalCause.EXPIRED)) {
-                    inFlightRequestMap.remove(new InflightRequestKey((String) key));
+                    inFlightRequestMap.remove(new InFlightRequestKey((String) key));
                 }
             }).build();
     }
@@ -477,20 +477,20 @@ public class TieredMessageQueueContainer {
         return groupOffsetCache.estimatedSize();
     }
 
-    public InflightRequestFuture getInflightRequest(long offset, int batchSize) {
-        Optional<InflightRequestFuture> optional = inFlightRequestMap.entrySet()
+    public InFlightRequestFuture getInflightRequest(long offset, int batchSize) {
+        Optional<InFlightRequestFuture> optional = inFlightRequestMap.entrySet()
             .stream()
             .filter(entry -> {
-                InflightRequestKey key = entry.getKey();
+                InFlightRequestKey key = entry.getKey();
                 return Math.max(key.getOffset(), offset) <= Math.min(key.getOffset() + key.getBatchSize(), offset + batchSize);
             })
             .max(Comparator.comparing(entry -> entry.getKey().getRequestTime()))
             .map(Map.Entry::getValue);
-        return optional.orElseGet(() -> new InflightRequestFuture(Long.MAX_VALUE, new ArrayList<>()));
+        return optional.orElseGet(() -> new InFlightRequestFuture(Long.MAX_VALUE, new ArrayList<>()));
     }
 
-    public InflightRequestFuture getInflightRequest(String group, long offset, int batchSize) {
-        InflightRequestFuture future = inFlightRequestMap.get(new InflightRequestKey(group));
+    public InFlightRequestFuture getInflightRequest(String group, long offset, int batchSize) {
+        InFlightRequestFuture future = inFlightRequestMap.get(new InFlightRequestKey(group));
         if (future != null && !future.isAllDone()) {
             return future;
         }
@@ -499,9 +499,9 @@ public class TieredMessageQueueContainer {
 
     public void putInflightRequest(String group, long offset, int requestMsgCount,
         List<Pair<Integer, CompletableFuture<Long>>> futureList) {
-        InflightRequestKey key = new InflightRequestKey(group, offset, requestMsgCount);
+        InFlightRequestKey key = new InFlightRequestKey(group, offset, requestMsgCount);
         inFlightRequestMap.remove(key);
-        inFlightRequestMap.putIfAbsent(key, new InflightRequestFuture(offset, futureList));
+        inFlightRequestMap.putIfAbsent(key, new InFlightRequestFuture(offset, futureList));
     }
 
     @Override

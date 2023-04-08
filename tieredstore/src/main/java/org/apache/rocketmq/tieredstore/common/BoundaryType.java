@@ -17,6 +17,7 @@
 package org.apache.rocketmq.tieredstore.common;
 
 public enum BoundaryType {
+
     /**
      * Indicate that lower boundary is expected.
      */
@@ -27,7 +28,7 @@ public enum BoundaryType {
      */
     UPPER("upper");
 
-    private String name;
+    private final String name;
 
     BoundaryType(String name) {
         this.name = name;

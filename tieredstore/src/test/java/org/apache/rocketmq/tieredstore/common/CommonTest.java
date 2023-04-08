@@ -24,12 +24,13 @@ import org.junit.Assert;
 import org.junit.Test;
 
 public class CommonTest {
+
     @Test
-    public void testInflightRequestFuture() {
+    public void testInFlightRequestFuture() {
         List<Pair<Integer, CompletableFuture<Long>>> futureList = new ArrayList<>();
         futureList.add(Pair.of(32, CompletableFuture.completedFuture(1031L)));
         futureList.add(Pair.of(256, CompletableFuture.completedFuture(1287L)));
-        InflightRequestFuture future = new InflightRequestFuture(1000, futureList);
+        InFlightRequestFuture future = new InFlightRequestFuture(1000, futureList);
 
         Assert.assertEquals(1000, future.getStartOffset());
         Assert.assertTrue(future.isFirstDone());
@@ -44,9 +45,9 @@ public class CommonTest {
     }
 
     @Test
-    public void testInflightRequestKey() {
-        InflightRequestKey requestKey1 = new InflightRequestKey("group", 0, 0);
-        InflightRequestKey requestKey2 = new InflightRequestKey("group", 1, 1);
+    public void testInFlightRequestKey() {
+        InFlightRequestKey requestKey1 = new InFlightRequestKey("group", 0, 0);
+        InFlightRequestKey requestKey2 = new InFlightRequestKey("group", 1, 1);
         Assert.assertEquals(requestKey1, requestKey2);
         Assert.assertEquals(requestKey1.hashCode(), requestKey2.hashCode());
         Assert.assertEquals(requestKey1.getGroup(), requestKey2.getGroup());

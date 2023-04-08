@@ -26,19 +26,19 @@ import java.util.concurrent.TimeUnit;
 import org.apache.rocketmq.common.ThreadFactoryImpl;
 
 public class TieredStoreExecutor {
+
     private static final int QUEUE_CAPACITY = 10000;
+
     private static final BlockingQueue<Runnable> DISPATCH_THREAD_POOL_QUEUE;
-    public static final ExecutorService DISPATCH_EXECUTOR;
+    private static final BlockingQueue<Runnable> FETCH_DATA_THREAD_POOL_QUEUE;
+    private static final BlockingQueue<Runnable> COMPACT_INDEX_FILE_THREAD_POOL_QUEUE;
+
     public static final ScheduledExecutorService COMMON_SCHEDULED_EXECUTOR;
-
     public static final ScheduledExecutorService COMMIT_EXECUTOR;
-
     public static final ScheduledExecutorService CLEAN_EXPIRED_FILE_EXECUTOR;
 
-    private static final BlockingQueue<Runnable> FETCH_DATA_THREAD_POOL_QUEUE;
+    public static final ExecutorService DISPATCH_EXECUTOR;
     public static final ExecutorService FETCH_DATA_EXECUTOR;
-
-    private static final BlockingQueue<Runnable> COMPACT_INDEX_FILE_THREAD_POOL_QUEUE;
     public static final ExecutorService COMPACT_INDEX_FILE_EXECUTOR;
 
     static {
