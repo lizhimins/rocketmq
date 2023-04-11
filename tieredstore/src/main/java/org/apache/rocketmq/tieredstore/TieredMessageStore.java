@@ -403,7 +403,6 @@ public class TieredMessageStore extends AbstractPluginMessageStore {
                 containerManager.destroyContainer(mq);
                 try {
                     metadataStore.deleteQueue(mq);
-                    metadataStore.deleteFileSegment(TieredStoreUtil.toPath(mq));
                 } catch (Exception e) {
                     throw new IllegalStateException(e);
                 }

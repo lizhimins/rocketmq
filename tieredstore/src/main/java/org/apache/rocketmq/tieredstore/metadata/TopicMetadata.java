@@ -16,6 +16,8 @@
  */
 package org.apache.rocketmq.tieredstore.metadata;
 
+import com.google.common.annotations.VisibleForTesting;
+
 public class TopicMetadata {
 
     private long topicId;
@@ -27,6 +29,11 @@ public class TopicMetadata {
     // default constructor is used by fastjson
     public TopicMetadata() {
 
+    }
+
+    @VisibleForTesting
+    public TopicMetadata(String topic) {
+        this.topic = topic;
     }
 
     public TopicMetadata(long topicId, String topic, long reserveTime) {

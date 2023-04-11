@@ -37,7 +37,7 @@ public class TieredConsumeQueue {
      * message size: int, 4 bytes
      * tag hash code: long, 8 bytes
      */
-    public static final int CONSUME_QUEUE_STORE_UNIT_SIZE = 8;
+    public static final int CONSUME_QUEUE_STORE_UNIT_SIZE = 8 + 4 + 8;
 
     private final TieredMessageStoreConfig storeConfig;
     private final TieredFileQueue fileQueue;

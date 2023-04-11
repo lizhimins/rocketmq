@@ -18,12 +18,16 @@ package org.apache.rocketmq.tieredstore.metadata;
 
 import com.alibaba.fastjson.JSON;
 import com.alibaba.fastjson.serializer.SerializerFeature;
+import com.google.common.annotations.VisibleForTesting;
 import java.nio.file.Paths;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
-import javax.annotation.Nullable;
+import java.util.function.Function;
 import org.apache.rocketmq.common.ConfigManager;
 import org.apache.rocketmq.common.message.MessageQueue;
 import org.apache.rocketmq.tieredstore.common.TieredMessageStoreConfig;
@@ -31,12 +35,12 @@ import org.apache.rocketmq.tieredstore.provider.TieredFileSegment;
 
 public class TieredMetadataManager extends ConfigManager implements TieredMetadataStore {
 
+    private static final int DEFAULT_CAPACITY = 1024;
     private static final String DEFAULT_CONFIG_NAME = "config";
     private static final String DEFAULT_FILE_NAME = "tieredStoreMetadata.json";
-    private static final int DEFAULT_CAPACITY = 1024;
 
+    private final AtomicLong topicSequenceNumber;
     private final TieredMessageStoreConfig storeConfig;
-    private final AtomicLong topicSequenceNumber = new AtomicLong(0L);
     private final ConcurrentMap<String /* topic */, TopicMetadata> topicMetadataTable;
     private final ConcurrentMap<String /* topic */, ConcurrentMap<Integer, QueueMetadata>> queueMetadataTable;
 
@@ -48,11 +52,13 @@ public class TieredMetadataManager extends ConfigManager implements TieredMetada
 
     public TieredMetadataManager(TieredMessageStoreConfig storeConfig) {
         this.storeConfig = storeConfig;
+        this.topicSequenceNumber = new AtomicLong(-1L);
         this.topicMetadataTable = new ConcurrentHashMap<>(DEFAULT_CAPACITY);
         this.queueMetadataTable = new ConcurrentHashMap<>(DEFAULT_CAPACITY);
         this.commitLogFileSegmentTable = new ConcurrentHashMap<>(DEFAULT_CAPACITY);
         this.consumeQueueFileSegmentTable = new ConcurrentHashMap<>(DEFAULT_CAPACITY);
         this.indexFileSegmentTable = new ConcurrentHashMap<>(DEFAULT_CAPACITY);
+        this.load();
     }
 
     @Override
@@ -109,7 +115,6 @@ public class TieredMetadataManager extends ConfigManager implements TieredMetada
         this.topicSequenceNumber.set(topicSequenceNumber);
     }
 
-    @Nullable
     @Override
     public TopicMetadata getTopic(String topic) {
         return topicMetadataTable.get(topic);
@@ -126,7 +131,7 @@ public class TieredMetadataManager extends ConfigManager implements TieredMetada
         if (old != null) {
             return old;
         }
-        TopicMetadata metadata = new TopicMetadata(topicSequenceNumber.getAndIncrement(), topic, reserveTime);
+        TopicMetadata metadata = new TopicMetadata(topicSequenceNumber.incrementAndGet(), topic, reserveTime);
         topicMetadataTable.put(topic, metadata);
         persist();
         return metadata;
@@ -149,21 +154,14 @@ public class TieredMetadataManager extends ConfigManager implements TieredMetada
         persist();
     }
 
-    @Nullable
     @Override
     public QueueMetadata getQueue(MessageQueue queue) {
-        if (!queueMetadataTable.containsKey(queue.getTopic())) {
-            return null;
-        }
-        return queueMetadataTable.get(queue.getTopic())
-            .get(queue.getQueueId());
+        return queueMetadataTable.getOrDefault(queue.getTopic(), new ConcurrentHashMap<>()).get(queue.getQueueId());
     }
 
     @Override
     public void iterateQueue(String topic, Consumer<QueueMetadata> callback) {
-        queueMetadataTable.get(topic)
-            .values()
-            .forEach(callback);
+        queueMetadataTable.get(topic).values().forEach(callback);
     }
 
     @Override
@@ -187,41 +185,50 @@ public class TieredMetadataManager extends ConfigManager implements TieredMetada
             if (metadataMap.containsKey(queue.getQueueId())) {
                 metadata.setUpdateTimestamp(System.currentTimeMillis());
                 metadataMap.put(queue.getQueueId(), metadata);
-                persist();
             }
+            persist();
         }
     }
 
     @Override
     public void deleteQueue(MessageQueue queue) {
         if (queueMetadataTable.containsKey(queue.getTopic())) {
-            queueMetadataTable.get(queue.getTopic())
-                .remove(queue.getQueueId());
+            queueMetadataTable.get(queue.getTopic()).remove(queue.getQueueId());
         }
         persist();
     }
 
-    @Nullable
-    @Override
-    public FileSegmentMetadata getFileSegment(TieredFileSegment fileSegment) {
-        switch (fileSegment.getFileType()) {
+    @VisibleForTesting
+    public Map<String, ConcurrentMap<Long, FileSegmentMetadata>> getTableByFileType(
+        TieredFileSegment.FileSegmentType fileType) {
+
+        switch (fileType) {
             case COMMIT_LOG:
-                if (commitLogFileSegmentTable.containsKey(fileSegment.getPath())) {
-                    return commitLogFileSegmentTable.get(fileSegment.getPath()).get(fileSegment.getBaseOffset());
-                }
-                break;
+                return commitLogFileSegmentTable;
             case CONSUME_QUEUE:
-                if (consumeQueueFileSegmentTable.containsKey(fileSegment.getPath())) {
-                    return consumeQueueFileSegmentTable.get(fileSegment.getPath()).get(fileSegment.getBaseOffset());
-                }
-                break;
+                return consumeQueueFileSegmentTable;
             case INDEX:
-                if (indexFileSegmentTable.containsKey(fileSegment.getPath())) {
-                    return indexFileSegmentTable.get(fileSegment.getPath()).get(fileSegment.getBaseOffset());
-                }
-                break;
+                return indexFileSegmentTable;
         }
-        return null;
+        return new HashMap<>();
+    }
+
+    @Override
+    public FileSegmentMetadata getFileSegment(
+        String basePath, TieredFileSegment.FileSegmentType fileType, long baseOffset) {
+
+        return Optional.ofNullable(this.getTableByFileType(fileType).get(basePath))
+            .map(fileMap -> fileMap.get(baseOffset)).orElse(null);
+    }
+
+    @Override
+    public void updateFileSegment(FileSegmentMetadata fileSegmentMetadata) {
+        TieredFileSegment.FileSegmentType fileType =
+            TieredFileSegment.FileSegmentType.valueOf(fileSegmentMetadata.getType());
+        ConcurrentMap<Long, FileSegmentMetadata> offsetTable = this.getTableByFileType(fileType)
+            .computeIfAbsent(fileSegmentMetadata.getPath(), s -> new ConcurrentHashMap<>());
+        offsetTable.put(fileSegmentMetadata.getBaseOffset(), fileSegmentMetadata);
+        persist();
     }
 
     @Override
@@ -235,99 +242,29 @@ public class TieredMetadataManager extends ConfigManager implements TieredMetada
     }
 
     @Override
-    public void iterateFileSegment(String filePath, Consumer<FileSegmentMetadata> callback) {
-        commitLogFileSegmentTable.getOrDefault(filePath, new ConcurrentHashMap<>()).forEach(
+    public void iterateFileSegment(String basePath, Consumer<FileSegmentMetadata> callback) {
+        commitLogFileSegmentTable.getOrDefault(basePath, new ConcurrentHashMap<>()).forEach(
             (offset, metadata) -> callback.accept(metadata));
-        consumeQueueFileSegmentTable.getOrDefault(filePath, new ConcurrentHashMap<>()).forEach(
+        consumeQueueFileSegmentTable.getOrDefault(basePath, new ConcurrentHashMap<>()).forEach(
             (offset, metadata) -> callback.accept(metadata));
-        indexFileSegmentTable.getOrDefault(filePath, new ConcurrentHashMap<>()).forEach(
+        indexFileSegmentTable.getOrDefault(basePath, new ConcurrentHashMap<>()).forEach(
             (offset, metadata) -> callback.accept(metadata));
-    }
-
-    private FileSegmentMetadata getOrCreateFileSegment(TieredFileSegment fileSegment) {
-        FileSegmentMetadata metadata = getFileSegment(fileSegment);
-        if (metadata != null) {
-            return metadata;
-        }
-
-        metadata = new FileSegmentMetadata(
-            fileSegment.getPath(), fileSegment.getBaseOffset(), fileSegment.getFileType().getType());
-
-        if (fileSegment.isClosed()) {
-            metadata.setStatus(FileSegmentMetadata.STATUS_DELETED);
-        }
-
-        metadata.setBeginTimestamp(fileSegment.getMinTimestamp());
-        metadata.setEndTimestamp(fileSegment.getMaxTimestamp());
-
-        switch (fileSegment.getFileType()) {
-            case COMMIT_LOG:
-                commitLogFileSegmentTable
-                    .computeIfAbsent(fileSegment.getPath(), filePath -> new ConcurrentHashMap<>())
-                    .put(fileSegment.getBaseOffset(), metadata);
-                break;
-            case CONSUME_QUEUE:
-                consumeQueueFileSegmentTable
-                    .computeIfAbsent(fileSegment.getPath(), filePath -> new ConcurrentHashMap<>())
-                    .put(fileSegment.getBaseOffset(), metadata);
-                break;
-            case INDEX:
-                indexFileSegmentTable
-                    .computeIfAbsent(fileSegment.getPath(), filePath -> new ConcurrentHashMap<>())
-                    .put(fileSegment.getBaseOffset(), metadata);
-                break;
-        }
-
-        this.persist();
-        return metadata;
     }
 
     @Override
-    public FileSegmentMetadata updateFileSegment(TieredFileSegment fileSegment) {
-        FileSegmentMetadata segmentMetadata = getOrCreateFileSegment(fileSegment);
-
-        if (segmentMetadata.getStatus() == FileSegmentMetadata.STATUS_NEW
-            && fileSegment.isFull()
-            && !fileSegment.needCommit()) {
-
-            segmentMetadata.setStatus(FileSegmentMetadata.STATUS_SEALED);
-            segmentMetadata.setSealTimestamp(System.currentTimeMillis());
+    public void deleteFileSegment(String filePath, TieredFileSegment.FileSegmentType fileType) {
+        Map<String, ConcurrentMap<Long, FileSegmentMetadata>> offsetTable = this.getTableByFileType(fileType);
+        if (offsetTable != null) {
+            offsetTable.remove(filePath);
         }
-
-        if (fileSegment.isClosed()) {
-            segmentMetadata.setStatus(FileSegmentMetadata.STATUS_DELETED);
-        }
-
-        segmentMetadata.setSize(fileSegment.getCommitPosition());
-        segmentMetadata.setBeginTimestamp(fileSegment.getMinTimestamp());
-        segmentMetadata.setEndTimestamp(fileSegment.getMaxTimestamp());
-        this.persist();
-        return segmentMetadata;
+        persist();
     }
 
     @Override
-    public void deleteFileSegment(String filePath) {
-
-    }
-
-    @Override
-    public void deleteFileSegment(String filePath, TieredFileSegment.FileSegmentType fileType, long baseOffset) {
-        switch (fileType) {
-            case COMMIT_LOG:
-                if (commitLogFileSegmentTable.containsKey(filePath)) {
-                    commitLogFileSegmentTable.get(filePath).remove(baseOffset);
-                }
-                break;
-            case CONSUME_QUEUE:
-                if (consumeQueueFileSegmentTable.containsKey(filePath)) {
-                    consumeQueueFileSegmentTable.get(filePath).remove(baseOffset);
-                }
-                break;
-            case INDEX:
-                if (indexFileSegmentTable.containsKey(filePath)) {
-                    indexFileSegmentTable.get(filePath).remove(baseOffset);
-                }
-                break;
+    public void deleteFileSegment(String basePath, TieredFileSegment.FileSegmentType fileType, long baseOffset) {
+        ConcurrentMap<Long, FileSegmentMetadata> offsetTable = this.getTableByFileType(fileType).get(basePath);
+        if (offsetTable != null) {
+            offsetTable.remove(baseOffset);
         }
         persist();
     }

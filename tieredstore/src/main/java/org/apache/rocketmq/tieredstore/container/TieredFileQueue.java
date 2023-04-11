@@ -22,6 +22,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashSet;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
@@ -49,18 +50,22 @@ public class TieredFileQueue {
     private final TieredFileSegment.FileSegmentType fileType;
     private final TieredMetadataStore tieredMetadataStore;
 
-    private volatile long baseOffset = 0L;
+    private volatile long baseOffset;
     private final FileSegmentFactory fileSegmentFactory;
-    private final List<TieredFileSegment> fileSegmentList = new ArrayList<>();
-    private final List<TieredFileSegment> needCommitFileSegmentList = new CopyOnWriteArrayList<>();
-    private final ReentrantReadWriteLock fileSegmentLock = new ReentrantReadWriteLock();
+    private final List<TieredFileSegment> fileSegmentList;
+    private final List<TieredFileSegment> needCommitFileSegmentList;
+    private final ReentrantReadWriteLock fileSegmentLock;
 
     public TieredFileQueue(FileSegmentFactory fileSegmentFactory,
         TieredFileSegment.FileSegmentType fileType, String filePath) {
 
         this.fileType = fileType;
         this.filePath = filePath;
+        this.baseOffset = 0L;
+        this.fileSegmentList = new LinkedList<>();
+        this.fileSegmentLock = new ReentrantReadWriteLock();
         this.fileSegmentFactory = fileSegmentFactory;
+        this.needCommitFileSegmentList = new CopyOnWriteArrayList<>();
         this.tieredMetadataStore = TieredStoreUtil.getMetadataStore(fileSegmentFactory.getStoreConfig());
         this.recoverMetadata();
 
@@ -137,7 +142,7 @@ public class TieredFileQueue {
                 return;
             }
 
-            TieredFileSegment segment = newSegment(metadata.getBaseOffset(), false);
+            TieredFileSegment segment = this.newSegment(fileType, metadata.getBaseOffset(), false);
             segment.initPosition(metadata.getSize());
             segment.setMinTimestamp(metadata.getBeginTimestamp());
             segment.setMaxTimestamp(metadata.getEndTimestamp());
@@ -157,6 +162,52 @@ public class TieredFileQueue {
         }
     }
 
+    private FileSegmentMetadata getOrCreateFileSegmentMetadata(TieredFileSegment fileSegment) {
+        FileSegmentMetadata metadata = tieredMetadataStore.getFileSegment(
+            fileSegment.getPath(), fileSegment.getFileType(), fileSegment.getBaseOffset());
+        if (metadata != null) {
+            return metadata;
+        }
+
+        metadata = new FileSegmentMetadata(
+            fileSegment.getPath(), fileSegment.getBaseOffset(), fileSegment.getFileType().getType());
+
+        if (fileSegment.isClosed()) {
+            metadata.setStatus(FileSegmentMetadata.STATUS_DELETED);
+        }
+
+        metadata.setBeginTimestamp(fileSegment.getMinTimestamp());
+        metadata.setEndTimestamp(fileSegment.getMaxTimestamp());
+
+        // Submit to persist
+        this.tieredMetadataStore.updateFileSegment(metadata);
+        return metadata;
+    }
+
+    /**
+     * FileQueue Status: Sealed | Sealed | Sealed | Not sealed, Allow appended && Not Full
+     */
+    @VisibleForTesting
+    public void updateFileSegment(TieredFileSegment fileSegment) {
+        FileSegmentMetadata segmentMetadata = getOrCreateFileSegmentMetadata(fileSegment);
+
+        if (segmentMetadata.getStatus() == FileSegmentMetadata.STATUS_NEW
+            && fileSegment.isFull()
+            && !fileSegment.needCommit()) {
+
+            segmentMetadata.markSealed();
+        }
+
+        if (fileSegment.isClosed()) {
+            segmentMetadata.setStatus(FileSegmentMetadata.STATUS_DELETED);
+        }
+
+        segmentMetadata.setSize(fileSegment.getCommitPosition());
+        segmentMetadata.setBeginTimestamp(fileSegment.getMinTimestamp());
+        segmentMetadata.setEndTimestamp(fileSegment.getMaxTimestamp());
+        this.tieredMetadataStore.updateFileSegment(segmentMetadata);
+    }
+
     private void checkAndFixFileSize() {
         for (int i = 1; i < fileSegmentList.size(); i++) {
             TieredFileSegment pre = fileSegmentList.get(i - 1);
@@ -171,7 +222,7 @@ public class TieredFileQueue {
                         continue;
                     }
                     pre.initPosition(actualSize);
-                    tieredMetadataStore.updateFileSegment(pre);
+                    this.updateFileSegment(pre);
                 } catch (Exception e) {
                     logger.error("TieredFileQueue#checkAndFixFileSize: fix file segment size failed: filePath: {}, file type: {}, base offset: {}",
                         filePath, fileType, pre.getBaseOffset());
@@ -189,15 +240,17 @@ public class TieredFileQueue {
         }
     }
 
-    private TieredFileSegment newSegment(long baseOffset, boolean createMetadata) {
+    private TieredFileSegment newSegment(
+        TieredFileSegment.FileSegmentType fileType, long baseOffset, boolean createMetadata) {
+
         TieredFileSegment segment = null;
         try {
-            segment = fileSegmentFactory.createCommitLogFileSegment(filePath, baseOffset);
+            segment = fileSegmentFactory.createSegment(fileType, filePath, baseOffset);
             if (fileType != TieredFileSegment.FileSegmentType.INDEX) {
                 segment.createFile();
             }
             if (createMetadata) {
-                tieredMetadataStore.updateFileSegment(segment);
+                this.updateFileSegment(segment);
             }
         } catch (Exception e) {
             logger.error("create file segment failed: filePath:{}, file type: {}, base offset: {}",
@@ -256,7 +309,7 @@ public class TieredFileQueue {
                 }
                 if (segment.commit()) {
                     try {
-                        tieredMetadataStore.updateFileSegment(segment);
+                        this.updateFileSegment(segment);
                     } catch (Exception e) {
                         return segment;
                     }
@@ -266,7 +319,7 @@ public class TieredFileQueue {
 
                 offset = segment.getMaxOffset();
             }
-            TieredFileSegment fileSegment = newSegment(offset, true);
+            TieredFileSegment fileSegment = this.newSegment(fileType, offset, true);
             fileSegmentList.add(fileSegment);
             needCommitFileSegmentList.add(fileSegment);
 
@@ -392,7 +445,7 @@ public class TieredFileQueue {
                         fileSegmentList.remove(fileSegment);
                         needCommitFileSegmentList.remove(fileSegment);
                         i--;
-                        tieredMetadataStore.updateFileSegment(fileSegment);
+                        this.updateFileSegment(fileSegment);
                         logger.info("expired file {} is been cleaned", fileSegment.getPath());
                     } else {
                         break;
@@ -422,12 +475,14 @@ public class TieredFileQueue {
     public void destroyExpiredFile() {
         try {
             tieredMetadataStore.iterateFileSegment(filePath, metadata -> {
+                System.out.println("try delete: " + filePath);
                 if (metadata.getStatus() == FileSegmentMetadata.STATUS_DELETED) {
                     try {
-                        TieredFileSegment fileSegment = newSegment(metadata.getBaseOffset(), false);
+                        TieredFileSegment fileSegment =
+                            this.newSegment(fileType, metadata.getBaseOffset(), false);
                         fileSegment.destroyFile();
                         if (!fileSegment.exists()) {
-                            tieredMetadataStore.deleteFileSegment(fileSegment.getPath());
+                            tieredMetadataStore.deleteFileSegment(filePath, fileType, metadata.getBaseOffset());
                             logger.info("expired file {} is been destroyed", fileSegment.getPath());
                         }
                     } catch (Exception e) {
@@ -451,7 +506,7 @@ public class TieredFileQueue {
                 futureList.add(segment.commitAsync()
                     .thenAccept(success -> {
                         try {
-                            tieredMetadataStore.updateFileSegment(segment);
+                            this.updateFileSegment(segment);
                         } catch (Exception e) {
                             // TODO handle update segment metadata failed exception
                             logger.error("update file segment metadata failed: " +
@@ -512,7 +567,7 @@ public class TieredFileQueue {
             for (TieredFileSegment fileSegment : fileSegmentList) {
                 fileSegment.close();
                 try {
-                    tieredMetadataStore.updateFileSegment(fileSegment);
+                    this.updateFileSegment(fileSegment);
                 } catch (Exception e) {
                     logger.error("TieredFileQueue#destroy: mark file segment: {} is deleted failed", fileSegment.getPath(), e);
                 }

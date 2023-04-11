@@ -38,7 +38,9 @@ public class MemoryFileSegment extends TieredFileSegment {
     @VisibleForTesting
     public MemoryFileSegment(TieredFileSegment.FileSegmentType fileType, MessageQueue messageQueue, long baseOffset,
         TieredMessageStoreConfig storeConfig) {
-        this(storeConfig, fileType, TieredStoreUtil.toPath(messageQueue), baseOffset);
+        this(storeConfig, fileType,
+            storeConfig.getStorePathRootDir() + File.separator + TieredStoreUtil.toPath(messageQueue),
+            baseOffset);
     }
 
     public MemoryFileSegment(TieredMessageStoreConfig storeConfig,
@@ -63,7 +65,7 @@ public class MemoryFileSegment extends TieredFileSegment {
 
     @Override
     public String getPath() {
-        return "/tiered/" + fileType + File.separator + baseOffset;
+        return filePath;
     }
 
     @Override

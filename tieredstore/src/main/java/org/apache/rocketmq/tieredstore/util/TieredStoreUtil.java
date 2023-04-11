@@ -16,6 +16,7 @@
  */
 package org.apache.rocketmq.tieredstore.util;
 
+import com.google.common.annotations.VisibleForTesting;
 import java.io.File;
 import java.lang.reflect.Constructor;
 import java.math.BigInteger;
@@ -59,7 +60,8 @@ public class TieredStoreUtil {
 
     private final static List<String> SYSTEM_TOPIC_WHITE_LIST = new LinkedList<>();
 
-    private volatile static TieredMetadataStore metadataStoreInstance;
+    @VisibleForTesting
+    public volatile static TieredMetadataStore metadataStoreInstance;
 
     private static String formatSize(long size, long divider, String unitName) {
         return DEC_FORMAT.format((double) size / divider) + unitName;
@@ -146,11 +148,15 @@ public class TieredStoreUtil {
             synchronized (TieredMetadataStore.class) {
                 if (metadataStoreInstance == null) {
                     try {
-                        Class<? extends TieredMetadataStore> clazz = Class.forName(storeConfig.getTieredMetadataServiceProvider()).asSubclass(TieredMetadataStore.class);
-                        Constructor<? extends TieredMetadataStore> constructor = clazz.getConstructor(TieredMessageStoreConfig.class);
+                        Class<? extends TieredMetadataStore> clazz = Class.forName(
+                            storeConfig.getTieredMetadataServiceProvider()).asSubclass(TieredMetadataStore.class);
+                        Constructor<? extends TieredMetadataStore> constructor =
+                            clazz.getConstructor(TieredMessageStoreConfig.class);
                         metadataStoreInstance = constructor.newInstance(storeConfig);
                     } catch (Exception e) {
-                        logger.error("TieredMetadataStore#getInstance: build metadata store failed, provider class: {}", storeConfig.getTieredMetadataServiceProvider(), e);
+                        logger.error("TieredMetadataStore#getInstance: " +
+                            "build metadata store failed, provider class: {}",
+                            storeConfig.getTieredMetadataServiceProvider(), e);
                     }
                 }
             }

@@ -49,11 +49,49 @@ public class FileSegmentFactory {
         return TieredStoreUtil.getMetadataStore(storeConfig);
     }
 
+    public TieredFileSegment createSegment(
+        TieredFileSegment.FileSegmentType fileType, String filePath, long baseOffset) {
+
+        switch (fileType) {
+            case COMMIT_LOG:
+                return this.createCommitLogFileSegment(filePath, baseOffset);
+            case CONSUME_QUEUE:
+                return this.createConsumeQueueFileSegment(filePath, baseOffset);
+            case INDEX:
+                return this.createIndexFileSegment(filePath, baseOffset);
+        }
+        return null;
+    }
+
     public TieredFileSegment createCommitLogFileSegment(String filePath, long baseOffset) {
         TieredFileSegment segment = null;
         try {
             segment = fileSegmentConstructor.newInstance(
                 this.storeConfig, TieredFileSegment.FileSegmentType.COMMIT_LOG, filePath, baseOffset);
+        } catch (Exception e) {
+            log.error("create file segment of commitlog failed, filePath: {}, baseOffset: {}",
+                filePath, baseOffset, e);
+        }
+        return segment;
+    }
+
+    public TieredFileSegment createConsumeQueueFileSegment(String filePath, long baseOffset) {
+        TieredFileSegment segment = null;
+        try {
+            segment = fileSegmentConstructor.newInstance(
+                this.storeConfig, TieredFileSegment.FileSegmentType.CONSUME_QUEUE, filePath, baseOffset);
+        } catch (Exception e) {
+            log.error("create file segment of commitlog failed, filePath: {}, baseOffset: {}",
+                filePath, baseOffset, e);
+        }
+        return segment;
+    }
+
+    public TieredFileSegment createIndexFileSegment(String filePath, long baseOffset) {
+        TieredFileSegment segment = null;
+        try {
+            segment = fileSegmentConstructor.newInstance(
+                this.storeConfig, TieredFileSegment.FileSegmentType.INDEX, filePath, baseOffset);
         } catch (Exception e) {
             log.error("create file segment of commitlog failed, filePath: {}, baseOffset: {}",
                 filePath, baseOffset, e);

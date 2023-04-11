@@ -17,22 +17,36 @@
 package org.apache.rocketmq.tieredstore.metadata;
 
 import java.util.function.Consumer;
-import javax.annotation.Nullable;
 import org.apache.rocketmq.common.message.MessageQueue;
 import org.apache.rocketmq.tieredstore.provider.TieredFileSegment;
 
+/**
+ * Provides tiered metadata storage service to store metadata information of Topic, Queue, FileSegment, etc.
+ */
 public interface TieredMetadataStore {
 
     /**
-     * Topic metadata operation
+     * Set the sequence number of Topic, the start index from 0.
      *
-     * @see TopicMetadata
+     * @param topicSequenceNumber The sequence number of Topic.
      */
     void setTopicSequenceNumber(long topicSequenceNumber);
 
-    @Nullable
+    /**
+     * Get the metadata information of specified Topic.
+     *
+     * @param topic The name of Topic.
+     * @return The metadata information of specified Topic, or null if it does not exist.
+     */
     TopicMetadata getTopic(String topic);
 
+    /**
+     * Add a new metadata information of Topic.
+     *
+     * @param topic       The name of Topic.
+     * @param reserveTime The reserve time.
+     * @return The newly added metadata information of Topic.
+     */
     TopicMetadata addTopic(String topic, long reserveTime);
 
     void updateTopic(TopicMetadata topicMetadata);
@@ -46,7 +60,6 @@ public interface TieredMetadataStore {
      *
      * @see QueueMetadata
      */
-    @Nullable
     QueueMetadata getQueue(MessageQueue queue);
 
     QueueMetadata addQueue(MessageQueue queue, long baseOffset);
@@ -58,25 +71,57 @@ public interface TieredMetadataStore {
     void deleteQueue(MessageQueue queue);
 
     /**
-     * File segment metadata operation
+     * Get the metadata information of specified file segment.
      *
-     * @see FileSegmentMetadata
+     * @param basePath   The file path.
+     * @param fileType   The file type.
+     * @param baseOffset The start offset of file segment.
+     * @return The metadata information of specified file segment, or null if it does not exist.
      */
-    @Nullable
-    FileSegmentMetadata getFileSegment(TieredFileSegment fileSegment);
-
-    FileSegmentMetadata updateFileSegment(TieredFileSegment fileSegment);
-
-    void iterateFileSegment(Consumer<FileSegmentMetadata> callback);
-
-    void iterateFileSegment(String filePath, Consumer<FileSegmentMetadata> callback);
-
-    void deleteFileSegment(String filePath);
-
-    void deleteFileSegment(String filePath, TieredFileSegment.FileSegmentType fileType, long baseOffset);
+    FileSegmentMetadata getFileSegment(String basePath, TieredFileSegment.FileSegmentType fileType, long baseOffset);
 
     /**
-     * Clean all metadata
+     * Update the metadata information of a file segment.
+     *
+     * @param fileSegmentMetadata The metadata information of the file segment.
+     */
+    void updateFileSegment(FileSegmentMetadata fileSegmentMetadata);
+
+    /**
+     * Traverse all metadata information of file segment
+     * and execute the callback function for each metadata information.
+     *
+     * @param callback The traversal callback function.
+     */
+    void iterateFileSegment(Consumer<FileSegmentMetadata> callback);
+
+    /**
+     * Traverse all the metadata information of the file segments in the specified file path
+     * and execute the callback function for each metadata information.
+     *
+     * @param basePath The file path.
+     * @param callback The traversal callback function.
+     */
+    void iterateFileSegment(String basePath, Consumer<FileSegmentMetadata> callback);
+
+    /**
+     * Delete all the metadata information of the file segments.
+     *
+     * @param basePath The file path.
+     */
+    void deleteFileSegment(String basePath, TieredFileSegment.FileSegmentType fileType);
+
+    /**
+     * Delete the metadata information of a specified file segment.
+     *
+     * @param basePath   The file path.
+     * @param fileType   The file type.
+     * @param baseOffset The start offset of the file segment.
+     */
+    void deleteFileSegment(String basePath, TieredFileSegment.FileSegmentType fileType, long baseOffset);
+
+    /**
+     * Clean all metadata in disk
      */
     void destroy();
 }

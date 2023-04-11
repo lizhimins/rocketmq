@@ -47,6 +47,5 @@ public class TieredFileQueueFactory {
 
     public TieredFileQueue createQueueForIndexFile(String filePath) {
         return new TieredFileQueue(fileSegmentFactory, TieredFileSegment.FileSegmentType.INDEX, filePath);
-        // new MessageQueue(TieredStoreUtil.RMQ_SYS_TIERED_STORE_INDEX_TOPIC, storeConfig.getBrokerName(), 0), storeConfig);
     }
 }

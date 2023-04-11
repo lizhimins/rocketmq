@@ -46,6 +46,11 @@ public class FileSegmentMetadata {
         this.createTimestamp = System.currentTimeMillis();
     }
 
+    public void markSealed() {
+        this.status = STATUS_SEALED;
+        this.sealTimestamp = System.currentTimeMillis();
+    }
+
     public int getStatus() {
         return status;
     }

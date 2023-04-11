@@ -45,6 +45,7 @@ import org.apache.rocketmq.tieredstore.common.TieredMessageStoreConfig;
 import org.apache.rocketmq.tieredstore.metadata.QueueMetadata;
 import org.apache.rocketmq.tieredstore.metadata.TieredMetadataStore;
 import org.apache.rocketmq.tieredstore.metadata.TopicMetadata;
+import org.apache.rocketmq.tieredstore.provider.TieredFileSegment;
 import org.apache.rocketmq.tieredstore.util.CQItemBufferUtil;
 import org.apache.rocketmq.tieredstore.util.MessageBufferUtil;
 import org.apache.rocketmq.tieredstore.util.TieredStoreUtil;
@@ -535,7 +536,10 @@ public class TieredMessageQueueContainer {
         commitLog.destroy();
         consumeQueue.destroy();
         try {
-            metadataStore.deleteFileSegment(TieredStoreUtil.toPath(messageQueue));
+            metadataStore.deleteFileSegment(
+                TieredStoreUtil.toPath(messageQueue), TieredFileSegment.FileSegmentType.COMMIT_LOG);
+            metadataStore.deleteFileSegment(
+                TieredStoreUtil.toPath(messageQueue), TieredFileSegment.FileSegmentType.CONSUME_QUEUE);
             metadataStore.deleteQueue(messageQueue);
         } catch (Exception e) {
             LOGGER.error("TieredMessageQueueContainer#destroy: clean metadata failed: ", e);

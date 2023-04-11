@@ -74,8 +74,8 @@ public class TieredMessageQueueContainerTest {
 
         MemoryFileSegment segment = new MemoryFileSegment(TieredFileSegment.FileSegmentType.COMMIT_LOG, mq, 1000, storeConfig);
         segment.initPosition(segment.getSize());
-        metadataStore.updateFileSegment(segment);
-        metadataStore.updateFileSegment(segment);
+        //metadataStore.updateFileSegment(segment);
+        //metadataStore.updateFileSegment(segment);
         container = new TieredMessageQueueContainer(mq, storeConfig);
         container.initOffset(6);
         result = container.appendCommitLog(message);
@@ -120,8 +120,8 @@ public class TieredMessageQueueContainerTest {
 
         MemoryFileSegment segment = new MemoryFileSegment(TieredFileSegment.FileSegmentType.CONSUME_QUEUE, mq, 20, storeConfig);
         segment.initPosition(segment.getSize());
-        metadataStore.updateFileSegment(segment);
-        metadataStore.updateFileSegment(segment);
+        //metadataStore.updateFileSegment(segment);
+        //metadataStore.updateFileSegment(segment);
         container = new TieredMessageQueueContainer(mq, storeConfig);
         result = container.appendConsumeQueue(request);
         Assert.assertEquals(AppendResult.SUCCESS, result);
