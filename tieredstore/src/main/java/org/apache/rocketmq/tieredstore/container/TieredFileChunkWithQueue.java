@@ -50,7 +50,6 @@ public class TieredFileChunkWithQueue extends TieredFileChunk {
         super.initOffset(offset);
     }
 
-    @Override
     public void recoverMetadata() {
         TopicMetadata topicMetadata = this.metadataStore.getTopic(messageQueue.getTopic());
         if (topicMetadata == null) {
@@ -67,7 +66,6 @@ public class TieredFileChunkWithQueue extends TieredFileChunk {
         }
     }
 
-    @Override
     public void persistMetadata() {
         try {
             if (consumeQueue.getCommitOffset() < queueMetadata.getMinOffset()) {

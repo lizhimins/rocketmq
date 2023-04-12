@@ -16,6 +16,7 @@
  */
 package org.apache.rocketmq.tieredstore.container;
 
+import com.google.common.annotations.VisibleForTesting;
 import java.nio.ByteBuffer;
 import java.util.concurrent.CompletableFuture;
 import org.apache.rocketmq.logging.org.slf4j.Logger;
@@ -44,6 +45,11 @@ public class TieredCommitLog {
     public TieredCommitLog(TieredFileFactory fileQueueFactory, String filePath) {
         this.storeConfig = fileQueueFactory.getStoreConfig();
         this.fileQueue = fileQueueFactory.createQueueForCommitLog(filePath);
+    }
+
+    @VisibleForTesting
+    public TieredFileQueue getFileQueue() {
+        return fileQueue;
     }
 
     public long getMinOffset() {

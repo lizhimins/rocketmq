@@ -16,6 +16,7 @@
  */
 package org.apache.rocketmq.tieredstore.container;
 
+import com.google.common.annotations.VisibleForTesting;
 import java.nio.ByteBuffer;
 import java.util.concurrent.CompletableFuture;
 import org.apache.commons.lang3.tuple.Pair;
@@ -38,16 +39,19 @@ public class TieredConsumeQueue {
      */
     public static final int CONSUME_QUEUE_STORE_UNIT_SIZE = 8 + 4 + 8;
 
-    private final TieredMessageStoreConfig storeConfig;
     private final TieredFileQueue fileQueue;
 
     public TieredConsumeQueue(TieredFileFactory fileQueueFactory, String filePath) {
-        this.storeConfig = fileQueueFactory.getStoreConfig();
         this.fileQueue = fileQueueFactory.createQueueForConsumeQueue(filePath);
     }
 
     public boolean isInitialized() {
         return fileQueue.getBaseOffset() != -1;
+    }
+
+    @VisibleForTesting
+    public TieredFileQueue getFileQueue() {
+        return fileQueue;
     }
 
     public long getBaseOffset() {

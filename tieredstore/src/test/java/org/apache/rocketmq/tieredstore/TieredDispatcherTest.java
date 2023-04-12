@@ -50,7 +50,7 @@ public class TieredDispatcherTest {
         storeConfig.setStorePathRootDir(storePath);
         storeConfig.setTieredBackendServiceProvider("org.apache.rocketmq.tieredstore.mock.MemoryFileSegmentWithoutCheck");
         storeConfig.setBrokerName(storeConfig.getBrokerName());
-        mq = new MessageQueue("TieredFileChunkTest", storeConfig.getBrokerName(), 0);
+        mq = new MessageQueue("TieredFileChunkWithQueueTest", storeConfig.getBrokerName(), 0);
         metadataStore = TieredStoreUtil.getMetadataStore(storeConfig);
     }
 

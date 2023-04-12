@@ -16,6 +16,7 @@
  */
 package org.apache.rocketmq.tieredstore.provider;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Stopwatch;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
@@ -256,6 +257,19 @@ public abstract class TieredFileSegment implements Comparable<TieredFileSegment>
         } finally {
             bufferLock.unlock();
         }
+    }
+
+    public void setCommitPosition(long commitPosition) {
+        this.commitPosition = commitPosition;
+    }
+
+    public long getAppendPosition() {
+        return appendPosition;
+    }
+
+    @VisibleForTesting
+    public void setAppendPosition(long appendPosition) {
+        this.appendPosition = appendPosition;
     }
 
     @SuppressWarnings("NonAtomicOperationOnVolatileField")

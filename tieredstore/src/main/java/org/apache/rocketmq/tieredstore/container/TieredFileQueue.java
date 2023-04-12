@@ -133,6 +133,11 @@ public class TieredFileQueue {
         }
     }
 
+    @VisibleForTesting
+    public List<TieredFileSegment> getFileSegmentList() {
+        return fileSegmentList;
+    }
+
     protected void recoverMetadata() {
         fileSegmentList.clear();
         needCommitFileSegmentList.clear();
@@ -503,7 +508,8 @@ public class TieredFileQueue {
                 if (segment.isClosed()) {
                     continue;
                 }
-                futureList.add(segment.commitAsync()
+                futureList.add(segment
+                    .commitAsync()
                     .thenAccept(success -> {
                         try {
                             this.updateFileSegment(segment);
@@ -511,12 +517,13 @@ public class TieredFileQueue {
                             // TODO handle update segment metadata failed exception
                             logger.error("update file segment metadata failed: " +
                                     "file path: {}, file type: {}, base offset: {}",
-                                fileSegmentFactory, fileType, segment.getBaseOffset(), e);
+                                filePath, fileType, segment.getBaseOffset(), e);
                         }
                         if (segment.isFull() && !segment.needCommit()) {
                             needCommitFileSegmentList.remove(segment);
                         }
-                    }));
+                    })
+                );
             }
         } catch (Exception e) {
             logger.error("commit file segment failed: topic: {}, queue: {}, file type: {}", filePath, fileType, e);

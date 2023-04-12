@@ -35,7 +35,6 @@ public class MemoryFileSegment extends TieredFileSegment {
 
     protected boolean checkSize = true;
 
-    @VisibleForTesting
     public MemoryFileSegment(TieredFileSegment.FileSegmentType fileType, MessageQueue messageQueue, long baseOffset,
         TieredMessageStoreConfig storeConfig) {
         this(storeConfig, fileType,

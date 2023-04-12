@@ -53,7 +53,11 @@ public abstract class TieredFileChunk implements FileChunk {
     protected volatile boolean closed = false;
     protected int readAheadFactor;
 
-    // Use consume queue offset
+    /**
+     * Dispatch offset represents the offset of the messages that have been
+     * dispatched to the current chunk, indicating the progress of the message distribution.
+     * It's consume queue current offset.
+     */
     protected volatile long dispatchOffset;
 
     protected final ReentrantLock fileChunkLock;
@@ -73,7 +77,6 @@ public abstract class TieredFileChunk implements FileChunk {
         this.metadataStore = TieredStoreUtil.getMetadataStore(this.storeConfig);
         this.commitLog = new TieredCommitLog(fileQueueFactory, filePath);
         this.consumeQueue = new TieredConsumeQueue(fileQueueFactory, filePath);
-        this.recoverMetadata();
 
         this.fileChunkLock = new ReentrantLock();
         this.readAheadFactor = storeConfig.getReadAheadMinFactor();
@@ -94,14 +97,6 @@ public abstract class TieredFileChunk implements FileChunk {
 
     public boolean isClosed() {
         return closed;
-    }
-
-    public void recoverMetadata() {
-
-    }
-
-    public void persistMetadata() {
-
     }
 
     public ReentrantLock getFileChunkLock() {
@@ -146,6 +141,7 @@ public abstract class TieredFileChunk implements FileChunk {
 
     @Override
     public CompletableFuture<ByteBuffer> getMessageAsync(long queueOffset) {
+        System.out.println("queue offset: " + queueOffset);
         return readConsumeQueue(queueOffset).thenComposeAsync(cqBuffer -> {
             long commitLogOffset = CQItemBufferUtil.getCommitLogOffset(cqBuffer);
             int length = CQItemBufferUtil.getSize(cqBuffer);
@@ -324,16 +320,16 @@ public abstract class TieredFileChunk implements FileChunk {
         if (closed) {
             return AppendResult.FILE_CLOSED;
         }
+
         long queueOffset = MessageBufferUtil.getQueueOffset(message);
-        if (queueOffset != dispatchOffset) {
+        if (dispatchOffset != queueOffset) {
             return AppendResult.OFFSET_INCORRECT;
         }
 
         AppendResult result = commitLog.append(message, commit);
         if (result == AppendResult.SUCCESS) {
-            dispatchOffset++;
+            dispatchOffset = queueOffset + 1;
         }
-
         return result;
     }
 
@@ -347,6 +343,7 @@ public abstract class TieredFileChunk implements FileChunk {
         if (closed) {
             return AppendResult.FILE_CLOSED;
         }
+
         if (request.getConsumeQueueOffset() != getConsumeQueueMaxOffset()) {
             return AppendResult.OFFSET_INCORRECT;
         }

@@ -93,7 +93,7 @@ public class TieredDispatcher extends ServiceThread implements CommitLogDispatch
 
         TieredStoreExecutor.COMMON_SCHEDULED_EXECUTOR.scheduleWithFixedDelay(() -> {
             try {
-                for (TieredFileChunk container : tieredContainerManager.getAllMQContainer()) {
+                for (TieredFileChunkWithQueue container : tieredContainerManager.getAllMQContainer()) {
                     container.persistMetadata();
                 }
             } catch (Throwable e) {
