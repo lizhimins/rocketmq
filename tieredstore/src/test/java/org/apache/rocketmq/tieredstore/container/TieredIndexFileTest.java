@@ -67,7 +67,7 @@ public class TieredIndexFileTest {
         // skip this test on windows
         Assume.assumeFalse(SystemUtils.IS_OS_WINDOWS);
 
-        TieredFileQueueFactory fileQueueFactory = new TieredFileQueueFactory(storeConfig);
+        TieredFileFactory fileQueueFactory = new TieredFileFactory(storeConfig);
         TieredIndexFile indexFile = new TieredIndexFile(fileQueueFactory, storePath);
         indexFile.append(mq, 0, "key3", 3, 300, 1000);
         indexFile.append(mq, 0, "key2", 2, 200, 1100);

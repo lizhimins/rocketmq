@@ -71,11 +71,11 @@ public class TieredContainerManagerTest {
             .atMost(3, TimeUnit.SECONDS)
             .until(() -> containerManager.getAllMQContainer().size() == 2);
 
-        TieredMessageQueueContainer container = containerManager.getMQContainer(mq);
+        TieredFileChunk container = containerManager.getMQContainer(mq);
         Assert.assertNotNull(container);
         Assert.assertEquals(100, container.getDispatchOffset());
 
-        TieredMessageQueueContainer container1 = containerManager.getMQContainer(mq1);
+        TieredFileChunk container1 = containerManager.getMQContainer(mq1);
         Assert.assertNotNull(container1);
         Assert.assertEquals(200, container1.getDispatchOffset());
 

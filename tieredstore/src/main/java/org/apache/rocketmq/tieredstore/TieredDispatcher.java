@@ -43,7 +43,8 @@ import org.apache.rocketmq.tieredstore.common.AppendResult;
 import org.apache.rocketmq.tieredstore.common.TieredMessageStoreConfig;
 import org.apache.rocketmq.tieredstore.common.TieredStoreExecutor;
 import org.apache.rocketmq.tieredstore.container.TieredContainerManager;
-import org.apache.rocketmq.tieredstore.container.TieredMessageQueueContainer;
+import org.apache.rocketmq.tieredstore.container.TieredFileChunk;
+import org.apache.rocketmq.tieredstore.container.TieredFileChunkWithQueue;
 import org.apache.rocketmq.tieredstore.metrics.TieredStoreMetricsConstant;
 import org.apache.rocketmq.tieredstore.metrics.TieredStoreMetricsManager;
 import org.apache.rocketmq.tieredstore.provider.TieredFileSegment;
@@ -52,6 +53,7 @@ import org.apache.rocketmq.tieredstore.util.MessageBufferUtil;
 import org.apache.rocketmq.tieredstore.util.TieredStoreUtil;
 
 public class TieredDispatcher extends ServiceThread implements CommitLogDispatcher {
+
     private static final Logger logger = LoggerFactory.getLogger(TieredStoreUtil.TIERED_STORE_LOGGER_NAME);
 
     private final MessageStore defaultStore;
@@ -59,8 +61,8 @@ public class TieredDispatcher extends ServiceThread implements CommitLogDispatch
     private final TieredMessageStoreConfig storeConfig;
     private final String brokerName;
 
-    private ConcurrentMap<TieredMessageQueueContainer, List<DispatchRequest>> dispatchRequestReadMap;
-    private ConcurrentMap<TieredMessageQueueContainer, List<DispatchRequest>> dispatchRequestWriteMap;
+    private ConcurrentMap<TieredFileChunkWithQueue, List<DispatchRequest>> dispatchRequestReadMap;
+    private ConcurrentMap<TieredFileChunkWithQueue, List<DispatchRequest>> dispatchRequestWriteMap;
     private final ReentrantLock dispatchRequestListLock;
 
     public TieredDispatcher(MessageStore defaultStore, TieredMessageStoreConfig storeConfig) {
@@ -74,8 +76,8 @@ public class TieredDispatcher extends ServiceThread implements CommitLogDispatch
 
         TieredStoreExecutor.COMMON_SCHEDULED_EXECUTOR.scheduleWithFixedDelay(() -> {
             try {
-                for (TieredMessageQueueContainer container : tieredContainerManager.getAllMQContainer()) {
-                    if (!container.getQueueLock().isLocked()) {
+                for (TieredFileChunkWithQueue container : tieredContainerManager.getAllMQContainer()) {
+                    if (!container.getFileChunkLock().isLocked()) {
                         TieredStoreExecutor.DISPATCH_EXECUTOR.execute(() -> {
                             try {
                                 dispatchByMQContainer(container);
@@ -88,10 +90,11 @@ public class TieredDispatcher extends ServiceThread implements CommitLogDispatch
             } catch (Throwable ignore) {
             }
         }, 30, 10, TimeUnit.SECONDS);
+
         TieredStoreExecutor.COMMON_SCHEDULED_EXECUTOR.scheduleWithFixedDelay(() -> {
             try {
-                for (TieredMessageQueueContainer container : tieredContainerManager.getAllMQContainer()) {
-                    container.flushMetadata();
+                for (TieredFileChunk container : tieredContainerManager.getAllMQContainer()) {
+                    container.persistMetadata();
                 }
             } catch (Throwable e) {
                 logger.error("dispatch by queue container failed: ", e);
@@ -109,7 +112,7 @@ public class TieredDispatcher extends ServiceThread implements CommitLogDispatch
             return;
         }
 
-        TieredMessageQueueContainer container =
+        TieredFileChunkWithQueue container =
             tieredContainerManager.getOrCreateMQContainer(new MessageQueue(topic, brokerName, request.getQueueId()));
         if (container == null) {
             logger.error("[Bug]TieredDispatcher#dispatch: dispatch failed, can not create container: topic: {}, queueId: {}", request.getTopic(), request.getQueueId());
@@ -129,20 +132,20 @@ public class TieredDispatcher extends ServiceThread implements CommitLogDispatch
 
         if (request.getConsumeQueueOffset() == container.getDispatchOffset()) {
             try {
-                if (container.getQueueLock().isLocked() || !container.getQueueLock().tryLock(1, TimeUnit.MILLISECONDS)) {
+                if (container.getFileChunkLock().isLocked() || !container.getFileChunkLock().tryLock(1, TimeUnit.MILLISECONDS)) {
                     return;
                 }
             } catch (Exception e) {
                 logger.warn("TieredDispatcher#dispatch: dispatch failed, can not get container lock: topic: {}, queueId: {}", request.getTopic(), request.getQueueId(), e);
-                if (container.getQueueLock().isLocked()) {
-                    container.getQueueLock().unlock();
+                if (container.getFileChunkLock().isLocked()) {
+                    container.getFileChunkLock().unlock();
                 }
                 return;
             }
 
             // double check
             if (request.getConsumeQueueOffset() != container.getDispatchOffset()) {
-                container.getQueueLock().unlock();
+                container.getFileChunkLock().unlock();
                 return;
             }
 
@@ -150,7 +153,7 @@ public class TieredDispatcher extends ServiceThread implements CommitLogDispatch
             if (message == null) {
                 logger.error("TieredDispatcher#dispatch: dispatch failed, can not get message from next store: topic: {}, queueId: {}, commitLog offset: {}, size: {}",
                     request.getTopic(), request.getQueueId(), request.getCommitLogOffset(), request.getMsgSize());
-                container.getQueueLock().unlock();
+                container.getFileChunkLock().unlock();
                 return;
             }
 
@@ -175,10 +178,10 @@ public class TieredDispatcher extends ServiceThread implements CommitLogDispatch
                 logger.error("TieredDispatcher#dispatch: dispatch failed: topic: {}, queueId: {}, queue offset: {}", request.getTopic(), request.getQueueId(), request.getConsumeQueueOffset(), throwable);
             } finally {
                 message.release();
-                container.getQueueLock().unlock();
+                container.getFileChunkLock().unlock();
             }
         } else {
-            if (!container.getQueueLock().isLocked()) {
+            if (!container.getFileChunkLock().isLocked()) {
                 try {
                     TieredStoreExecutor.DISPATCH_EXECUTOR.execute(() -> {
                         try {
@@ -193,7 +196,7 @@ public class TieredDispatcher extends ServiceThread implements CommitLogDispatch
         }
     }
 
-    protected void dispatchByMQContainer(TieredMessageQueueContainer container) {
+    protected void dispatchByMQContainer(TieredFileChunkWithQueue container) {
         if (stopped) {
             return;
         }
@@ -220,13 +223,13 @@ public class TieredDispatcher extends ServiceThread implements CommitLogDispatch
         }
 
         try {
-            if (!container.getQueueLock().tryLock(200, TimeUnit.MILLISECONDS)) {
+            if (!container.getFileChunkLock().tryLock(200, TimeUnit.MILLISECONDS)) {
                 return;
             }
         } catch (Exception e) {
             logger.warn("TieredDispatcher#dispatchByMQContainer: dispatch failed, can not get container lock: topic: {}, queueId: {}", mq.getTopic(), mq.getQueueId(), e);
-            if (container.getQueueLock().isLocked()) {
-                container.getQueueLock().unlock();
+            if (container.getFileChunkLock().isLocked()) {
+                container.getFileChunkLock().unlock();
             }
             return;
         }
@@ -277,10 +280,10 @@ public class TieredDispatcher extends ServiceThread implements CommitLogDispatch
                 .build();
             TieredStoreMetricsManager.messagesDispatchTotal.add(queueOffset - beforeOffset, attributes);
         } finally {
-            container.getQueueLock().unlock();
+            container.getFileChunkLock().unlock();
         }
         // If this queue dispatch falls too far, dispatch again immediately
-        if (container.getDispatchOffset() < maxOffsetInQueue && !container.getQueueLock().isLocked()) {
+        if (container.getDispatchOffset() < maxOffsetInQueue && !container.getFileChunkLock().isLocked()) {
             TieredStoreExecutor.DISPATCH_EXECUTOR.execute(() -> {
                 try {
                     dispatchByMQContainer(container);
@@ -291,7 +294,7 @@ public class TieredDispatcher extends ServiceThread implements CommitLogDispatch
         }
     }
 
-    public void handleAppendCommitLogResult(AppendResult result, TieredMessageQueueContainer container,
+    public void handleAppendCommitLogResult(AppendResult result, TieredFileChunkWithQueue container,
         long queueOffset,
         long dispatchOffset, long newCommitLogOffset, int size, long tagCode, ByteBuffer message) {
         MessageQueue mq = container.getMessageQueue();
@@ -380,8 +383,8 @@ public class TieredDispatcher extends ServiceThread implements CommitLogDispatch
         Map<MessageQueue, Long> cqMetricsMap = new HashMap<>();
         Map<MessageQueue, Long> ifMetricsMap = new HashMap<>();
 
-        for (Map.Entry<TieredMessageQueueContainer, List<DispatchRequest>> entry : dispatchRequestReadMap.entrySet()) {
-            TieredMessageQueueContainer container = entry.getKey();
+        for (Map.Entry<TieredFileChunkWithQueue, List<DispatchRequest>> entry : dispatchRequestReadMap.entrySet()) {
+            TieredFileChunkWithQueue container = entry.getKey();
             List<DispatchRequest> requestList = entry.getValue();
             if (container.isClosed()) {
                 requestList.clear();
@@ -410,7 +413,7 @@ public class TieredDispatcher extends ServiceThread implements CommitLogDispatch
                 } else if (result == AppendResult.OFFSET_INCORRECT) {
                     logger.error("build consumeQueue and indexFile failed, offset is messed up, try to rebuild cq: topic: {}, queue: {}, queue offset: {}, max queue offset: {}"
                         , request.getTopic(), request.getQueueId(), request.getConsumeQueueOffset(), container.getConsumeQueueMaxOffset());
-                    container.getQueueLock().lock();
+                    container.getFileChunkLock().lock();
                     try {
                         // rollback dispatch offset, this operation will cause duplicate message in commitLog
                         container.initOffset(container.getConsumeQueueMaxOffset());
@@ -419,7 +422,7 @@ public class TieredDispatcher extends ServiceThread implements CommitLogDispatch
                         requestList.clear();
                         break;
                     } finally {
-                        container.getQueueLock().unlock();
+                        container.getFileChunkLock().unlock();
                     }
                 } else {
                     logger.warn("build consumeQueue failed, result: {}, topic: {}, queue: {}, queue offset: {}",

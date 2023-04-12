@@ -41,7 +41,7 @@ public class TieredFileQueueTest {
 
     private MessageQueue queue;
     private TieredMessageStoreConfig storeConfig;
-    private TieredFileQueueFactory fileQueueFactory;
+    private TieredFileFactory fileQueueFactory;
 
     @Before
     public void setUp() throws ClassNotFoundException, NoSuchMethodException {
@@ -50,7 +50,7 @@ public class TieredFileQueueTest {
         storeConfig.setStorePathRootDir(storePath);
         storeConfig.setTieredBackendServiceProvider("org.apache.rocketmq.tieredstore.mock.MemoryFileSegment");
         queue = new MessageQueue("TieredFileQueueTest", storeConfig.getBrokerName(), 0);
-        fileQueueFactory = new TieredFileQueueFactory(storeConfig);
+        fileQueueFactory = new TieredFileFactory(storeConfig);
     }
 
     @After

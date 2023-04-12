@@ -21,12 +21,12 @@ import org.apache.rocketmq.tieredstore.common.TieredMessageStoreConfig;
 import org.apache.rocketmq.tieredstore.provider.FileSegmentFactory;
 import org.apache.rocketmq.tieredstore.provider.TieredFileSegment;
 
-public class TieredFileQueueFactory {
+public class TieredFileFactory {
 
     private final FileSegmentFactory fileSegmentFactory;
     private final TieredMessageStoreConfig storeConfig;
 
-    public TieredFileQueueFactory(TieredMessageStoreConfig storeConfig)
+    public TieredFileFactory(TieredMessageStoreConfig storeConfig)
         throws ClassNotFoundException, NoSuchMethodException {
 
         this.storeConfig = storeConfig;

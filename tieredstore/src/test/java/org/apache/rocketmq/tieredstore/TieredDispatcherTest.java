@@ -24,16 +24,10 @@ import org.apache.commons.io.FileUtils;
 import org.apache.rocketmq.common.message.MessageQueue;
 import org.apache.rocketmq.store.ConsumeQueue;
 import org.apache.rocketmq.store.DefaultMessageStore;
-import org.apache.rocketmq.store.DispatchRequest;
 import org.apache.rocketmq.store.SelectMappedBufferResult;
-import org.apache.rocketmq.tieredstore.common.AppendResult;
 import org.apache.rocketmq.tieredstore.common.TieredMessageStoreConfig;
-import org.apache.rocketmq.tieredstore.container.TieredConsumeQueue;
 import org.apache.rocketmq.tieredstore.container.TieredContainerManager;
-import org.apache.rocketmq.tieredstore.container.TieredMessageQueueContainer;
 import org.apache.rocketmq.tieredstore.metadata.TieredMetadataStore;
-import org.apache.rocketmq.tieredstore.mock.MemoryFileSegment;
-import org.apache.rocketmq.tieredstore.provider.TieredFileSegment;
 import org.apache.rocketmq.tieredstore.util.MessageBufferUtil;
 import org.apache.rocketmq.tieredstore.util.MessageBufferUtilTest;
 import org.apache.rocketmq.tieredstore.util.TieredStoreUtil;
@@ -56,7 +50,7 @@ public class TieredDispatcherTest {
         storeConfig.setStorePathRootDir(storePath);
         storeConfig.setTieredBackendServiceProvider("org.apache.rocketmq.tieredstore.mock.MemoryFileSegmentWithoutCheck");
         storeConfig.setBrokerName(storeConfig.getBrokerName());
-        mq = new MessageQueue("TieredMessageQueueContainerTest", storeConfig.getBrokerName(), 0);
+        mq = new MessageQueue("TieredFileChunkTest", storeConfig.getBrokerName(), 0);
         metadataStore = TieredStoreUtil.getMetadataStore(storeConfig);
     }
 
@@ -88,7 +82,7 @@ public class TieredDispatcherTest {
         //Assert.assertNotNull(containerManager.getMQContainer(mq));
         //Assert.assertEquals(7, containerManager.getMQContainer(mq).getDispatchOffset());
         //
-        //TieredMessageQueueContainer container = containerManager.getOrCreateMQContainer(mq);
+        //TieredFileChunk container = containerManager.getOrCreateMQContainer(mq);
         //container.commit(true);
         //Assert.assertEquals(6, container.getBuildCQMaxOffset());
         //

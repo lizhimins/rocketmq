@@ -45,7 +45,7 @@ import org.apache.rocketmq.tieredstore.common.BoundaryType;
 import org.apache.rocketmq.tieredstore.common.TieredMessageStoreConfig;
 import org.apache.rocketmq.tieredstore.common.TieredStoreExecutor;
 import org.apache.rocketmq.tieredstore.container.TieredContainerManager;
-import org.apache.rocketmq.tieredstore.container.TieredMessageQueueContainer;
+import org.apache.rocketmq.tieredstore.container.TieredFileChunk;
 import org.apache.rocketmq.tieredstore.metadata.TieredMetadataStore;
 import org.apache.rocketmq.tieredstore.metadata.TopicMetadata;
 import org.apache.rocketmq.tieredstore.metrics.TieredStoreMetricsConstant;
@@ -103,7 +103,7 @@ public class TieredMessageStore extends AbstractPluginMessageStore {
             return false;
         }
 
-        TieredMessageQueueContainer container = containerManager.getMQContainer(new MessageQueue(topic, brokerName, queueId));
+        TieredFileChunk container = containerManager.getMQContainer(new MessageQueue(topic, brokerName, queueId));
         if (container == null) {
             return false;
         }
@@ -190,7 +190,7 @@ public class TieredMessageStore extends AbstractPluginMessageStore {
     @Override
     public long getMinOffsetInQueue(String topic, int queueId) {
         long minOffsetInNextStore = next.getMinOffsetInQueue(topic, queueId);
-        TieredMessageQueueContainer container = containerManager.getMQContainer(new MessageQueue(topic, brokerName, queueId));
+        TieredFileChunk container = containerManager.getMQContainer(new MessageQueue(topic, brokerName, queueId));
         if (container == null) {
             return minOffsetInNextStore;
         }
@@ -398,7 +398,7 @@ public class TieredMessageStore extends AbstractPluginMessageStore {
         String topic = topicMetadata.getTopic();
         metadataStore.iterateQueue(topic, queueMetadata -> {
             MessageQueue mq = queueMetadata.getQueue();
-            TieredMessageQueueContainer container = containerManager.getMQContainer(mq);
+            TieredFileChunk container = containerManager.getMQContainer(mq);
             if (container != null) {
                 containerManager.destroyContainer(mq);
                 try {

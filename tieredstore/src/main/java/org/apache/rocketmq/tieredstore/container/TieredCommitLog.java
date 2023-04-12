@@ -18,12 +18,10 @@ package org.apache.rocketmq.tieredstore.container;
 
 import java.nio.ByteBuffer;
 import java.util.concurrent.CompletableFuture;
-import org.apache.rocketmq.common.message.MessageQueue;
 import org.apache.rocketmq.logging.org.slf4j.Logger;
 import org.apache.rocketmq.logging.org.slf4j.LoggerFactory;
 import org.apache.rocketmq.tieredstore.common.AppendResult;
 import org.apache.rocketmq.tieredstore.common.TieredMessageStoreConfig;
-import org.apache.rocketmq.tieredstore.provider.FileSegmentFactory;
 import org.apache.rocketmq.tieredstore.provider.TieredFileSegment;
 import org.apache.rocketmq.tieredstore.util.MessageBufferUtil;
 import org.apache.rocketmq.tieredstore.util.TieredStoreUtil;
@@ -43,7 +41,7 @@ public class TieredCommitLog {
     private final TieredMessageStoreConfig storeConfig;
     private final TieredFileQueue fileQueue;
 
-    public TieredCommitLog(TieredFileQueueFactory fileQueueFactory, String filePath) {
+    public TieredCommitLog(TieredFileFactory fileQueueFactory, String filePath) {
         this.storeConfig = fileQueueFactory.getStoreConfig();
         this.fileQueue = fileQueueFactory.createQueueForCommitLog(filePath);
     }

@@ -42,7 +42,8 @@ import org.apache.rocketmq.store.config.MessageStoreConfig;
 import org.apache.rocketmq.store.plugin.MessageStorePluginContext;
 import org.apache.rocketmq.tieredstore.common.BoundaryType;
 import org.apache.rocketmq.tieredstore.container.TieredContainerManager;
-import org.apache.rocketmq.tieredstore.container.TieredMessageQueueContainer;
+import org.apache.rocketmq.tieredstore.container.TieredFileChunk;
+import org.apache.rocketmq.tieredstore.container.TieredFileChunkWithQueue;
 import org.apache.rocketmq.tieredstore.util.TieredStoreUtil;
 import org.junit.After;
 import org.junit.Assert;
@@ -111,7 +112,7 @@ public class TieredMessageStoreTest {
 
     private void mockContainer() {
         containerManager = Mockito.mock(TieredContainerManager.class);
-        TieredMessageQueueContainer container = Mockito.mock(TieredMessageQueueContainer.class);
+        TieredFileChunkWithQueue container = Mockito.mock(TieredFileChunkWithQueue.class);
         when(container.getConsumeQueueCommitOffset()).thenReturn(Long.MAX_VALUE);
         when(containerManager.getMQContainer(mq)).thenReturn(container);
         try {
@@ -252,7 +253,7 @@ public class TieredMessageStoreTest {
     @Test
     public void testGetMinOffsetInQueue() {
         mockContainer();
-        TieredMessageQueueContainer container = containerManager.getMQContainer(mq);
+        TieredFileChunkWithQueue container = containerManager.getMQContainer(mq);
         when(nextStore.getMinOffsetInQueue(anyString(), anyInt())).thenReturn(100L);
         when(containerManager.getMQContainer(mq)).thenReturn(null);
         Assert.assertEquals(100L, store.getMinOffsetInQueue(mq.getTopic(), mq.getQueueId()));

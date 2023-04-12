@@ -47,8 +47,9 @@ import org.apache.rocketmq.tieredstore.common.TieredMessageStoreConfig;
 import org.apache.rocketmq.tieredstore.common.TieredStoreExecutor;
 import org.apache.rocketmq.tieredstore.container.TieredConsumeQueue;
 import org.apache.rocketmq.tieredstore.container.TieredContainerManager;
+import org.apache.rocketmq.tieredstore.container.TieredFileChunk;
+import org.apache.rocketmq.tieredstore.container.TieredFileChunkWithQueue;
 import org.apache.rocketmq.tieredstore.container.TieredIndexFile;
-import org.apache.rocketmq.tieredstore.container.TieredMessageQueueContainer;
 import org.apache.rocketmq.tieredstore.exception.TieredStoreErrorCode;
 import org.apache.rocketmq.tieredstore.exception.TieredStoreException;
 import org.apache.rocketmq.tieredstore.metadata.TieredMetadataStore;
@@ -91,18 +92,18 @@ public class TieredMessageFetcher {
         return readAheadCache;
     }
 
-    public CompletableFuture<GetMessageResult> getMessageFromCacheAsync(TieredMessageQueueContainer container,
+    public CompletableFuture<GetMessageResult> getMessageFromCacheAsync(TieredFileChunkWithQueue container,
         String group, long queueOffset, int maxMsgNums) {
         // wait for inflight request by default
         return getMessageFromCacheAsync(container, group, queueOffset, maxMsgNums, true);
     }
 
-    protected SelectMappedBufferResultWrapper putMessageToCache(TieredMessageQueueContainer container, long queueOffset,
+    protected SelectMappedBufferResultWrapper putMessageToCache(TieredFileChunk container, long queueOffset,
         SelectMappedBufferResult msg, long minOffset, long maxOffset, int size) {
         return putMessageToCache(container, queueOffset, msg, minOffset, maxOffset, size, false);
     }
 
-    protected SelectMappedBufferResultWrapper putMessageToCache(TieredMessageQueueContainer container, long queueOffset,
+    protected SelectMappedBufferResultWrapper putMessageToCache(TieredFileChunk container, long queueOffset,
         SelectMappedBufferResult msg, long minOffset, long maxOffset, int size, boolean used) {
         SelectMappedBufferResultWrapper wrapper = new SelectMappedBufferResultWrapper(msg, queueOffset, minOffset, maxOffset, size);
         if (used) {
@@ -113,13 +114,13 @@ public class TieredMessageFetcher {
     }
 
     @Nullable
-    protected SelectMappedBufferResultWrapper getMessageFromCache(TieredMessageQueueContainer container,
+    protected SelectMappedBufferResultWrapper getMessageFromCache(TieredFileChunk container,
         long queueOffset) {
         MessageCacheKey cacheKey = new MessageCacheKey(container, queueOffset);
         return readAheadCache.getIfPresent(cacheKey);
     }
 
-    protected void recordCacheAccess(TieredMessageQueueContainer container, String group, long queueOffset,
+    protected void recordCacheAccess(TieredFileChunk container, String group, long queueOffset,
         List<SelectMappedBufferResultWrapper> resultWrapperList) {
         if (resultWrapperList.size() > 0) {
             queueOffset = resultWrapperList.get(resultWrapperList.size() - 1).getCurOffset();
@@ -134,7 +135,7 @@ public class TieredMessageFetcher {
         }
     }
 
-    private void preFetchMessage(TieredMessageQueueContainer container, String group, int maxMsgNums,
+    private void preFetchMessage(TieredFileChunkWithQueue container, String group, int maxMsgNums,
         long nextBeginOffset) {
         if (maxMsgNums == 1 || container.getReadAheadFactor() == 1) {
             return;
@@ -198,7 +199,7 @@ public class TieredMessageFetcher {
         }
     }
 
-    private CompletableFuture<Long> prefetchAndPutMsgToCache(TieredMessageQueueContainer container, MessageQueue mq,
+    private CompletableFuture<Long> prefetchAndPutMsgToCache(TieredFileChunkWithQueue container, MessageQueue mq,
         long queueOffset, int batchSize) {
         return getMessageFromTieredStoreAsync(container, queueOffset, batchSize)
             .thenApplyAsync(result -> {
@@ -234,7 +235,7 @@ public class TieredMessageFetcher {
             }, TieredStoreExecutor.FETCH_DATA_EXECUTOR);
     }
 
-    private CompletableFuture<GetMessageResult> getMessageFromCacheAsync(TieredMessageQueueContainer container,
+    private CompletableFuture<GetMessageResult> getMessageFromCacheAsync(TieredFileChunkWithQueue container,
         String group, long queueOffset, int maxMsgNums, boolean waitInflightRequest) {
         MessageQueue mq = container.getMessageQueue();
 
@@ -346,7 +347,7 @@ public class TieredMessageFetcher {
         return resultFuture;
     }
 
-    public CompletableFuture<GetMessageResult> getMessageFromTieredStoreAsync(TieredMessageQueueContainer container,
+    public CompletableFuture<GetMessageResult> getMessageFromTieredStoreAsync(TieredFileChunkWithQueue container,
         long queueOffset, int batchSize) {
         GetMessageResult result = new GetMessageResult();
         result.setMinOffset(container.getConsumeQueueMinOffset());
@@ -434,7 +435,7 @@ public class TieredMessageFetcher {
 
     public CompletableFuture<GetMessageResult> getMessageAsync(String group, String topic, int queueId,
         long queueOffset, int maxMsgNums, final MessageFilter messageFilter) {
-        TieredMessageQueueContainer container = containerManager.getMQContainer(new MessageQueue(topic, brokerName, queueId));
+        TieredFileChunkWithQueue container = containerManager.getMQContainer(new MessageQueue(topic, brokerName, queueId));
         if (container == null) {
             GetMessageResult result = new GetMessageResult();
             result.setNextBeginOffset(queueOffset);
@@ -471,7 +472,7 @@ public class TieredMessageFetcher {
     }
 
     public CompletableFuture<Long> getEarliestMessageTimeAsync(String topic, int queueId) {
-        TieredMessageQueueContainer container = containerManager.getMQContainer(new MessageQueue(topic, brokerName, queueId));
+        TieredFileChunk container = containerManager.getMQContainer(new MessageQueue(topic, brokerName, queueId));
         if (container == null) {
             return CompletableFuture.completedFuture(-1L);
         }
@@ -481,7 +482,7 @@ public class TieredMessageFetcher {
     }
 
     public CompletableFuture<Long> getMessageStoreTimeStampAsync(String topic, int queueId, long queueOffset) {
-        TieredMessageQueueContainer container = containerManager.getMQContainer(new MessageQueue(topic, brokerName, queueId));
+        TieredFileChunk container = containerManager.getMQContainer(new MessageQueue(topic, brokerName, queueId));
         if (container == null) {
             return CompletableFuture.completedFuture(-1L);
         }
@@ -500,7 +501,7 @@ public class TieredMessageFetcher {
 
     public long getOffsetInQueueByTime(String topic, int queueId, long timestamp,
         BoundaryType type) {
-        TieredMessageQueueContainer container = containerManager.getMQContainer(new MessageQueue(topic, brokerName, queueId));
+        TieredFileChunk container = containerManager.getMQContainer(new MessageQueue(topic, brokerName, queueId));
         if (container == null) {
             return -1L;
         }
@@ -554,7 +555,7 @@ public class TieredMessageFetcher {
                         }
 
                         int queueId = indexBuffer.getInt(indexOffset + 4 + 4);
-                        TieredMessageQueueContainer container = TieredContainerManager.getInstance(storeConfig).getMQContainer(new MessageQueue(topic, brokerName, queueId));
+                        TieredFileChunk container = TieredContainerManager.getInstance(storeConfig).getMQContainer(new MessageQueue(topic, brokerName, queueId));
                         if (container == null) {
                             continue;
                         }

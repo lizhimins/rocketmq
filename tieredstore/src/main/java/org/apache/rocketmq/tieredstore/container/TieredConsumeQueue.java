@@ -19,7 +19,6 @@ package org.apache.rocketmq.tieredstore.container;
 import java.nio.ByteBuffer;
 import java.util.concurrent.CompletableFuture;
 import org.apache.commons.lang3.tuple.Pair;
-import org.apache.rocketmq.common.message.MessageQueue;
 import org.apache.rocketmq.logging.org.slf4j.Logger;
 import org.apache.rocketmq.logging.org.slf4j.LoggerFactory;
 import org.apache.rocketmq.tieredstore.common.AppendResult;
@@ -42,7 +41,7 @@ public class TieredConsumeQueue {
     private final TieredMessageStoreConfig storeConfig;
     private final TieredFileQueue fileQueue;
 
-    public TieredConsumeQueue(TieredFileQueueFactory fileQueueFactory, String filePath) {
+    public TieredConsumeQueue(TieredFileFactory fileQueueFactory, String filePath) {
         this.storeConfig = fileQueueFactory.getStoreConfig();
         this.fileQueue = fileQueueFactory.createQueueForConsumeQueue(filePath);
     }

@@ -75,7 +75,7 @@ public class TieredIndexFile {
     private final ReentrantLock curFileLock = new ReentrantLock();
     private Future<Void> inflightCompactFuture = CompletableFuture.completedFuture(null);
 
-    protected TieredIndexFile(TieredFileQueueFactory fileQueueFactory, String filePath) throws IOException {
+    protected TieredIndexFile(TieredFileFactory fileQueueFactory, String filePath) throws IOException {
         this.storeConfig = fileQueueFactory.getStoreConfig();
         this.fileQueue = fileQueueFactory.createQueueForIndexFile(filePath);
         if (fileQueue.getBaseOffset() == -1) {

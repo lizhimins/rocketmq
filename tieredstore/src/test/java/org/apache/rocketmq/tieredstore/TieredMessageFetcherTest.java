@@ -36,8 +36,9 @@ import org.apache.rocketmq.tieredstore.common.BoundaryType;
 import org.apache.rocketmq.tieredstore.common.SelectMappedBufferResultWrapper;
 import org.apache.rocketmq.tieredstore.common.TieredMessageStoreConfig;
 import org.apache.rocketmq.tieredstore.container.TieredContainerManager;
+import org.apache.rocketmq.tieredstore.container.TieredFileChunkWithQueue;
 import org.apache.rocketmq.tieredstore.container.TieredIndexFile;
-import org.apache.rocketmq.tieredstore.container.TieredMessageQueueContainer;
+import org.apache.rocketmq.tieredstore.container.TieredFileChunk;
 import org.apache.rocketmq.tieredstore.util.MessageBufferUtil;
 import org.apache.rocketmq.tieredstore.util.MessageBufferUtilTest;
 import org.apache.rocketmq.tieredstore.util.TieredStoreUtil;
@@ -80,7 +81,7 @@ public class TieredMessageFetcherTest {
         GetMessageResult getMessageResult = fetcher.getMessageAsync("group", mq.getTopic(), mq.getQueueId(), 0, 32, null).join();
         Assert.assertEquals(GetMessageStatus.NO_MATCHED_LOGIC_QUEUE, getMessageResult.getStatus());
 
-        TieredMessageQueueContainer container = containerManager.getOrCreateMQContainer(mq);
+        TieredFileChunk container = containerManager.getOrCreateMQContainer(mq);
         container.initOffset(0);
 
         getMessageResult = fetcher.getMessageAsync("group", mq.getTopic(), mq.getQueueId(), 0, 32, null).join();
@@ -113,7 +114,7 @@ public class TieredMessageFetcherTest {
         TieredMessageFetcher fetcher = triple.getLeft();
         ByteBuffer msg1 = triple.getMiddle();
         ByteBuffer msg2 = triple.getRight();
-        TieredMessageQueueContainer container = TieredContainerManager.getInstance(storeConfig).getMQContainer(mq);
+        TieredFileChunkWithQueue container = TieredContainerManager.getInstance(storeConfig).getMQContainer(mq);
         Assert.assertNotNull(container);
 
         GetMessageResult getMessageResult = fetcher.getMessageFromTieredStoreAsync(container, 0, 32).join();
@@ -136,7 +137,7 @@ public class TieredMessageFetcherTest {
         TieredMessageFetcher fetcher = triple.getLeft();
         ByteBuffer msg1 = triple.getMiddle();
         ByteBuffer msg2 = triple.getRight();
-        TieredMessageQueueContainer container = TieredContainerManager.getInstance(storeConfig).getMQContainer(mq);
+        TieredFileChunkWithQueue container = TieredContainerManager.getInstance(storeConfig).getMQContainer(mq);
         Assert.assertNotNull(container);
 
         fetcher.recordCacheAccess(container, "prevent-invalid-cache", 0, new ArrayList<>());
@@ -193,7 +194,7 @@ public class TieredMessageFetcherTest {
     @Test
     public void testGetMessageStoreTimeStampAsync() {
         TieredMessageFetcher fetcher = new TieredMessageFetcher(storeConfig);
-        TieredMessageQueueContainer container = TieredContainerManager.getInstance(storeConfig).getOrCreateMQContainer(mq);
+        TieredFileChunk container = TieredContainerManager.getInstance(storeConfig).getOrCreateMQContainer(mq);
         container.initOffset(0);
 
         ByteBuffer msg1 = MessageBufferUtilTest.buildMessageBuffer();
@@ -233,7 +234,7 @@ public class TieredMessageFetcherTest {
         TieredMessageFetcher fetcher = new TieredMessageFetcher(storeConfig);
         Assert.assertEquals(-1, fetcher.getOffsetInQueueByTime(mq.getTopic(), mq.getQueueId(), 0, BoundaryType.LOWER));
 
-        TieredMessageQueueContainer container = TieredContainerManager.getInstance(storeConfig).getOrCreateMQContainer(mq);
+        TieredFileChunk container = TieredContainerManager.getInstance(storeConfig).getOrCreateMQContainer(mq);
         Assert.assertEquals(-1, fetcher.getOffsetInQueueByTime(mq.getTopic(), mq.getQueueId(), 0, BoundaryType.LOWER));
         container.appendConsumeQueue(new DispatchRequest(mq.getTopic(), mq.getQueueId(), 50, 0, MessageBufferUtilTest.MSG_LEN, 0), true);
         container.commit(true);
@@ -259,7 +260,7 @@ public class TieredMessageFetcherTest {
         TieredMessageFetcher fetcher = new TieredMessageFetcher(storeConfig);
         Assert.assertEquals(0, fetcher.queryMessageAsync(mq.getTopic(), "key", 32, 0, Long.MAX_VALUE).join().getMessageMapedList().size());
 
-        TieredMessageQueueContainer container = TieredContainerManager.getInstance(storeConfig).getOrCreateMQContainer(mq);
+        TieredFileChunkWithQueue container = TieredContainerManager.getInstance(storeConfig).getOrCreateMQContainer(mq);
         Assert.assertEquals(0, fetcher.queryMessageAsync(mq.getTopic(), "key", 32, 0, Long.MAX_VALUE).join().getMessageMapedList().size());
 
         container.initOffset(0);

@@ -47,7 +47,8 @@ import org.apache.rocketmq.tieredstore.common.MessageCacheKey;
 import org.apache.rocketmq.tieredstore.common.SelectMappedBufferResultWrapper;
 import org.apache.rocketmq.tieredstore.common.TieredMessageStoreConfig;
 import org.apache.rocketmq.tieredstore.container.TieredContainerManager;
-import org.apache.rocketmq.tieredstore.container.TieredMessageQueueContainer;
+import org.apache.rocketmq.tieredstore.container.TieredFileChunk;
+import org.apache.rocketmq.tieredstore.container.TieredFileChunkWithQueue;
 import org.apache.rocketmq.tieredstore.metadata.TieredMetadataStore;
 import org.apache.rocketmq.tieredstore.provider.TieredFileSegment;
 import org.apache.rocketmq.tieredstore.util.TieredStoreUtil;
@@ -177,7 +178,9 @@ public class TieredStoreMetricsManager {
             .setDescription("Tiered store dispatch behind message count")
             .ofLongs()
             .buildWithCallback(measurement -> {
-                for (TieredMessageQueueContainer container : TieredContainerManager.getInstance(storeConfig).getAllMQContainer()) {
+                for (TieredFileChunkWithQueue container :
+                    TieredContainerManager.getInstance(storeConfig).getAllMQContainer()) {
+
                     MessageQueue mq = container.getMessageQueue();
                     long maxOffset = next.getMaxOffsetInQueue(mq.getTopic(), mq.getQueueId());
                     long maxTimestamp = next.getMessageStoreTimeStamp(mq.getTopic(), mq.getQueueId(), maxOffset - 1);
@@ -205,7 +208,9 @@ public class TieredStoreMetricsManager {
             .setUnit("seconds")
             .ofLongs()
             .buildWithCallback(measurement -> {
-                for (TieredMessageQueueContainer container : TieredContainerManager.getInstance(storeConfig).getAllMQContainer()) {
+                for (TieredFileChunkWithQueue container :
+                    TieredContainerManager.getInstance(storeConfig).getAllMQContainer()) {
+
                     MessageQueue mq = container.getMessageQueue();
                     long maxOffset = next.getMaxOffsetInQueue(mq.getTopic(), mq.getQueueId());
                     long maxTimestamp = next.getMessageStoreTimeStamp(mq.getTopic(), mq.getQueueId(), maxOffset - 1);
@@ -309,7 +314,7 @@ public class TieredStoreMetricsManager {
             .setUnit("milliseconds")
             .ofLongs()
             .buildWithCallback(measurement -> {
-                for (TieredMessageQueueContainer container : TieredContainerManager.getInstance(storeConfig).getAllMQContainer()) {
+                for (TieredFileChunkWithQueue container : TieredContainerManager.getInstance(storeConfig).getAllMQContainer()) {
                     long timestamp = container.getCommitLogBeginTimestamp();
                     if (timestamp > 0) {
                         MessageQueue mq = container.getMessageQueue();

@@ -24,7 +24,6 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import javax.annotation.Nullable;
 import org.apache.rocketmq.common.message.MessageQueue;
@@ -44,11 +43,15 @@ public class TieredContainerManager {
 
     private final TieredMetadataStore metadataStore;
     private final TieredMessageStoreConfig storeConfig;
-    private final ConcurrentMap<MessageQueue, TieredMessageQueueContainer> messageQueueContainerMap;
+    private final TieredFileFactory tieredFileFactory;
+    private final ConcurrentMap<MessageQueue, TieredFileChunkWithQueue> messageQueueContainerMap;
 
-    public TieredContainerManager(TieredMessageStoreConfig storeConfig) {
+    public TieredContainerManager(TieredMessageStoreConfig storeConfig)
+        throws ClassNotFoundException, NoSuchMethodException {
+
         this.storeConfig = storeConfig;
         this.metadataStore = TieredStoreUtil.getMetadataStore(storeConfig);
+        this.tieredFileFactory = new TieredFileFactory(storeConfig);
         this.messageQueueContainerMap = new ConcurrentHashMap<>();
         this.doScheduleTask();
     }
@@ -84,7 +87,7 @@ public class TieredContainerManager {
                     try {
                         String filePath = TieredStoreUtil.toPath(new MessageQueue(
                             TieredStoreUtil.RMQ_SYS_TIERED_STORE_INDEX_TOPIC, storeConfig.getBrokerName(), 0));
-                        indexFile = new TieredIndexFile(new TieredFileQueueFactory(storeConfig), filePath);
+                        indexFile = new TieredIndexFile(new TieredFileFactory(storeConfig), filePath);
                     } catch (Exception e) {
                         logger.error("TieredContainerManager#getIndexFile: create index file failed", e);
                     }
@@ -98,7 +101,7 @@ public class TieredContainerManager {
         TieredStoreExecutor.COMMON_SCHEDULED_EXECUTOR.scheduleWithFixedDelay(() -> {
             try {
                 Random random = new Random();
-                for (TieredMessageQueueContainer container : getAllMQContainer()) {
+                for (TieredFileChunkWithQueue container : getAllMQContainer()) {
                     int delay = random.nextInt(storeConfig.getMaxCommitJitter());
                     TieredStoreExecutor.COMMIT_EXECUTOR.schedule(() -> {
                         try {
@@ -135,10 +138,10 @@ public class TieredContainerManager {
             try {
                 long expiredTimeStamp = System.currentTimeMillis() - (long) storeConfig.getTieredStoreFileReservedTime() * 60 * 60 * 1000;
                 Random random = new Random();
-                for (TieredMessageQueueContainer container : getAllMQContainer()) {
+                for (TieredFileChunkWithQueue container : getAllMQContainer()) {
                     int delay = random.nextInt(storeConfig.getMaxCommitJitter());
                     TieredStoreExecutor.CLEAN_EXPIRED_FILE_EXECUTOR.schedule(() -> {
-                        container.getQueueLock().lock();
+                        container.getFileChunkLock().lock();
                         try {
                             container.cleanExpiredFile(expiredTimeStamp);
                             container.destroyExpiredFile();
@@ -146,7 +149,7 @@ public class TieredContainerManager {
                                 destroyContainer(container.getMessageQueue());
                             }
                         } finally {
-                            container.getQueueLock().unlock();
+                            container.getFileChunkLock().unlock();
                         }
                     }, delay, TimeUnit.MILLISECONDS);
                 }
@@ -207,12 +210,12 @@ public class TieredContainerManager {
     }
 
     @Nullable
-    public TieredMessageQueueContainer getOrCreateMQContainer(MessageQueue messageQueue) {
+    public TieredFileChunkWithQueue getOrCreateMQContainer(MessageQueue messageQueue) {
         return messageQueueContainerMap.computeIfAbsent(messageQueue, mq -> {
             try {
                 logger.info("TieredContainerManager#getOrCreateMQContainer: try to create new container: topic: {}, queueId: {}",
                     messageQueue.getTopic(), messageQueue.getQueueId());
-                return new TieredMessageQueueContainer(mq, storeConfig);
+                return new TieredFileChunkWithQueue(tieredFileFactory, mq);
             } catch (Exception e) {
                 logger.error("TieredContainerManager#getOrCreateMQContainer: create new container failed: topic: {}, queueId: {}",
                     messageQueue.getTopic(), messageQueue.getQueueId(), e);
@@ -222,11 +225,11 @@ public class TieredContainerManager {
     }
 
     @Nullable
-    public TieredMessageQueueContainer getMQContainer(MessageQueue messageQueue) {
+    public TieredFileChunkWithQueue getMQContainer(MessageQueue messageQueue) {
         return messageQueueContainerMap.get(messageQueue);
     }
 
-    public ImmutableList<TieredMessageQueueContainer> getAllMQContainer() {
+    public ImmutableList<TieredFileChunkWithQueue> getAllMQContainer() {
         return ImmutableList.copyOf(messageQueueContainerMap.values());
     }
 
@@ -234,7 +237,7 @@ public class TieredContainerManager {
         if (indexFile != null) {
             indexFile.commit(true);
         }
-        for (TieredMessageQueueContainer container : getAllMQContainer()) {
+        for (TieredFileChunk container : getAllMQContainer()) {
             container.shutdown();
         }
     }
@@ -243,15 +246,15 @@ public class TieredContainerManager {
         if (indexFile != null) {
             indexFile.destroy();
         }
-        ImmutableList<TieredMessageQueueContainer> containerList = getAllMQContainer();
+        ImmutableList<TieredFileChunkWithQueue> containerList = getAllMQContainer();
         cleanup();
-        for (TieredMessageQueueContainer container : containerList) {
+        for (TieredFileChunk container : containerList) {
             container.destroy();
         }
     }
 
     public void destroyContainer(MessageQueue mq) {
-        TieredMessageQueueContainer container = messageQueueContainerMap.remove(mq);
+        TieredFileChunkWithQueue container = messageQueueContainerMap.remove(mq);
         if (container != null) {
             MessageQueue messageQueue = container.getMessageQueue();
             logger.info("BlobContainerManager#destroyContainer: try to destroy container: topic: {}, queueId: {}",
