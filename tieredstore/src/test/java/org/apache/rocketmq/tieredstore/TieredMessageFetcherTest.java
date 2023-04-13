@@ -237,8 +237,10 @@ public class TieredMessageFetcherTest {
         TieredFileChunkWithQueue container = TieredContainerManager.getInstance(storeConfig).getOrCreateMQContainer(mq);
         Assert.assertEquals(-1, fetcher.getOffsetInQueueByTime(mq.getTopic(), mq.getQueueId(), 0, BoundaryType.LOWER));
         Assert.assertNotNull(container);
+
+        // offset has not been initialized, so put message would be failed
         AppendResult appendResult = container.appendConsumeQueue(new DispatchRequest(mq.getTopic(), mq.getQueueId(), 50, 0, MessageBufferUtilTest.MSG_LEN, 0), true);
-        Assert.assertEquals(AppendResult.SUCCESS, appendResult);
+        Assert.assertEquals(AppendResult.OFFSET_INCORRECT, appendResult);
         container.commit(true);
         Assert.assertEquals(-1, fetcher.getOffsetInQueueByTime(mq.getTopic(), mq.getQueueId(), 0, BoundaryType.LOWER));
 

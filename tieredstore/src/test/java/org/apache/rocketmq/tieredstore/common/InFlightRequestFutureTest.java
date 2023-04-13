@@ -21,13 +21,40 @@ import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import org.apache.commons.lang3.tuple.Pair;
+import org.junit.Assert;
 import org.junit.Test;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertTrue;
-
 public class InFlightRequestFutureTest {
+
+    @Test
+    public void testInFlightRequestFuture() {
+        List<Pair<Integer, CompletableFuture<Long>>> futureList = new ArrayList<>();
+        futureList.add(Pair.of(32, CompletableFuture.completedFuture(1031L)));
+        futureList.add(Pair.of(256, CompletableFuture.completedFuture(1287L)));
+        InFlightRequestFuture future = new InFlightRequestFuture(1000, futureList);
+
+        Assert.assertEquals(1000, future.getStartOffset());
+        Assert.assertTrue(future.isFirstDone());
+        Assert.assertTrue(future.isAllDone());
+        Assert.assertEquals(1031, future.getFirstFuture().join().longValue());
+        Assert.assertEquals(-1L, future.getFuture(0).join().longValue());
+        Assert.assertEquals(1031L, future.getFuture(1024).join().longValue());
+        Assert.assertEquals(1287L, future.getFuture(1200).join().longValue());
+        Assert.assertEquals(-1L, future.getFuture(2000).join().longValue());
+        Assert.assertEquals(1287L, future.getLastFuture().join().longValue());
+        Assert.assertArrayEquals(futureList.stream().map(Pair::getRight).toArray(), future.getAllFuture().toArray());
+    }
+
+    @Test
+    public void testInFlightRequestKey() {
+        InFlightRequestKey requestKey1 = new InFlightRequestKey("group", 0, 0);
+        InFlightRequestKey requestKey2 = new InFlightRequestKey("group", 1, 1);
+        Assert.assertEquals(requestKey1, requestKey2);
+        Assert.assertEquals(requestKey1.hashCode(), requestKey2.hashCode());
+        Assert.assertEquals(requestKey1.getGroup(), requestKey2.getGroup());
+        Assert.assertNotEquals(requestKey1.getOffset(), requestKey2.getOffset());
+        Assert.assertNotEquals(requestKey1.getBatchSize(), requestKey2.getBatchSize());
+    }
 
     @Test
     public void testGetStartOffset() {
@@ -36,7 +63,7 @@ public class InFlightRequestFutureTest {
         futureList.add(Pair.of(1, completableFuture));
         InFlightRequestFuture inFlightRequestFuture = new InFlightRequestFuture(10, futureList);
         long startOffset = inFlightRequestFuture.getStartOffset();
-        assertEquals(10, startOffset);
+        Assert.assertEquals(10, startOffset);
     }
 
     @Test
@@ -47,7 +74,7 @@ public class InFlightRequestFutureTest {
         futureList.add(Pair.of(1, completableFuture));
         InFlightRequestFuture inFlightRequestFuture = new InFlightRequestFuture(10, futureList);
         CompletableFuture<Long> firstFuture = inFlightRequestFuture.getFirstFuture();
-        assertEquals(new Long(20), firstFuture.get());
+        Assert.assertEquals(new Long(20), firstFuture.get());
     }
 
     @Test
@@ -58,7 +85,7 @@ public class InFlightRequestFutureTest {
         futureList.add(Pair.of(1, completableFuture));
         InFlightRequestFuture inFlightRequestFuture = new InFlightRequestFuture(10, futureList);
         CompletableFuture<Long> future = inFlightRequestFuture.getFuture(11);
-        assertEquals(new Long(-1L), future.join());
+        Assert.assertEquals(new Long(-1L), future.join());
     }
 
     @Test
@@ -69,7 +96,7 @@ public class InFlightRequestFutureTest {
         futureList.add(Pair.of(1, completableFuture));
         InFlightRequestFuture inFlightRequestFuture = new InFlightRequestFuture(10, futureList);
         CompletableFuture<Long> lastFuture = inFlightRequestFuture.getLastFuture();
-        assertEquals(new Long(20), lastFuture.get());
+        Assert.assertEquals(new Long(20), lastFuture.get());
     }
 
     @Test
@@ -79,8 +106,7 @@ public class InFlightRequestFutureTest {
         completableFuture.complete(20L);
         futureList.add(Pair.of(1, completableFuture));
         InFlightRequestFuture inFlightRequestFuture = new InFlightRequestFuture(10, futureList);
-        boolean firstDone = inFlightRequestFuture.isFirstDone();
-        assertTrue(firstDone);
+        Assert.assertTrue(inFlightRequestFuture.isFirstDone());
     }
 
     @Test
@@ -98,8 +124,7 @@ public class InFlightRequestFutureTest {
         futureList.add(Pair.of(3, completableFuture3));
         futureList.add(Pair.of(4, completableFuture4));
         InFlightRequestFuture inFlightRequestFuture = new InFlightRequestFuture(10, futureList);
-        boolean allDone = inFlightRequestFuture.isAllDone();
-        assertFalse(allDone);
+        Assert.assertFalse(inFlightRequestFuture.isAllDone());
     }
 
     @Test
@@ -115,6 +140,6 @@ public class InFlightRequestFutureTest {
         futureList.add(Pair.of(4, completableFuture4));
         InFlightRequestFuture inFlightRequestFuture = new InFlightRequestFuture(10, futureList);
         List<CompletableFuture<Long>> allFuture = inFlightRequestFuture.getAllFuture();
-        assertEquals(4, allFuture.size());
+        Assert.assertEquals(4, allFuture.size());
     }
 }

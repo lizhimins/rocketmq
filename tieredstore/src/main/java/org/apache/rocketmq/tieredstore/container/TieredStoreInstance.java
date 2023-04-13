@@ -23,6 +23,6 @@ import org.apache.rocketmq.tieredstore.util.TieredStoreUtil;
 
 public class TieredStoreInstance {
 
-    private static final Logger logger = LoggerFactory.getLogger(TieredStoreUtil.TIERED_STORE_LOGGER_NAME);
+    private static final Logger log = LoggerFactory.getLogger(TieredStoreUtil.TIERED_STORE_LOGGER_NAME);
 
 }
