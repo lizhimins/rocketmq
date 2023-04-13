@@ -16,12 +16,12 @@
  */
 package org.apache.rocketmq.tieredstore.mock;
 
-import com.google.common.annotations.VisibleForTesting;
 import java.io.File;
 import java.nio.ByteBuffer;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import org.apache.rocketmq.common.message.MessageQueue;
+import org.apache.rocketmq.tieredstore.common.FileSegmentType;
 import org.apache.rocketmq.tieredstore.common.TieredMessageStoreConfig;
 import org.apache.rocketmq.tieredstore.provider.TieredFileSegment;
 import org.apache.rocketmq.tieredstore.util.TieredStoreUtil;
@@ -35,7 +35,7 @@ public class MemoryFileSegment extends TieredFileSegment {
 
     protected boolean checkSize = true;
 
-    public MemoryFileSegment(TieredFileSegment.FileSegmentType fileType, MessageQueue messageQueue, long baseOffset,
+    public MemoryFileSegment(FileSegmentType fileType, MessageQueue messageQueue, long baseOffset,
         TieredMessageStoreConfig storeConfig) {
         this(storeConfig, fileType,
             storeConfig.getStorePathRootDir() + File.separator + TieredStoreUtil.toPath(messageQueue),

@@ -36,9 +36,9 @@ import org.apache.rocketmq.tieredstore.common.BoundaryType;
 import org.apache.rocketmq.tieredstore.common.SelectMappedBufferResultWrapper;
 import org.apache.rocketmq.tieredstore.common.TieredMessageStoreConfig;
 import org.apache.rocketmq.tieredstore.container.TieredContainerManager;
+import org.apache.rocketmq.tieredstore.container.TieredFileChunk;
 import org.apache.rocketmq.tieredstore.container.TieredFileChunkWithQueue;
 import org.apache.rocketmq.tieredstore.container.TieredIndexFile;
-import org.apache.rocketmq.tieredstore.container.TieredFileChunk;
 import org.apache.rocketmq.tieredstore.util.MessageBufferUtil;
 import org.apache.rocketmq.tieredstore.util.MessageBufferUtilTest;
 import org.apache.rocketmq.tieredstore.util.TieredStoreUtil;
@@ -234,12 +234,13 @@ public class TieredMessageFetcherTest {
         TieredMessageFetcher fetcher = new TieredMessageFetcher(storeConfig);
         Assert.assertEquals(-1, fetcher.getOffsetInQueueByTime(mq.getTopic(), mq.getQueueId(), 0, BoundaryType.LOWER));
 
-        TieredFileChunk container = TieredContainerManager.getInstance(storeConfig).getOrCreateMQContainer(mq);
+        TieredFileChunkWithQueue container = TieredContainerManager.getInstance(storeConfig).getOrCreateMQContainer(mq);
         Assert.assertEquals(-1, fetcher.getOffsetInQueueByTime(mq.getTopic(), mq.getQueueId(), 0, BoundaryType.LOWER));
-        container.appendConsumeQueue(new DispatchRequest(mq.getTopic(), mq.getQueueId(), 50, 0, MessageBufferUtilTest.MSG_LEN, 0), true);
+        Assert.assertNotNull(container);
+        AppendResult appendResult = container.appendConsumeQueue(new DispatchRequest(mq.getTopic(), mq.getQueueId(), 50, 0, MessageBufferUtilTest.MSG_LEN, 0), true);
+        Assert.assertEquals(AppendResult.SUCCESS, appendResult);
         container.commit(true);
         Assert.assertEquals(-1, fetcher.getOffsetInQueueByTime(mq.getTopic(), mq.getQueueId(), 0, BoundaryType.LOWER));
-
 
         long timestamp = System.currentTimeMillis();
         ByteBuffer buffer = MessageBufferUtilTest.buildMessageBuffer();
@@ -247,7 +248,8 @@ public class TieredMessageFetcherTest {
         buffer.putLong(MessageBufferUtil.STORE_TIMESTAMP_POSITION, timestamp);
         container.initOffset(50);
         container.appendCommitLog(buffer, true);
-        container.appendConsumeQueue(new DispatchRequest(mq.getTopic(), mq.getQueueId(), 0, MessageBufferUtilTest.MSG_LEN, 0, timestamp, 50, "", "", 0, 0, null), true);
+        appendResult = container.appendConsumeQueue(new DispatchRequest(mq.getTopic(), mq.getQueueId(), 0, MessageBufferUtilTest.MSG_LEN, 0, timestamp, 50, "", "", 0, 0, null), true);
+        Assert.assertEquals(AppendResult.SUCCESS, appendResult);
         container.commit(true);
         Assert.assertEquals(50, fetcher.getOffsetInQueueByTime(mq.getTopic(), mq.getQueueId(), 0, BoundaryType.LOWER));
     }

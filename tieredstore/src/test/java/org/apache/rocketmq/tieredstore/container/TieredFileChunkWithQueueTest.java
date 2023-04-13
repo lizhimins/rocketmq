@@ -16,7 +16,6 @@
  */
 package org.apache.rocketmq.tieredstore.container;
 
-import com.alibaba.fastjson.JSON;
 import java.io.File;
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -28,11 +27,11 @@ import org.apache.rocketmq.store.DispatchRequest;
 import org.apache.rocketmq.tieredstore.TieredStoreTestUtil;
 import org.apache.rocketmq.tieredstore.common.AppendResult;
 import org.apache.rocketmq.tieredstore.common.BoundaryType;
+import org.apache.rocketmq.tieredstore.common.FileSegmentType;
 import org.apache.rocketmq.tieredstore.common.TieredMessageStoreConfig;
 import org.apache.rocketmq.tieredstore.metadata.QueueMetadata;
 import org.apache.rocketmq.tieredstore.metadata.TieredMetadataStore;
 import org.apache.rocketmq.tieredstore.mock.MemoryFileSegment;
-import org.apache.rocketmq.tieredstore.provider.TieredFileSegment;
 import org.apache.rocketmq.tieredstore.util.MessageBufferUtil;
 import org.apache.rocketmq.tieredstore.util.MessageBufferUtilTest;
 import org.apache.rocketmq.tieredstore.util.TieredStoreUtil;
@@ -105,12 +104,15 @@ public class TieredFileChunkWithQueueTest {
         AppendResult result = container.appendConsumeQueue(request);
         Assert.assertEquals(AppendResult.OFFSET_INCORRECT, result);
 
-        // Mock memory file
+        // Create new segment in file queue
+        MemoryFileSegment segment = new MemoryFileSegment(FileSegmentType.CONSUME_QUEUE, mq, 20, storeConfig);
+        segment.initPosition(segment.getSize());
+        container.consumeQueue.getFileQueue().setBaseOffset(20L);
+        container.consumeQueue.getFileQueue().getFileToWrite();
+
+        // Recreate will load metadata and build consume queue
         container = new TieredFileChunkWithQueue(tieredFileFactory, mq);
-        container.initOffset(30);
-        int baseOffset = 51 * ConsumeQueue.CQ_STORE_UNIT_SIZE;
-        TieredFileSegment segment = container.consumeQueue.getFileQueue().getFileToWrite();
-        segment.initPosition(baseOffset);
+        segment.initPosition(ConsumeQueue.CQ_STORE_UNIT_SIZE);
         result = container.appendConsumeQueue(request);
         Assert.assertEquals(AppendResult.SUCCESS, result);
 
@@ -128,8 +130,10 @@ public class TieredFileChunkWithQueueTest {
 
     @Test
     public void testBinarySearchInQueueByTime() throws ClassNotFoundException, NoSuchMethodException {
+
         // replace provider, need new factory again
-        storeConfig.setTieredBackendServiceProvider("org.apache.rocketmq.tieredstore.mock.MemoryFileSegmentWithoutCheck");
+        storeConfig.setTieredBackendServiceProvider(
+            "org.apache.rocketmq.tieredstore.mock.MemoryFileSegmentWithoutCheck");
         tieredFileFactory = new TieredFileFactory(storeConfig);
 
         // inject store time: 0, +100, +100, +100, +200
@@ -160,9 +164,6 @@ public class TieredFileChunkWithQueueTest {
         buffer.putLong(MessageBufferUtil.QUEUE_OFFSET_POSITION, 54);
         buffer.putLong(MessageBufferUtil.STORE_TIMESTAMP_POSITION, timestamp3);
         container.appendCommitLog(buffer, true);
-
-        System.out.println(container.commitLog.getFileQueue().getFileToWrite().getCommitPosition());
-        System.out.println(container.commitLog.getFileQueue().getFileToWrite().getAppendPosition());
 
         // append message to consume queue
         container.consumeQueue.getFileQueue().setBaseOffset(50 * ConsumeQueue.CQ_STORE_UNIT_SIZE);

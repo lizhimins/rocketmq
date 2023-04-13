@@ -14,15 +14,33 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+package org.apache.rocketmq.tieredstore.common;
 
-package org.apache.rocketmq.tieredstore.container;
+public enum FileSegmentType {
+    COMMIT_LOG(0),
+    CONSUME_QUEUE(1),
+    INDEX(2);
 
-import org.apache.rocketmq.logging.org.slf4j.Logger;
-import org.apache.rocketmq.logging.org.slf4j.LoggerFactory;
-import org.apache.rocketmq.tieredstore.util.TieredStoreUtil;
+    private final int type;
 
-public class TieredStoreInstance {
+    FileSegmentType(int type) {
+        this.type = type;
+    }
 
-    private static final Logger logger = LoggerFactory.getLogger(TieredStoreUtil.TIERED_STORE_LOGGER_NAME);
+    public int getType() {
+        return type;
+    }
 
+    public static FileSegmentType valueOf(int type) {
+        switch (type) {
+            case 0:
+                return COMMIT_LOG;
+            case 1:
+                return CONSUME_QUEUE;
+            case 2:
+                return INDEX;
+            default:
+                throw new IllegalStateException("Unexpected value: " + type);
+        }
+    }
 }

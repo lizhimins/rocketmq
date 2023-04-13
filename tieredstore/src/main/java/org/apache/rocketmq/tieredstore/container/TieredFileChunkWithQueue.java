@@ -31,13 +31,13 @@ public class TieredFileChunkWithQueue extends TieredFileChunk {
     private final MessageQueue messageQueue;
     private long topicSequenceNumber;
     private QueueMetadata queueMetadata;
-    private TieredIndexFile indexFile;
+    private final TieredIndexFile indexFile;
 
     public TieredFileChunkWithQueue(TieredFileFactory fileQueueFactory, MessageQueue messageQueue) {
         super(fileQueueFactory, TieredStoreUtil.toPath(messageQueue));
         this.messageQueue = messageQueue;
-        this.recoverMetadata();
-        this.dispatchOffset = queueMetadata.getMaxOffset();
+        this.recoverTopicMetadata();
+        super.recoverMetadata();
         this.indexFile = TieredContainerManager.getIndexFile(storeConfig);
     }
 
@@ -50,7 +50,7 @@ public class TieredFileChunkWithQueue extends TieredFileChunk {
         super.initOffset(offset);
     }
 
-    public void recoverMetadata() {
+    public void recoverTopicMetadata() {
         TopicMetadata topicMetadata = this.metadataStore.getTopic(messageQueue.getTopic());
         if (topicMetadata == null) {
             topicMetadata = this.metadataStore.addTopic(messageQueue.getTopic(), -1L);
@@ -64,6 +64,7 @@ public class TieredFileChunkWithQueue extends TieredFileChunk {
         if (queueMetadata.getMaxOffset() < queueMetadata.getMinOffset()) {
             queueMetadata.setMaxOffset(queueMetadata.getMinOffset());
         }
+        this.dispatchOffset = queueMetadata.getMaxOffset();
     }
 
     public void persistMetadata() {

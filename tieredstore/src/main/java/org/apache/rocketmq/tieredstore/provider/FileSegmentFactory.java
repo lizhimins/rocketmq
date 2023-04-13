@@ -20,6 +20,7 @@ package org.apache.rocketmq.tieredstore.provider;
 import java.lang.reflect.Constructor;
 import org.apache.rocketmq.logging.org.slf4j.Logger;
 import org.apache.rocketmq.logging.org.slf4j.LoggerFactory;
+import org.apache.rocketmq.tieredstore.common.FileSegmentType;
 import org.apache.rocketmq.tieredstore.common.TieredMessageStoreConfig;
 import org.apache.rocketmq.tieredstore.metadata.TieredMetadataStore;
 import org.apache.rocketmq.tieredstore.util.TieredStoreUtil;
@@ -38,7 +39,7 @@ public class FileSegmentFactory {
         Class<? extends TieredFileSegment> clazz =
             Class.forName(storeConfig.getTieredBackendServiceProvider()).asSubclass(TieredFileSegment.class);
         fileSegmentConstructor = clazz.getConstructor(
-            TieredMessageStoreConfig.class, TieredFileSegment.FileSegmentType.class, String.class, Long.TYPE);
+            TieredMessageStoreConfig.class, FileSegmentType.class, String.class, Long.TYPE);
     }
 
     public TieredMessageStoreConfig getStoreConfig() {
@@ -50,7 +51,7 @@ public class FileSegmentFactory {
     }
 
     public TieredFileSegment createSegment(
-        TieredFileSegment.FileSegmentType fileType, String filePath, long baseOffset) {
+        FileSegmentType fileType, String filePath, long baseOffset) {
 
         switch (fileType) {
             case COMMIT_LOG:
@@ -67,7 +68,7 @@ public class FileSegmentFactory {
         TieredFileSegment segment = null;
         try {
             segment = fileSegmentConstructor.newInstance(
-                this.storeConfig, TieredFileSegment.FileSegmentType.COMMIT_LOG, filePath, baseOffset);
+                this.storeConfig, FileSegmentType.COMMIT_LOG, filePath, baseOffset);
         } catch (Exception e) {
             log.error("create file segment of commitlog failed, filePath: {}, baseOffset: {}",
                 filePath, baseOffset, e);
@@ -79,7 +80,7 @@ public class FileSegmentFactory {
         TieredFileSegment segment = null;
         try {
             segment = fileSegmentConstructor.newInstance(
-                this.storeConfig, TieredFileSegment.FileSegmentType.CONSUME_QUEUE, filePath, baseOffset);
+                this.storeConfig, FileSegmentType.CONSUME_QUEUE, filePath, baseOffset);
         } catch (Exception e) {
             log.error("create file segment of commitlog failed, filePath: {}, baseOffset: {}",
                 filePath, baseOffset, e);
@@ -91,7 +92,7 @@ public class FileSegmentFactory {
         TieredFileSegment segment = null;
         try {
             segment = fileSegmentConstructor.newInstance(
-                this.storeConfig, TieredFileSegment.FileSegmentType.INDEX, filePath, baseOffset);
+                this.storeConfig, FileSegmentType.INDEX, filePath, baseOffset);
         } catch (Exception e) {
             log.error("create file segment of commitlog failed, filePath: {}, baseOffset: {}",
                 filePath, baseOffset, e);

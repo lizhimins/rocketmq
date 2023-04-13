@@ -27,11 +27,10 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
-import java.util.function.Function;
 import org.apache.rocketmq.common.ConfigManager;
 import org.apache.rocketmq.common.message.MessageQueue;
+import org.apache.rocketmq.tieredstore.common.FileSegmentType;
 import org.apache.rocketmq.tieredstore.common.TieredMessageStoreConfig;
-import org.apache.rocketmq.tieredstore.provider.TieredFileSegment;
 
 public class TieredMetadataManager extends ConfigManager implements TieredMetadataStore {
 
@@ -200,7 +199,7 @@ public class TieredMetadataManager extends ConfigManager implements TieredMetada
 
     @VisibleForTesting
     public Map<String, ConcurrentMap<Long, FileSegmentMetadata>> getTableByFileType(
-        TieredFileSegment.FileSegmentType fileType) {
+        FileSegmentType fileType) {
 
         switch (fileType) {
             case COMMIT_LOG:
@@ -215,7 +214,7 @@ public class TieredMetadataManager extends ConfigManager implements TieredMetada
 
     @Override
     public FileSegmentMetadata getFileSegment(
-        String basePath, TieredFileSegment.FileSegmentType fileType, long baseOffset) {
+        String basePath, FileSegmentType fileType, long baseOffset) {
 
         return Optional.ofNullable(this.getTableByFileType(fileType).get(basePath))
             .map(fileMap -> fileMap.get(baseOffset)).orElse(null);
@@ -223,8 +222,8 @@ public class TieredMetadataManager extends ConfigManager implements TieredMetada
 
     @Override
     public void updateFileSegment(FileSegmentMetadata fileSegmentMetadata) {
-        TieredFileSegment.FileSegmentType fileType =
-            TieredFileSegment.FileSegmentType.valueOf(fileSegmentMetadata.getType());
+        FileSegmentType fileType =
+            FileSegmentType.valueOf(fileSegmentMetadata.getType());
         ConcurrentMap<Long, FileSegmentMetadata> offsetTable = this.getTableByFileType(fileType)
             .computeIfAbsent(fileSegmentMetadata.getPath(), s -> new ConcurrentHashMap<>());
         offsetTable.put(fileSegmentMetadata.getBaseOffset(), fileSegmentMetadata);
@@ -233,26 +232,22 @@ public class TieredMetadataManager extends ConfigManager implements TieredMetada
 
     @Override
     public void iterateFileSegment(Consumer<FileSegmentMetadata> callback) {
-        commitLogFileSegmentTable.forEach(
-            (filePath, map) -> map.forEach((offset, metadata) -> callback.accept(metadata)));
-        consumeQueueFileSegmentTable.forEach(
-            (filePath, map) -> map.forEach((offset, metadata) -> callback.accept(metadata)));
-        indexFileSegmentTable.forEach(
-            (filePath, map) -> map.forEach((offset, metadata) -> callback.accept(metadata)));
+        commitLogFileSegmentTable
+            .forEach((filePath, map) -> map.forEach((offset, metadata) -> callback.accept(metadata)));
+        consumeQueueFileSegmentTable
+            .forEach((filePath, map) -> map.forEach((offset, metadata) -> callback.accept(metadata)));
+        indexFileSegmentTable
+            .forEach((filePath, map) -> map.forEach((offset, metadata) -> callback.accept(metadata)));
     }
 
     @Override
-    public void iterateFileSegment(String basePath, Consumer<FileSegmentMetadata> callback) {
-        commitLogFileSegmentTable.getOrDefault(basePath, new ConcurrentHashMap<>()).forEach(
-            (offset, metadata) -> callback.accept(metadata));
-        consumeQueueFileSegmentTable.getOrDefault(basePath, new ConcurrentHashMap<>()).forEach(
-            (offset, metadata) -> callback.accept(metadata));
-        indexFileSegmentTable.getOrDefault(basePath, new ConcurrentHashMap<>()).forEach(
-            (offset, metadata) -> callback.accept(metadata));
+    public void iterateFileSegment(String basePath, FileSegmentType fileType, Consumer<FileSegmentMetadata> callback) {
+        this.getTableByFileType(fileType).getOrDefault(basePath, new ConcurrentHashMap<>())
+            .forEach((offset, metadata) -> callback.accept(metadata));
     }
 
     @Override
-    public void deleteFileSegment(String filePath, TieredFileSegment.FileSegmentType fileType) {
+    public void deleteFileSegment(String filePath, FileSegmentType fileType) {
         Map<String, ConcurrentMap<Long, FileSegmentMetadata>> offsetTable = this.getTableByFileType(fileType);
         if (offsetTable != null) {
             offsetTable.remove(filePath);
@@ -261,7 +256,7 @@ public class TieredMetadataManager extends ConfigManager implements TieredMetada
     }
 
     @Override
-    public void deleteFileSegment(String basePath, TieredFileSegment.FileSegmentType fileType, long baseOffset) {
+    public void deleteFileSegment(String basePath, FileSegmentType fileType, long baseOffset) {
         ConcurrentMap<Long, FileSegmentMetadata> offsetTable = this.getTableByFileType(fileType).get(basePath);
         if (offsetTable != null) {
             offsetTable.remove(baseOffset);

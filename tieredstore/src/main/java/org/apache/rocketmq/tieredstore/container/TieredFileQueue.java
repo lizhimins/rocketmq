@@ -34,6 +34,7 @@ import org.apache.rocketmq.logging.org.slf4j.Logger;
 import org.apache.rocketmq.logging.org.slf4j.LoggerFactory;
 import org.apache.rocketmq.tieredstore.common.AppendResult;
 import org.apache.rocketmq.tieredstore.common.BoundaryType;
+import org.apache.rocketmq.tieredstore.common.FileSegmentType;
 import org.apache.rocketmq.tieredstore.exception.TieredStoreErrorCode;
 import org.apache.rocketmq.tieredstore.exception.TieredStoreException;
 import org.apache.rocketmq.tieredstore.metadata.FileSegmentMetadata;
@@ -47,21 +48,20 @@ public class TieredFileQueue {
     private static final Logger logger = LoggerFactory.getLogger(TieredStoreUtil.TIERED_STORE_LOGGER_NAME);
 
     private final String filePath;
-    private final TieredFileSegment.FileSegmentType fileType;
+    private final FileSegmentType fileType;
     private final TieredMetadataStore tieredMetadataStore;
 
-    private volatile long baseOffset;
+    private volatile long baseOffset = -1L;
     private final FileSegmentFactory fileSegmentFactory;
     private final List<TieredFileSegment> fileSegmentList;
     private final List<TieredFileSegment> needCommitFileSegmentList;
     private final ReentrantReadWriteLock fileSegmentLock;
 
     public TieredFileQueue(FileSegmentFactory fileSegmentFactory,
-        TieredFileSegment.FileSegmentType fileType, String filePath) {
+        FileSegmentType fileType, String filePath) {
 
         this.fileType = fileType;
         this.filePath = filePath;
-        this.baseOffset = 0L;
         this.fileSegmentList = new LinkedList<>();
         this.fileSegmentLock = new ReentrantReadWriteLock();
         this.fileSegmentFactory = fileSegmentFactory;
@@ -69,7 +69,7 @@ public class TieredFileQueue {
         this.tieredMetadataStore = TieredStoreUtil.getMetadataStore(fileSegmentFactory.getStoreConfig());
         this.recoverMetadata();
 
-        if (fileType != TieredFileSegment.FileSegmentType.INDEX) {
+        if (fileType != FileSegmentType.INDEX) {
             checkAndFixFileSize();
         }
     }
@@ -142,7 +142,7 @@ public class TieredFileQueue {
         fileSegmentList.clear();
         needCommitFileSegmentList.clear();
 
-        tieredMetadataStore.iterateFileSegment(filePath, metadata -> {
+        tieredMetadataStore.iterateFileSegment(filePath, fileType, metadata -> {
             if (metadata.getStatus() == FileSegmentMetadata.STATUS_DELETED) {
                 return;
             }
@@ -245,13 +245,11 @@ public class TieredFileQueue {
         }
     }
 
-    private TieredFileSegment newSegment(
-        TieredFileSegment.FileSegmentType fileType, long baseOffset, boolean createMetadata) {
-
+    private TieredFileSegment newSegment(FileSegmentType fileType, long baseOffset, boolean createMetadata) {
         TieredFileSegment segment = null;
         try {
             segment = fileSegmentFactory.createSegment(fileType, filePath, baseOffset);
-            if (fileType != TieredFileSegment.FileSegmentType.INDEX) {
+            if (fileType != FileSegmentType.INDEX) {
                 segment.createFile();
             }
             if (createMetadata) {
@@ -426,7 +424,7 @@ public class TieredFileQueue {
     public void cleanExpiredFile(long expireTimestamp) {
         Set<Long> needToDeleteSet = new HashSet<>();
         try {
-            tieredMetadataStore.iterateFileSegment(filePath, metadata -> {
+            tieredMetadataStore.iterateFileSegment(filePath, fileType, metadata -> {
                 if (metadata.getEndTimestamp() < expireTimestamp) {
                     needToDeleteSet.add(metadata.getBaseOffset());
                 }
@@ -462,7 +460,7 @@ public class TieredFileQueue {
             }
             if (fileSegmentList.size() > 0) {
                 baseOffset = fileSegmentList.get(0).getBaseOffset();
-            } else if (fileType == TieredFileSegment.FileSegmentType.CONSUME_QUEUE) {
+            } else if (fileType == FileSegmentType.CONSUME_QUEUE) {
                 baseOffset = -1;
             } else {
                 baseOffset = 0;
@@ -479,8 +477,7 @@ public class TieredFileQueue {
 
     public void destroyExpiredFile() {
         try {
-            tieredMetadataStore.iterateFileSegment(filePath, metadata -> {
-                System.out.println("try delete: " + filePath);
+            tieredMetadataStore.iterateFileSegment(filePath, fileType, metadata -> {
                 if (metadata.getStatus() == FileSegmentMetadata.STATUS_DELETED) {
                     try {
                         TieredFileSegment fileSegment =

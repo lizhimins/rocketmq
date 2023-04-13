@@ -64,11 +64,11 @@ public class TieredDispatcherTest {
     @Test
     public void testDispatch() {
         //metadataStore.addQueue(mq, 6);
-        //MemoryFileSegment segment = new MemoryFileSegment(TieredFileSegment.FileSegmentType.COMMIT_LOG, mq, 1000, storeConfig);
+        //MemoryFileSegment segment = new MemoryFileSegment(FileSegmentType.COMMIT_LOG, mq, 1000, storeConfig);
         //segment.initPosition(segment.getSize());
         //metadataStore.updateFileSegment(segment);
         //metadataStore.updateFileSegment(segment);
-        //segment = new MemoryFileSegment(TieredFileSegment.FileSegmentType.CONSUME_QUEUE, mq, 6 * TieredConsumeQueue.CONSUME_QUEUE_STORE_UNIT_SIZE, storeConfig);
+        //segment = new MemoryFileSegment(FileSegmentType.CONSUME_QUEUE, mq, 6 * TieredConsumeQueue.CONSUME_QUEUE_STORE_UNIT_SIZE, storeConfig);
         //metadataStore.updateFileSegment(segment);
         //
         //TieredContainerManager containerManager = TieredContainerManager.getInstance(storeConfig);

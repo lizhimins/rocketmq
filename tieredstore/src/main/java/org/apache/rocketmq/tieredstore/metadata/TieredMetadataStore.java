@@ -18,7 +18,7 @@ package org.apache.rocketmq.tieredstore.metadata;
 
 import java.util.function.Consumer;
 import org.apache.rocketmq.common.message.MessageQueue;
-import org.apache.rocketmq.tieredstore.provider.TieredFileSegment;
+import org.apache.rocketmq.tieredstore.common.FileSegmentType;
 
 /**
  * Provides tiered metadata storage service to store metadata information of Topic, Queue, FileSegment, etc.
@@ -78,7 +78,7 @@ public interface TieredMetadataStore {
      * @param baseOffset The start offset of file segment.
      * @return The metadata information of specified file segment, or null if it does not exist.
      */
-    FileSegmentMetadata getFileSegment(String basePath, TieredFileSegment.FileSegmentType fileType, long baseOffset);
+    FileSegmentMetadata getFileSegment(String basePath, FileSegmentType fileType, long baseOffset);
 
     /**
      * Update the metadata information of a file segment.
@@ -102,14 +102,14 @@ public interface TieredMetadataStore {
      * @param basePath The file path.
      * @param callback The traversal callback function.
      */
-    void iterateFileSegment(String basePath, Consumer<FileSegmentMetadata> callback);
+    void iterateFileSegment(String basePath, FileSegmentType fileType, Consumer<FileSegmentMetadata> callback);
 
     /**
      * Delete all the metadata information of the file segments.
      *
      * @param basePath The file path.
      */
-    void deleteFileSegment(String basePath, TieredFileSegment.FileSegmentType fileType);
+    void deleteFileSegment(String basePath, FileSegmentType fileType);
 
     /**
      * Delete the metadata information of a specified file segment.
@@ -118,7 +118,7 @@ public interface TieredMetadataStore {
      * @param fileType   The file type.
      * @param baseOffset The start offset of the file segment.
      */
-    void deleteFileSegment(String basePath, TieredFileSegment.FileSegmentType fileType, long baseOffset);
+    void deleteFileSegment(String basePath, FileSegmentType fileType, long baseOffset);
 
     /**
      * Clean all metadata in disk

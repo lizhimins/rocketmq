@@ -17,9 +17,9 @@
 
 package org.apache.rocketmq.tieredstore.container;
 
+import org.apache.rocketmq.tieredstore.common.FileSegmentType;
 import org.apache.rocketmq.tieredstore.common.TieredMessageStoreConfig;
 import org.apache.rocketmq.tieredstore.provider.FileSegmentFactory;
-import org.apache.rocketmq.tieredstore.provider.TieredFileSegment;
 
 public class TieredFileFactory {
 
@@ -38,14 +38,19 @@ public class TieredFileFactory {
     }
 
     public TieredFileQueue createQueueForCommitLog(String filePath) {
-        return new TieredFileQueue(fileSegmentFactory, TieredFileSegment.FileSegmentType.COMMIT_LOG, filePath);
+        TieredFileQueue tieredFileQueue =
+            new TieredFileQueue(fileSegmentFactory, FileSegmentType.COMMIT_LOG, filePath);
+        if (tieredFileQueue.getBaseOffset() == -1L) {
+            tieredFileQueue.setBaseOffset(0L);
+        }
+        return tieredFileQueue;
     }
 
     public TieredFileQueue createQueueForConsumeQueue(String filePath) {
-        return new TieredFileQueue(fileSegmentFactory, TieredFileSegment.FileSegmentType.CONSUME_QUEUE, filePath);
+        return new TieredFileQueue(fileSegmentFactory, FileSegmentType.CONSUME_QUEUE, filePath);
     }
 
     public TieredFileQueue createQueueForIndexFile(String filePath) {
-        return new TieredFileQueue(fileSegmentFactory, TieredFileSegment.FileSegmentType.INDEX, filePath);
+        return new TieredFileQueue(fileSegmentFactory, FileSegmentType.INDEX, filePath);
     }
 }

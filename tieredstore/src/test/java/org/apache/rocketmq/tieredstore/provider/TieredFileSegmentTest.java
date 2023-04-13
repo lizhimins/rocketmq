@@ -19,6 +19,7 @@ package org.apache.rocketmq.tieredstore.provider;
 import java.nio.ByteBuffer;
 import java.util.concurrent.CompletableFuture;
 import org.apache.rocketmq.common.message.MessageQueue;
+import org.apache.rocketmq.tieredstore.common.FileSegmentType;
 import org.apache.rocketmq.tieredstore.common.TieredMessageStoreConfig;
 import org.apache.rocketmq.tieredstore.container.TieredCommitLog;
 import org.apache.rocketmq.tieredstore.container.TieredConsumeQueue;
@@ -31,14 +32,14 @@ import org.junit.Test;
 public class TieredFileSegmentTest {
     public int baseOffset = 1000;
 
-    public TieredFileSegment createFileSegment(TieredFileSegment.FileSegmentType fileType) {
+    public TieredFileSegment createFileSegment(FileSegmentType fileType) {
         return new MemoryFileSegment(fileType, new MessageQueue("TieredFileSegmentTest", new TieredMessageStoreConfig().getBrokerName(), 0),
             baseOffset, new TieredMessageStoreConfig());
     }
 
     @Test
     public void testCommitLog() {
-        TieredFileSegment segment = createFileSegment(TieredFileSegment.FileSegmentType.COMMIT_LOG);
+        TieredFileSegment segment = createFileSegment(FileSegmentType.COMMIT_LOG);
         segment.initPosition(segment.getSize());
         long lastSize = segment.getSize();
         segment.append(MessageBufferUtilTest.buildMessageBuffer(), 0);
@@ -87,7 +88,7 @@ public class TieredFileSegmentTest {
 
     @Test
     public void testConsumeQueue() {
-        TieredFileSegment segment = createFileSegment(TieredFileSegment.FileSegmentType.CONSUME_QUEUE);
+        TieredFileSegment segment = createFileSegment(FileSegmentType.CONSUME_QUEUE);
         segment.initPosition(segment.getSize());
         long lastSize = segment.getSize();
         segment.append(buildConsumeQueue(baseOffset), 0);
@@ -115,7 +116,7 @@ public class TieredFileSegmentTest {
     @Test
     public void testCommitFailed() {
         long startTime = System.currentTimeMillis();
-        MemoryFileSegment segment = (MemoryFileSegment) createFileSegment(TieredFileSegment.FileSegmentType.COMMIT_LOG);
+        MemoryFileSegment segment = (MemoryFileSegment) createFileSegment(FileSegmentType.COMMIT_LOG);
         long lastSize = segment.getSize();
         segment.append(MessageBufferUtilTest.buildMessageBuffer(), 0);
         segment.append(MessageBufferUtilTest.buildMessageBuffer(), 0);

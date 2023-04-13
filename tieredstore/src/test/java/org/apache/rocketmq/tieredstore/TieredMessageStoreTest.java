@@ -42,7 +42,6 @@ import org.apache.rocketmq.store.config.MessageStoreConfig;
 import org.apache.rocketmq.store.plugin.MessageStorePluginContext;
 import org.apache.rocketmq.tieredstore.common.BoundaryType;
 import org.apache.rocketmq.tieredstore.container.TieredContainerManager;
-import org.apache.rocketmq.tieredstore.container.TieredFileChunk;
 import org.apache.rocketmq.tieredstore.container.TieredFileChunkWithQueue;
 import org.apache.rocketmq.tieredstore.util.TieredStoreUtil;
 import org.junit.After;

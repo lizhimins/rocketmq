@@ -40,14 +40,13 @@ import org.apache.rocketmq.store.DispatchRequest;
 import org.apache.rocketmq.store.MessageStore;
 import org.apache.rocketmq.store.SelectMappedBufferResult;
 import org.apache.rocketmq.tieredstore.common.AppendResult;
+import org.apache.rocketmq.tieredstore.common.FileSegmentType;
 import org.apache.rocketmq.tieredstore.common.TieredMessageStoreConfig;
 import org.apache.rocketmq.tieredstore.common.TieredStoreExecutor;
 import org.apache.rocketmq.tieredstore.container.TieredContainerManager;
-import org.apache.rocketmq.tieredstore.container.TieredFileChunk;
 import org.apache.rocketmq.tieredstore.container.TieredFileChunkWithQueue;
 import org.apache.rocketmq.tieredstore.metrics.TieredStoreMetricsConstant;
 import org.apache.rocketmq.tieredstore.metrics.TieredStoreMetricsManager;
-import org.apache.rocketmq.tieredstore.provider.TieredFileSegment;
 import org.apache.rocketmq.tieredstore.util.CQItemBufferUtil;
 import org.apache.rocketmq.tieredstore.util.MessageBufferUtil;
 import org.apache.rocketmq.tieredstore.util.TieredStoreUtil;
@@ -170,7 +169,7 @@ public class TieredDispatcher extends ServiceThread implements CommitLogDispatch
                     Attributes attributes = TieredStoreMetricsManager.newAttributesBuilder()
                         .put(TieredStoreMetricsConstant.LABEL_TOPIC, request.getTopic())
                         .put(TieredStoreMetricsConstant.LABEL_QUEUE_ID, request.getQueueId())
-                        .put(TieredStoreMetricsConstant.LABEL_FILE_TYPE, TieredFileSegment.FileSegmentType.COMMIT_LOG.name().toLowerCase())
+                        .put(TieredStoreMetricsConstant.LABEL_FILE_TYPE, FileSegmentType.COMMIT_LOG.name().toLowerCase())
                         .build();
                     TieredStoreMetricsManager.messagesDispatchTotal.add(1, attributes);
                 }
@@ -276,7 +275,7 @@ public class TieredDispatcher extends ServiceThread implements CommitLogDispatch
             Attributes attributes = TieredStoreMetricsManager.newAttributesBuilder()
                 .put(TieredStoreMetricsConstant.LABEL_TOPIC, mq.getTopic())
                 .put(TieredStoreMetricsConstant.LABEL_QUEUE_ID, mq.getQueueId())
-                .put(TieredStoreMetricsConstant.LABEL_FILE_TYPE, TieredFileSegment.FileSegmentType.COMMIT_LOG.name().toLowerCase())
+                .put(TieredStoreMetricsConstant.LABEL_FILE_TYPE, FileSegmentType.COMMIT_LOG.name().toLowerCase())
                 .build();
             TieredStoreMetricsManager.messagesDispatchTotal.add(queueOffset - beforeOffset, attributes);
         } finally {
@@ -455,7 +454,7 @@ public class TieredDispatcher extends ServiceThread implements CommitLogDispatch
             Attributes attributes = TieredStoreMetricsManager.newAttributesBuilder()
                 .put(TieredStoreMetricsConstant.LABEL_TOPIC, messageQueue.getTopic())
                 .put(TieredStoreMetricsConstant.LABEL_QUEUE_ID, messageQueue.getQueueId())
-                .put(TieredStoreMetricsConstant.LABEL_FILE_TYPE, TieredFileSegment.FileSegmentType.CONSUME_QUEUE.name().toLowerCase())
+                .put(TieredStoreMetricsConstant.LABEL_FILE_TYPE, FileSegmentType.CONSUME_QUEUE.name().toLowerCase())
                 .build();
             TieredStoreMetricsManager.messagesDispatchTotal.add(count, attributes);
         });
@@ -463,7 +462,7 @@ public class TieredDispatcher extends ServiceThread implements CommitLogDispatch
             Attributes attributes = TieredStoreMetricsManager.newAttributesBuilder()
                 .put(TieredStoreMetricsConstant.LABEL_TOPIC, messageQueue.getTopic())
                 .put(TieredStoreMetricsConstant.LABEL_QUEUE_ID, messageQueue.getQueueId())
-                .put(TieredStoreMetricsConstant.LABEL_FILE_TYPE, TieredFileSegment.FileSegmentType.INDEX.name().toLowerCase())
+                .put(TieredStoreMetricsConstant.LABEL_FILE_TYPE, FileSegmentType.INDEX.name().toLowerCase())
                 .build();
             TieredStoreMetricsManager.messagesDispatchTotal.add(count, attributes);
         });

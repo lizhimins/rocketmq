@@ -37,11 +37,11 @@ import org.apache.rocketmq.logging.org.slf4j.LoggerFactory;
 import org.apache.rocketmq.store.DispatchRequest;
 import org.apache.rocketmq.tieredstore.common.AppendResult;
 import org.apache.rocketmq.tieredstore.common.BoundaryType;
+import org.apache.rocketmq.tieredstore.common.FileSegmentType;
 import org.apache.rocketmq.tieredstore.common.InFlightRequestFuture;
 import org.apache.rocketmq.tieredstore.common.InFlightRequestKey;
 import org.apache.rocketmq.tieredstore.common.TieredMessageStoreConfig;
 import org.apache.rocketmq.tieredstore.metadata.TieredMetadataStore;
-import org.apache.rocketmq.tieredstore.provider.TieredFileSegment;
 import org.apache.rocketmq.tieredstore.util.CQItemBufferUtil;
 import org.apache.rocketmq.tieredstore.util.MessageBufferUtil;
 import org.apache.rocketmq.tieredstore.util.TieredStoreUtil;
@@ -71,22 +71,25 @@ public abstract class TieredFileChunk implements FileChunk {
     protected final ConcurrentMap<InFlightRequestKey, InFlightRequestFuture> inFlightRequestMap;
 
     public TieredFileChunk(TieredFileFactory fileQueueFactory, String filePath) {
-
         this.filePath = filePath;
         this.storeConfig = fileQueueFactory.getStoreConfig();
+        this.readAheadFactor = this.storeConfig.getReadAheadMinFactor();
         this.metadataStore = TieredStoreUtil.getMetadataStore(this.storeConfig);
+        this.fileChunkLock = new ReentrantLock();
+        this.inFlightRequestMap = new ConcurrentHashMap<>();
         this.commitLog = new TieredCommitLog(fileQueueFactory, filePath);
         this.consumeQueue = new TieredConsumeQueue(fileQueueFactory, filePath);
+        this.groupOffsetCache = this.initOffsetCache();
+    }
 
-        this.fileChunkLock = new ReentrantLock();
-        this.readAheadFactor = storeConfig.getReadAheadMinFactor();
-        this.inFlightRequestMap = new ConcurrentHashMap<>();
-
-        if (!consumeQueue.isInitialized() && this.dispatchOffset != -1L) {
+    protected void recoverMetadata() {
+        if (!consumeQueue.isInitialized() && this.dispatchOffset != -1) {
             consumeQueue.setBaseOffset(this.dispatchOffset * TieredConsumeQueue.CONSUME_QUEUE_STORE_UNIT_SIZE);
         }
+    }
 
-        this.groupOffsetCache = Caffeine.newBuilder()
+    private Cache<String, Long> initOffsetCache() {
+        return Caffeine.newBuilder()
             .expireAfterWrite(2, TimeUnit.MINUTES)
             .removalListener((key, value, cause) -> {
                 if (cause.equals(RemovalCause.EXPIRED)) {
@@ -141,7 +144,6 @@ public abstract class TieredFileChunk implements FileChunk {
 
     @Override
     public CompletableFuture<ByteBuffer> getMessageAsync(long queueOffset) {
-        System.out.println("queue offset: " + queueOffset);
         return readConsumeQueue(queueOffset).thenComposeAsync(cqBuffer -> {
             long commitLogOffset = CQItemBufferUtil.getCommitLogOffset(cqBuffer);
             int length = CQItemBufferUtil.getSize(cqBuffer);
@@ -485,8 +487,8 @@ public abstract class TieredFileChunk implements FileChunk {
         commitLog.destroy();
         consumeQueue.destroy();
         try {
-            metadataStore.deleteFileSegment(filePath, TieredFileSegment.FileSegmentType.COMMIT_LOG);
-            metadataStore.deleteFileSegment(filePath, TieredFileSegment.FileSegmentType.CONSUME_QUEUE);
+            metadataStore.deleteFileSegment(filePath, FileSegmentType.COMMIT_LOG);
+            metadataStore.deleteFileSegment(filePath, FileSegmentType.CONSUME_QUEUE);
         } catch (Exception e) {
             LOGGER.error("TieredFileChunk#destroy: clean metadata failed: ", e);
         }

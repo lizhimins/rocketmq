@@ -27,8 +27,8 @@ import java.util.concurrent.atomic.AtomicLong;
 import org.apache.commons.io.FileUtils;
 import org.apache.rocketmq.common.message.MessageQueue;
 import org.apache.rocketmq.tieredstore.TieredStoreTestUtil;
+import org.apache.rocketmq.tieredstore.common.FileSegmentType;
 import org.apache.rocketmq.tieredstore.common.TieredMessageStoreConfig;
-import org.apache.rocketmq.tieredstore.provider.TieredFileSegment;
 import org.apache.rocketmq.tieredstore.util.TieredStoreUtil;
 import org.junit.After;
 import org.junit.Assert;
@@ -154,7 +154,8 @@ public class TieredMetadataManagerTest {
 
     private long countFileSegment(TieredMetadataStore metadataStore, String filePath) {
         AtomicLong count = new AtomicLong();
-        metadataStore.iterateFileSegment(filePath, segmentMetadata -> count.incrementAndGet());
+        metadataStore.iterateFileSegment(
+            filePath, FileSegmentType.COMMIT_LOG, segmentMetadata -> count.incrementAndGet());
         return count.get();
     }
 
@@ -162,17 +163,17 @@ public class TieredMetadataManagerTest {
     public void testFileSegment() {
         String filePath = TieredStoreUtil.toPath(mq0);
         FileSegmentMetadata segmentMetadata1 = new FileSegmentMetadata(
-            filePath, 0L, TieredFileSegment.FileSegmentType.COMMIT_LOG.getType());
+            filePath, 0L, FileSegmentType.COMMIT_LOG.getType());
         metadataStore.updateFileSegment(segmentMetadata1);
         Assert.assertEquals(1L, countFileSegment(metadataStore));
 
         FileSegmentMetadata segmentMetadata2 = new FileSegmentMetadata(
-            filePath, 100, TieredFileSegment.FileSegmentType.COMMIT_LOG.getType());
+            filePath, 100, FileSegmentType.COMMIT_LOG.getType());
         metadataStore.updateFileSegment(segmentMetadata2);
         Assert.assertEquals(2L, countFileSegment(metadataStore));
 
         FileSegmentMetadata segmentMetadata = metadataStore.getFileSegment(
-            filePath, TieredFileSegment.FileSegmentType.COMMIT_LOG, 0L);
+            filePath, FileSegmentType.COMMIT_LOG, 0L);
         Assert.assertEquals(0L, segmentMetadata.getBaseOffset());
         Assert.assertEquals(0L, segmentMetadata.getSealTimestamp());
         Assert.assertEquals(FileSegmentMetadata.STATUS_NEW, segmentMetadata.getStatus());
@@ -180,7 +181,7 @@ public class TieredMetadataManagerTest {
         segmentMetadata.markSealed();
         metadataStore.updateFileSegment(segmentMetadata);
         segmentMetadata = metadataStore.getFileSegment(
-            filePath, TieredFileSegment.FileSegmentType.COMMIT_LOG, segmentMetadata.getBaseOffset());
+            filePath, FileSegmentType.COMMIT_LOG, segmentMetadata.getBaseOffset());
         Assert.assertEquals(FileSegmentMetadata.STATUS_SEALED, segmentMetadata.getStatus());
         Assert.assertNotEquals(0L, segmentMetadata.getSealTimestamp());
 
@@ -193,21 +194,21 @@ public class TieredMetadataManagerTest {
         String filePath1 = TieredStoreUtil.toPath(mq1);
         for (int i = 0; i < 10; i++) {
             FileSegmentMetadata segmentMetadata = new FileSegmentMetadata(
-                filePath0, i * 1000L * 1000L, TieredFileSegment.FileSegmentType.COMMIT_LOG.getType());
+                filePath0, i * 1000L * 1000L, FileSegmentType.COMMIT_LOG.getType());
             metadataStore.updateFileSegment(segmentMetadata);
 
             segmentMetadata = new FileSegmentMetadata(
-                filePath1, i * 1000L * 1000L, TieredFileSegment.FileSegmentType.COMMIT_LOG.getType());
+                filePath1, i * 1000L * 1000L, FileSegmentType.COMMIT_LOG.getType());
             metadataStore.updateFileSegment(segmentMetadata);
         }
         Assert.assertEquals(20, countFileSegment(metadataStore));
         Assert.assertEquals(10, countFileSegment(metadataStore, filePath0));
         Assert.assertEquals(10, countFileSegment(metadataStore, filePath1));
 
-        metadataStore.deleteFileSegment(filePath0, TieredFileSegment.FileSegmentType.COMMIT_LOG);
+        metadataStore.deleteFileSegment(filePath0, FileSegmentType.COMMIT_LOG);
         for (int i = 0; i < 5; i++) {
             metadataStore.deleteFileSegment(
-                filePath1, TieredFileSegment.FileSegmentType.COMMIT_LOG, i * 1000L * 1000L);
+                filePath1, FileSegmentType.COMMIT_LOG, i * 1000L * 1000L);
         }
         Assert.assertEquals(0L, countFileSegment(metadataStore, filePath0));
         Assert.assertEquals(5L, countFileSegment(metadataStore, filePath1));
@@ -226,10 +227,10 @@ public class TieredMetadataManagerTest {
 
         String filePath0 = TieredStoreUtil.toPath(mq0);
         FileSegmentMetadata segmentMetadata =
-            new FileSegmentMetadata(filePath0, 100, TieredFileSegment.FileSegmentType.COMMIT_LOG.getType());
+            new FileSegmentMetadata(filePath0, 100, FileSegmentType.COMMIT_LOG.getType());
         metadataStore.updateFileSegment(segmentMetadata);
         segmentMetadata =
-            new FileSegmentMetadata(filePath0, 200, TieredFileSegment.FileSegmentType.COMMIT_LOG.getType());
+            new FileSegmentMetadata(filePath0, 200, FileSegmentType.COMMIT_LOG.getType());
         metadataStore.updateFileSegment(segmentMetadata);
 
         Assert.assertTrue(new File(metadataManager.configFilePath()).exists());
