@@ -60,15 +60,15 @@ public interface TieredMetadataStore {
      *
      * @see QueueMetadata
      */
-    QueueMetadata getQueue(MessageQueue queue);
+    QueueMetadata getQueue(MessageQueue mq);
 
-    QueueMetadata addQueue(MessageQueue queue, long baseOffset);
+    QueueMetadata addQueue(MessageQueue mq, long baseOffset);
 
     void updateQueue(QueueMetadata queueMetadata);
 
     void iterateQueue(String topic, Consumer<QueueMetadata> callback);
 
-    void deleteQueue(MessageQueue queue);
+    void deleteQueue(MessageQueue mq);
 
     /**
      * Get the metadata information of specified file segment.

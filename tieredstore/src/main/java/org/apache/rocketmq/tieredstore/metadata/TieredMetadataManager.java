@@ -154,8 +154,8 @@ public class TieredMetadataManager extends ConfigManager implements TieredMetada
     }
 
     @Override
-    public QueueMetadata getQueue(MessageQueue queue) {
-        return queueMetadataTable.getOrDefault(queue.getTopic(), new ConcurrentHashMap<>()).get(queue.getQueueId());
+    public QueueMetadata getQueue(MessageQueue mq) {
+        return queueMetadataTable.getOrDefault(mq.getTopic(), new ConcurrentHashMap<>()).get(mq.getQueueId());
     }
 
     @Override
@@ -164,14 +164,14 @@ public class TieredMetadataManager extends ConfigManager implements TieredMetada
     }
 
     @Override
-    public QueueMetadata addQueue(MessageQueue queue, long baseOffset) {
-        QueueMetadata old = getQueue(queue);
+    public QueueMetadata addQueue(MessageQueue mq, long baseOffset) {
+        QueueMetadata old = getQueue(mq);
         if (old != null) {
             return old;
         }
-        QueueMetadata metadata = new QueueMetadata(queue, baseOffset, baseOffset);
-        queueMetadataTable.computeIfAbsent(queue.getTopic(), topic -> new ConcurrentHashMap<>())
-            .put(queue.getQueueId(), metadata);
+        QueueMetadata metadata = new QueueMetadata(mq, baseOffset, baseOffset);
+        queueMetadataTable.computeIfAbsent(mq.getTopic(), topic -> new ConcurrentHashMap<>())
+            .put(mq.getQueueId(), metadata);
         persist();
         return metadata;
     }
@@ -190,9 +190,9 @@ public class TieredMetadataManager extends ConfigManager implements TieredMetada
     }
 
     @Override
-    public void deleteQueue(MessageQueue queue) {
-        if (queueMetadataTable.containsKey(queue.getTopic())) {
-            queueMetadataTable.get(queue.getTopic()).remove(queue.getQueueId());
+    public void deleteQueue(MessageQueue mq) {
+        if (queueMetadataTable.containsKey(mq.getTopic())) {
+            queueMetadataTable.get(mq.getTopic()).remove(mq.getQueueId());
         }
         persist();
     }

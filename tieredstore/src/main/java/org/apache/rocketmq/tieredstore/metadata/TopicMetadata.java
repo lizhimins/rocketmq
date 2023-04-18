@@ -47,7 +47,7 @@ public class TopicMetadata {
         return topicId;
     }
 
-    public void setTopicId(int topicId) {
+    public void setTopicId(long topicId) {
         this.topicId = topicId;
     }
 
