@@ -72,8 +72,7 @@ public class PosixFileSegment extends TieredFileSegment {
         String brokerClusterName = storeConfig.getBrokerClusterName();
         String clusterBasePath = TieredStoreUtil.getHash(brokerClusterName) + UNDERLINE + brokerClusterName;
         this.fullPath = Paths.get(File.separator, basePath, clusterBasePath, filePath,
-                fileType.toString(), TieredStoreUtil.offset2FileName(baseOffset)).toString()
-            .replaceFirst(File.separator, StringUtils.EMPTY);
+                fileType.toString(), TieredStoreUtil.offset2FileName(baseOffset)).toString();
 
         createFile();
     }

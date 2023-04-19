@@ -16,7 +16,6 @@
  */
 package org.apache.rocketmq.tieredstore.mock;
 
-import java.io.File;
 import java.nio.ByteBuffer;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
@@ -37,9 +36,7 @@ public class MemoryFileSegment extends TieredFileSegment {
 
     public MemoryFileSegment(FileSegmentType fileType, MessageQueue messageQueue, long baseOffset,
         TieredMessageStoreConfig storeConfig) {
-        this(storeConfig, fileType,
-            storeConfig.getStorePathRootDir() + File.separator + TieredStoreUtil.toPath(messageQueue),
-            baseOffset);
+        this(storeConfig, fileType, TieredStoreUtil.toPath(messageQueue), baseOffset);
     }
 
     public MemoryFileSegment(TieredMessageStoreConfig storeConfig,
@@ -47,12 +44,8 @@ public class MemoryFileSegment extends TieredFileSegment {
         super(storeConfig, fileType, filePath, baseOffset);
         switch (fileType) {
             case COMMIT_LOG:
-                memStore = ByteBuffer.allocate(10000);
-                break;
-            case CONSUME_QUEUE:
-                memStore = ByteBuffer.allocate(10000);
-                break;
             case INDEX:
+            case CONSUME_QUEUE:
                 memStore = ByteBuffer.allocate(10000);
                 break;
             default:

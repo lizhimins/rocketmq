@@ -19,6 +19,8 @@ package org.apache.rocketmq.tieredstore.container;
 import java.io.File;
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 import org.apache.commons.io.FileUtils;
 import org.apache.rocketmq.common.message.MessageQueue;
@@ -37,8 +39,8 @@ import org.junit.Test;
 
 public class TieredFileQueueTest {
 
-    private final String storePath =
-        FileUtils.getTempDirectory() + File.separator + "tiered_store_unit_test" + UUID.randomUUID().toString().substring(8);
+    private final String storePath = FileUtils.getTempDirectory() + File.separator
+        + "tiered_store_unit_test" + UUID.randomUUID().toString().substring(8);
 
     private MessageQueue queue;
     private TieredMessageStoreConfig storeConfig;
@@ -60,40 +62,54 @@ public class TieredFileQueueTest {
         TieredStoreTestUtil.destroyTempDir(storePath);
     }
 
-    //@Test
-    //public void testFileSegment() {
-    //    MemoryFileSegment fileSegment1 = new MemoryFileSegment(
-    //        FileSegmentType.COMMIT_LOG, mq0, 100, storeConfig);
-    //    fileSegment1.initPosition(fileSegment1.getSize());
-    //    FileSegmentMetadata metadata1 = metadataStore.updateFileSegment(fileSegment1);
-    //    Assert.assertEquals(TieredStoreUtil.toPath(mq0), metadata1.getPath());
-    //    Assert.assertEquals(FileSegmentType.COMMIT_LOG, FileSegmentType.valueOf(metadata1.getType()));
-    //    Assert.assertEquals(100, metadata1.getBaseOffset());
-    //    Assert.assertEquals(0, metadata1.getSealTimestamp());
-    //
-    //    fileSegment1.setFull();
-    //    metadata1 = metadataStore.updateFileSegment(fileSegment1);
-    //    Assert.assertEquals(1000, metadata1.getSize());
-    //    Assert.assertEquals(0, metadata1.getSealTimestamp());
-    //
-    //    fileSegment1.commit();
-    //    metadata1 = metadataStore.updateFileSegment(fileSegment1);
-    //    Assert.assertEquals(1000 + TieredCommitLog.CODA_SIZE, metadata1.getSize());
-    //    Assert.assertTrue(metadata1.getSealTimestamp() > 0);
-    //
-    //    MemoryFileSegment fileSegment2 = new MemoryFileSegment(FileSegmentType.COMMIT_LOG,
-    //        mq0, 1100, storeConfig);
-    //    metadataStore.updateFileSegment(fileSegment2);
-    //    List<FileSegmentMetadata> list = new ArrayList<>();
-    //    //metadataStore.iterateFileSegment(FileSegmentType.COMMIT_LOG, mq0.getTopic(), mq0.getQueueId(), list::add);
-    //    Assert.assertEquals(2, list.size());
-    //    Assert.assertEquals(100, list.get(0).getBaseOffset());
-    //    Assert.assertEquals(1100, list.get(1).getBaseOffset());
-    //
-    //    Assert.assertNotNull(metadataStore.getFileSegment(fileSegment1));
-    //    metadataStore.deleteFileSegment(fileSegment1.getPath());
-    //    Assert.assertNull(metadataStore.getFileSegment(fileSegment1));
-    //}
+    private List<FileSegmentMetadata> getSegmentMetadataList(TieredMetadataStore metadataStore) {
+        List<FileSegmentMetadata> result = new ArrayList<>();
+        metadataStore.iterateFileSegment(result::add);
+        return result;
+    }
+
+    @Test
+    public void testFileSegment() {
+        MemoryFileSegment fileSegment = new MemoryFileSegment(
+            FileSegmentType.COMMIT_LOG, queue, 100, storeConfig);
+        fileSegment.initPosition(fileSegment.getSize());
+
+        TieredFileQueue fileQueue = fileQueueFactory.createQueueForCommitLog(storePath);
+        fileQueue.updateFileSegment(fileSegment);
+
+        TieredMetadataStore metadataStore = TieredStoreUtil.getMetadataStore(storeConfig);
+        FileSegmentMetadata metadata =
+            metadataStore.getFileSegment(fileSegment.getPath(), FileSegmentType.COMMIT_LOG, 100);
+        Assert.assertEquals(fileSegment.getPath(), metadata.getPath());
+        Assert.assertEquals(FileSegmentType.COMMIT_LOG, FileSegmentType.valueOf(metadata.getType()));
+        Assert.assertEquals(100, metadata.getBaseOffset());
+        Assert.assertEquals(0, metadata.getSealTimestamp());
+
+        fileSegment.setFull();
+        fileQueue.updateFileSegment(fileSegment);
+        metadata = metadataStore.getFileSegment(fileSegment.getPath(), FileSegmentType.COMMIT_LOG, 100);
+        Assert.assertEquals(1000, metadata.getSize());
+        Assert.assertEquals(0, metadata.getSealTimestamp());
+
+        fileSegment.commit();
+        fileQueue.updateFileSegment(fileSegment);
+        metadata = metadataStore.getFileSegment(fileSegment.getPath(), FileSegmentType.COMMIT_LOG, 100);
+        Assert.assertEquals(1000 + TieredCommitLog.CODA_SIZE, metadata.getSize());
+        Assert.assertTrue(metadata.getSealTimestamp() > 0);
+
+        MemoryFileSegment fileSegment2 = new MemoryFileSegment(FileSegmentType.COMMIT_LOG,
+            queue, 1100, storeConfig);
+        fileQueue.updateFileSegment(fileSegment2);
+        List<FileSegmentMetadata> list = getSegmentMetadataList(metadataStore);
+        Assert.assertEquals(2, list.size());
+        Assert.assertEquals(100, list.get(0).getBaseOffset());
+        Assert.assertEquals(1100, list.get(1).getBaseOffset());
+
+        Assert.assertNotNull(metadataStore.getFileSegment(
+            fileSegment.getPath(), fileSegment.getFileType(), fileSegment.getBaseOffset()));
+        metadataStore.deleteFileSegment(fileSegment.getPath(), fileSegment.getFileType());
+        Assert.assertEquals(0L, getSegmentMetadataList(metadataStore).size());
+    }
 
     /**
      * Test whether the file is continuous after switching to write.
@@ -158,7 +174,7 @@ public class TieredFileQueueTest {
 
     @Test
     public void testLoadFromMetadata() {
-        String filePath = storePath + File.separator + TieredStoreUtil.toPath(queue);
+        String filePath = TieredStoreUtil.toPath(queue);
         TieredFileQueue fileQueue = fileQueueFactory.createQueueForCommitLog(filePath);
 
         MemoryFileSegment fileSegment1 =
@@ -193,7 +209,7 @@ public class TieredFileQueueTest {
 
     @Test
     public void testCheckFileSize() {
-        String filePath = storePath + File.separator + TieredStoreUtil.toPath(queue);
+        String filePath = TieredStoreUtil.toPath(queue);
         TieredFileQueue tieredFileQueue = fileQueueFactory.createQueueForCommitLog(filePath);
 
         TieredFileSegment fileSegment1 = new MemoryFileSegment(
@@ -229,7 +245,7 @@ public class TieredFileQueueTest {
 
     @Test
     public void testCleanExpiredFile() {
-        String filePath = storePath + File.separator + TieredStoreUtil.toPath(queue);
+        String filePath = TieredStoreUtil.toPath(queue);
         TieredFileQueue tieredFileQueue = fileQueueFactory.createQueueForCommitLog(filePath);
 
         TieredFileSegment fileSegment1 = new MemoryFileSegment(
@@ -273,7 +289,7 @@ public class TieredFileQueueTest {
 
     @Test
     public void testRollingNewFile() {
-        String filePath = storePath + File.separator + TieredStoreUtil.toPath(queue);
+        String filePath = TieredStoreUtil.toPath(queue);
         TieredFileQueue tieredFileQueue = fileQueueFactory.createQueueForCommitLog(filePath);
 
         TieredFileSegment fileSegment1 = new MemoryFileSegment(
