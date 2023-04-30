@@ -1025,7 +1025,7 @@ public class TimerMessageStore {
         return null;
     }
 
-    private MessageExtBrokerInner convert(MessageExt messageExt, long enqueueTime, boolean needRoll) {
+    public MessageExtBrokerInner convert(MessageExt messageExt, long enqueueTime, boolean needRoll) {
         if (enqueueTime != -1) {
             MessageAccessor.putProperty(messageExt, TIMER_ENQUEUE_MS, enqueueTime + "");
         }
@@ -1042,7 +1042,7 @@ public class TimerMessageStore {
     }
 
     //0 succ; 1 fail, need retry; 2 fail, do not retry;
-    private int doPut(MessageExtBrokerInner message, boolean roll) throws Exception {
+    public int doPut(MessageExtBrokerInner message, boolean roll) throws Exception {
 
         if (!roll && null != message.getProperty(MessageConst.PROPERTY_TIMER_DEL_UNIQKEY)) {
             LOGGER.warn("Trying do put delete timer msg:[{}] roll:[{}]", message, roll);
@@ -1092,7 +1092,7 @@ public class TimerMessageStore {
         return PUT_NO_RETRY;
     }
 
-    private MessageExtBrokerInner convertMessage(MessageExt msgExt, boolean needRoll) {
+    public MessageExtBrokerInner convertMessage(MessageExt msgExt, boolean needRoll) {
         MessageExtBrokerInner msgInner = new MessageExtBrokerInner();
         msgInner.setBody(msgExt.getBody());
         msgInner.setFlag(msgExt.getFlag());

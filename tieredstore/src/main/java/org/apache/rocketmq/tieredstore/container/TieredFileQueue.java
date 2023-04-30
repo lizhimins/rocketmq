@@ -168,14 +168,17 @@ public class TieredFileQueue {
     }
 
     private FileSegmentMetadata getOrCreateFileSegmentMetadata(TieredFileSegment fileSegment) {
+
         FileSegmentMetadata metadata = tieredMetadataStore.getFileSegment(
             fileSegment.getPath(), fileSegment.getFileType(), fileSegment.getBaseOffset());
+
         if (metadata != null) {
             return metadata;
         }
 
+        // Note: file segment path may not the same as file base path, use base path here.
         metadata = new FileSegmentMetadata(
-            fileSegment.getPath(), fileSegment.getBaseOffset(), fileSegment.getFileType().getType());
+            this.filePath, fileSegment.getBaseOffset(), fileSegment.getFileType().getType());
 
         if (fileSegment.isClosed()) {
             metadata.setStatus(FileSegmentMetadata.STATUS_DELETED);
