@@ -221,18 +221,22 @@ public class TieredFileQueue {
             TieredFileSegment pre = fileSegmentList.get(i - 1);
             TieredFileSegment cur = fileSegmentList.get(i);
             if (pre.getCommitOffset() != cur.getBaseOffset()) {
-                logger.warn("TieredFileQueue#checkAndFixFileSize: file segment has incorrect size: filePath:{}, file type: {}, base offset: {}", filePath, fileType, pre.getBaseOffset());
+                logger.warn("TieredFileQueue#checkAndFixFileSize: file segment has incorrect size: " +
+                    "filePath:{}, file type: {}, base offset: {}", filePath, fileType, pre.getBaseOffset());
                 try {
                     long actualSize = pre.getSize();
                     if (pre.getBaseOffset() + actualSize != cur.getBaseOffset()) {
-                        logger.error("[Bug]TieredFileQueue#checkAndFixFileSize: file segment has incorrect size and can not fix: filePath:{}, file type: {}, base offset: {}, actual size: {}, next file offset: {}",
+                        logger.error("[Bug]TieredFileQueue#checkAndFixFileSize: " +
+                                "file segment has incorrect size and can not fix: " +
+                                "filePath:{}, file type: {}, base offset: {}, actual size: {}, next file offset: {}",
                             filePath, fileType, pre.getBaseOffset(), actualSize, cur.getBaseOffset());
                         continue;
                     }
                     pre.initPosition(actualSize);
                     this.updateFileSegment(pre);
                 } catch (Exception e) {
-                    logger.error("TieredFileQueue#checkAndFixFileSize: fix file segment size failed: filePath: {}, file type: {}, base offset: {}",
+                    logger.error("TieredFileQueue#checkAndFixFileSize: " +
+                            "fix file segment size failed: filePath: {}, file type: {}, base offset: {}",
                         filePath, fileType, pre.getBaseOffset());
                 }
             }
@@ -242,7 +246,8 @@ public class TieredFileQueue {
             TieredFileSegment lastFile = fileSegmentList.get(fileSegmentList.size() - 1);
             long lastFileSize = lastFile.getSize();
             if (lastFile.getCommitPosition() != lastFileSize) {
-                logger.warn("TieredFileQueue#checkAndFixFileSize: fix last file {} size: origin: {}, actual: {}", lastFile.getPath(), lastFile.getCommitOffset() - lastFile.getBaseOffset(), lastFileSize);
+                logger.warn("TieredFileQueue#checkAndFixFileSize: fix last file {} size: origin: {}, actual: {}",
+                    lastFile.getPath(), lastFile.getCommitOffset() - lastFile.getBaseOffset(), lastFileSize);
                 lastFile.initPosition(lastFileSize);
             }
         }
