@@ -14,7 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.rocketmq.tieredstore.container;
+package org.apache.rocketmq.tieredstore.file;
 
 import java.io.File;
 import java.io.IOException;
@@ -63,7 +63,7 @@ public class TieredIndexFile {
     private static final String COMPACT_FILE_NAME = "2222";
 
     private final TieredMessageStoreConfig storeConfig;
-    private final TieredFileQueue fileQueue;
+    private final TieredFlatFile fileQueue;
     private final int maxHashSlotNum;
     private final int maxIndexNum;
     private final int fileMaxSize;
@@ -75,7 +75,7 @@ public class TieredIndexFile {
     private final ReentrantLock curFileLock = new ReentrantLock();
     private Future<Void> inflightCompactFuture = CompletableFuture.completedFuture(null);
 
-    protected TieredIndexFile(TieredFileFactory fileQueueFactory, String filePath) throws IOException {
+    protected TieredIndexFile(TieredFileAllocator fileQueueFactory, String filePath) throws IOException {
         this.storeConfig = fileQueueFactory.getStoreConfig();
         this.fileQueue = fileQueueFactory.createQueueForIndexFile(filePath);
         if (fileQueue.getBaseOffset() == -1) {
@@ -92,7 +92,7 @@ public class TieredIndexFile {
         this.preFilepath = Paths.get(
             storeConfig.getStorePathRootDir(), INDEX_FILE_DIR_NAME, PRE_INDEX_FILE_NAME).toString();
         initFile();
-        TieredStoreExecutor.COMMON_SCHEDULED_EXECUTOR.scheduleWithFixedDelay(
+        TieredStoreExecutor.commonScheduledExecutor.scheduleWithFixedDelay(
             this::doScheduleTask, 10, 10, TimeUnit.SECONDS);
     }
 
@@ -111,7 +111,7 @@ public class TieredIndexFile {
                         rollingFile();
                     }
                     if (inflightCompactFuture.isDone() && preMappedFile != null && preMappedFile.isAvailable()) {
-                        inflightCompactFuture = TieredStoreExecutor.COMPACT_INDEX_FILE_EXECUTOR.submit(
+                        inflightCompactFuture = TieredStoreExecutor.compactIndexFileExecutor.submit(
                             new CompactTask(storeConfig, preMappedFile, fileQueue), null);
                     }
                 }
@@ -165,7 +165,7 @@ public class TieredIndexFile {
         if (preFileExists) {
             synchronized (TieredIndexFile.class) {
                 if (inflightCompactFuture.isDone()) {
-                    inflightCompactFuture = TieredStoreExecutor.COMPACT_INDEX_FILE_EXECUTOR.submit(new CompactTask(storeConfig, preMappedFile, fileQueue), null);
+                    inflightCompactFuture = TieredStoreExecutor.compactIndexFileExecutor.submit(new CompactTask(storeConfig, preMappedFile, fileQueue), null);
                 }
             }
         }
@@ -198,7 +198,7 @@ public class TieredIndexFile {
     private void tryToCompactPreFile() throws IOException {
         synchronized (TieredIndexFile.class) {
             if (inflightCompactFuture.isDone()) {
-                inflightCompactFuture = TieredStoreExecutor.COMPACT_INDEX_FILE_EXECUTOR.submit(new CompactTask(storeConfig, preMappedFile, fileQueue), null);
+                inflightCompactFuture = TieredStoreExecutor.compactIndexFileExecutor.submit(new CompactTask(storeConfig, preMappedFile, fileQueue), null);
             }
         }
     }
@@ -351,11 +351,11 @@ public class TieredIndexFile {
         private final int maxIndexNum;
         private final int fileMaxSize;
         private MappedFile originFile;
-        private TieredFileQueue fileQueue;
+        private TieredFlatFile fileQueue;
         private final MappedFile compactFile;
 
         public CompactTask(TieredMessageStoreConfig storeConfig, MappedFile originFile,
-            TieredFileQueue fileQueue) throws IOException {
+            TieredFlatFile fileQueue) throws IOException {
             this.storeConfig = storeConfig;
             this.maxHashSlotNum = storeConfig.getTieredStoreIndexFileMaxHashSlotNum();
             this.maxIndexNum = storeConfig.getTieredStoreIndexFileMaxIndexNum();

@@ -21,8 +21,8 @@ import java.util.concurrent.CompletableFuture;
 import org.apache.rocketmq.common.message.MessageQueue;
 import org.apache.rocketmq.tieredstore.common.FileSegmentType;
 import org.apache.rocketmq.tieredstore.common.TieredMessageStoreConfig;
-import org.apache.rocketmq.tieredstore.container.TieredCommitLog;
-import org.apache.rocketmq.tieredstore.container.TieredConsumeQueue;
+import org.apache.rocketmq.tieredstore.file.TieredCommitLog;
+import org.apache.rocketmq.tieredstore.file.TieredConsumeQueue;
 import org.apache.rocketmq.tieredstore.mock.MemoryFileSegment;
 import org.apache.rocketmq.tieredstore.util.MessageBufferUtil;
 import org.apache.rocketmq.tieredstore.util.MessageBufferUtilTest;
@@ -62,7 +62,7 @@ public class TieredFileSegmentTest {
         segment.commit();
         Assert.assertFalse(segment.needCommit());
         Assert.assertEquals(segment.getMaxOffset(), segment.getCommitOffset());
-        Assert.assertEquals(queueOffset, segment.getCommitMsgQueueOffset());
+        Assert.assertEquals(queueOffset, segment.getDispatchCommitOffset());
 
         ByteBuffer msg1 = segment.read(lastSize, MessageBufferUtilTest.MSG_LEN);
         Assert.assertEquals(baseOffset + lastSize, MessageBufferUtil.getCommitLogOffset(msg1));

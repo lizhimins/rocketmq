@@ -192,7 +192,7 @@ public class PosixFileSegment extends TieredFileSegment {
 
         CompletableFuture<Boolean> future = new CompletableFuture<>();
         try {
-            TieredStoreExecutor.COMMIT_EXECUTOR.execute(() -> {
+            TieredStoreExecutor.commitExecutor.execute(() -> {
                 try {
                     byte[] byteArray = ByteStreams.toByteArray(inputStream);
                     if (byteArray.length != length) {

@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.rocketmq.tieredstore.container;
+package org.apache.rocketmq.tieredstore.file;
 
 import org.apache.commons.lang3.StringUtils;
 import org.apache.rocketmq.common.message.MessageConst;
@@ -26,19 +26,19 @@ import org.apache.rocketmq.tieredstore.metadata.QueueMetadata;
 import org.apache.rocketmq.tieredstore.metadata.TopicMetadata;
 import org.apache.rocketmq.tieredstore.util.TieredStoreUtil;
 
-public class TieredFileChunkWithQueue extends TieredFileChunk {
+public class CompositeQueueFlatFile extends CompositeFlatFile {
 
     private final MessageQueue messageQueue;
     private long topicSequenceNumber;
     private QueueMetadata queueMetadata;
     private final TieredIndexFile indexFile;
 
-    public TieredFileChunkWithQueue(TieredFileFactory fileQueueFactory, MessageQueue messageQueue) {
+    public CompositeQueueFlatFile(TieredFileAllocator fileQueueFactory, MessageQueue messageQueue) {
         super(fileQueueFactory, TieredStoreUtil.toPath(messageQueue));
         this.messageQueue = messageQueue;
         this.recoverTopicMetadata();
         super.recoverMetadata();
-        this.indexFile = TieredContainerManager.getIndexFile(storeConfig);
+        this.indexFile = TieredFlatFileManager.getIndexFile(storeConfig);
     }
 
     @Override
@@ -75,7 +75,7 @@ public class TieredFileChunkWithQueue extends TieredFileChunk {
             queueMetadata.setMaxOffset(consumeQueue.getCommitOffset() / TieredConsumeQueue.CONSUME_QUEUE_STORE_UNIT_SIZE);
             metadataStore.updateQueue(queueMetadata);
         } catch (Exception e) {
-            LOGGER.error("TieredFileChunk#flushMetadata: update queue metadata failed: topic: {}, queue: {}", messageQueue.getTopic(), messageQueue.getQueueId(), e);
+            LOGGER.error("CompositeFlatFile#flushMetadata: update queue metadata failed: topic: {}, queue: {}", messageQueue.getTopic(), messageQueue.getQueueId(), e);
         }
     }
 

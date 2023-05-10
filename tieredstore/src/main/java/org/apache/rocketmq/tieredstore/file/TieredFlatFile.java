@@ -14,7 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.rocketmq.tieredstore.container;
+package org.apache.rocketmq.tieredstore.file;
 
 import com.google.common.annotations.VisibleForTesting;
 import java.nio.ByteBuffer;
@@ -39,11 +39,11 @@ import org.apache.rocketmq.tieredstore.exception.TieredStoreErrorCode;
 import org.apache.rocketmq.tieredstore.exception.TieredStoreException;
 import org.apache.rocketmq.tieredstore.metadata.FileSegmentMetadata;
 import org.apache.rocketmq.tieredstore.metadata.TieredMetadataStore;
-import org.apache.rocketmq.tieredstore.provider.FileSegmentFactory;
+import org.apache.rocketmq.tieredstore.provider.FileSegmentAllocator;
 import org.apache.rocketmq.tieredstore.provider.TieredFileSegment;
 import org.apache.rocketmq.tieredstore.util.TieredStoreUtil;
 
-public class TieredFileQueue {
+public class TieredFlatFile {
 
     private static final Logger logger = LoggerFactory.getLogger(TieredStoreUtil.TIERED_STORE_LOGGER_NAME);
 
@@ -52,21 +52,21 @@ public class TieredFileQueue {
     private final TieredMetadataStore tieredMetadataStore;
 
     private volatile long baseOffset = -1L;
-    private final FileSegmentFactory fileSegmentFactory;
+    private final FileSegmentAllocator fileSegmentAllocator;
     private final List<TieredFileSegment> fileSegmentList;
     private final List<TieredFileSegment> needCommitFileSegmentList;
     private final ReentrantReadWriteLock fileSegmentLock;
 
-    public TieredFileQueue(FileSegmentFactory fileSegmentFactory,
+    public TieredFlatFile(FileSegmentAllocator fileSegmentAllocator,
         FileSegmentType fileType, String filePath) {
 
         this.fileType = fileType;
         this.filePath = filePath;
         this.fileSegmentList = new LinkedList<>();
         this.fileSegmentLock = new ReentrantReadWriteLock();
-        this.fileSegmentFactory = fileSegmentFactory;
+        this.fileSegmentAllocator = fileSegmentAllocator;
         this.needCommitFileSegmentList = new CopyOnWriteArrayList<>();
-        this.tieredMetadataStore = TieredStoreUtil.getMetadataStore(fileSegmentFactory.getStoreConfig());
+        this.tieredMetadataStore = TieredStoreUtil.getMetadataStore(fileSegmentAllocator.getStoreConfig());
         this.recoverMetadata();
 
         if (fileType != FileSegmentType.INDEX) {
@@ -121,13 +121,13 @@ public class TieredFileQueue {
         }
     }
 
-    public long getCommitMsgQueueOffset() {
+    public long getDispatchCommitOffset() {
         fileSegmentLock.readLock().lock();
         try {
             if (fileSegmentList.isEmpty()) {
                 return 0;
             }
-            return fileSegmentList.get(fileSegmentList.size() - 1).getCommitMsgQueueOffset();
+            return fileSegmentList.get(fileSegmentList.size() - 1).getDispatchCommitOffset();
         } finally {
             fileSegmentLock.readLock().unlock();
         }
@@ -221,12 +221,12 @@ public class TieredFileQueue {
             TieredFileSegment pre = fileSegmentList.get(i - 1);
             TieredFileSegment cur = fileSegmentList.get(i);
             if (pre.getCommitOffset() != cur.getBaseOffset()) {
-                logger.warn("TieredFileQueue#checkAndFixFileSize: file segment has incorrect size: " +
+                logger.warn("TieredFlatFile#checkAndFixFileSize: file segment has incorrect size: " +
                     "filePath:{}, file type: {}, base offset: {}", filePath, fileType, pre.getBaseOffset());
                 try {
                     long actualSize = pre.getSize();
                     if (pre.getBaseOffset() + actualSize != cur.getBaseOffset()) {
-                        logger.error("[Bug]TieredFileQueue#checkAndFixFileSize: " +
+                        logger.error("[Bug]TieredFlatFile#checkAndFixFileSize: " +
                                 "file segment has incorrect size and can not fix: " +
                                 "filePath:{}, file type: {}, base offset: {}, actual size: {}, next file offset: {}",
                             filePath, fileType, pre.getBaseOffset(), actualSize, cur.getBaseOffset());
@@ -235,7 +235,7 @@ public class TieredFileQueue {
                     pre.initPosition(actualSize);
                     this.updateFileSegment(pre);
                 } catch (Exception e) {
-                    logger.error("TieredFileQueue#checkAndFixFileSize: " +
+                    logger.error("TieredFlatFile#checkAndFixFileSize: " +
                             "fix file segment size failed: filePath: {}, file type: {}, base offset: {}",
                         filePath, fileType, pre.getBaseOffset());
                 }
@@ -246,7 +246,7 @@ public class TieredFileQueue {
             TieredFileSegment lastFile = fileSegmentList.get(fileSegmentList.size() - 1);
             long lastFileSize = lastFile.getSize();
             if (lastFile.getCommitPosition() != lastFileSize) {
-                logger.warn("TieredFileQueue#checkAndFixFileSize: fix last file {} size: origin: {}, actual: {}",
+                logger.warn("TieredFlatFile#checkAndFixFileSize: fix last file {} size: origin: {}, actual: {}",
                     lastFile.getPath(), lastFile.getCommitOffset() - lastFile.getBaseOffset(), lastFileSize);
                 lastFile.initPosition(lastFileSize);
             }
@@ -256,7 +256,7 @@ public class TieredFileQueue {
     private TieredFileSegment newSegment(FileSegmentType fileType, long baseOffset, boolean createMetadata) {
         TieredFileSegment segment = null;
         try {
-            segment = fileSegmentFactory.createSegment(fileType, filePath, baseOffset);
+            segment = fileSegmentAllocator.createSegment(fileType, filePath, baseOffset);
             if (fileType != FileSegmentType.INDEX) {
                 segment.createFile();
             }
@@ -541,7 +541,7 @@ public class TieredFileQueue {
     public CompletableFuture<ByteBuffer> readAsync(long offset, int length) {
         int index = getSegmentIndexByOffset(offset);
         if (index == -1) {
-            String errorMsg = String.format("TieredFileQueue#readAsync: offset is illegal, " +
+            String errorMsg = String.format("TieredFlatFile#readAsync: offset is illegal, " +
                     "file path: %s, file type: %s, start: %d, length: %d, file num: %d",
                 filePath, fileType, offset, length, fileSegmentList.size());
             logger.error(errorMsg);
@@ -581,7 +581,7 @@ public class TieredFileQueue {
                 try {
                     this.updateFileSegment(fileSegment);
                 } catch (Exception e) {
-                    logger.error("TieredFileQueue#destroy: mark file segment: {} is deleted failed", fileSegment.getPath(), e);
+                    logger.error("TieredFlatFile#destroy: mark file segment: {} is deleted failed", fileSegment.getPath(), e);
                 }
                 fileSegment.destroyFile();
             }

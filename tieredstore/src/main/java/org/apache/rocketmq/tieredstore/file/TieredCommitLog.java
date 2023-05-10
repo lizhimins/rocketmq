@@ -14,7 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.rocketmq.tieredstore.container;
+package org.apache.rocketmq.tieredstore.file;
 
 import com.google.common.annotations.VisibleForTesting;
 import java.nio.ByteBuffer;
@@ -40,15 +40,15 @@ public class TieredCommitLog {
     public static final int BLANK_MAGIC_CODE = 0xBBCCDDEE ^ 1880681586 + 8;
 
     private final TieredMessageStoreConfig storeConfig;
-    private final TieredFileQueue fileQueue;
+    private final TieredFlatFile fileQueue;
 
-    public TieredCommitLog(TieredFileFactory fileQueueFactory, String filePath) {
+    public TieredCommitLog(TieredFileAllocator fileQueueFactory, String filePath) {
         this.storeConfig = fileQueueFactory.getStoreConfig();
         this.fileQueue = fileQueueFactory.createQueueForCommitLog(filePath);
     }
 
     @VisibleForTesting
-    public TieredFileQueue getFileQueue() {
+    public TieredFlatFile getFileQueue() {
         return fileQueue;
     }
 
@@ -60,8 +60,8 @@ public class TieredCommitLog {
         return fileQueue.getCommitOffset();
     }
 
-    public long getCommitMsgQueueOffset() {
-        return fileQueue.getCommitMsgQueueOffset();
+    public long getDispatchCommitOffset() {
+        return fileQueue.getDispatchCommitOffset();
     }
 
     public long getMaxOffset() {

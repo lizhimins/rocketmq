@@ -25,7 +25,7 @@ import org.apache.rocketmq.tieredstore.common.TieredMessageStoreConfig;
 import org.apache.rocketmq.tieredstore.metadata.TieredMetadataStore;
 import org.apache.rocketmq.tieredstore.util.TieredStoreUtil;
 
-public class FileSegmentFactory {
+public class FileSegmentAllocator {
 
     private static final Logger log = LoggerFactory.getLogger(TieredStoreUtil.TIERED_STORE_LOGGER_NAME);
 
@@ -33,7 +33,7 @@ public class FileSegmentFactory {
 
     private final Constructor<? extends TieredFileSegment> fileSegmentConstructor;
 
-    public FileSegmentFactory(
+    public FileSegmentAllocator(
         TieredMessageStoreConfig storeConfig) throws ClassNotFoundException, NoSuchMethodException {
         this.storeConfig = storeConfig;
         Class<? extends TieredFileSegment> clazz =

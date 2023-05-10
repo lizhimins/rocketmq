@@ -22,8 +22,6 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.Random;
-import java.util.UUID;
-import org.apache.commons.io.FileUtils;
 import org.apache.rocketmq.common.message.MessageQueue;
 import org.apache.rocketmq.tieredstore.TieredStoreTestUtil;
 import org.apache.rocketmq.tieredstore.common.FileSegmentType;
@@ -36,10 +34,10 @@ import org.junit.Before;
 import org.junit.Test;
 
 public class PosixFileSegmentTest {
+
+    private final String storePath = TieredStoreTestUtil.getRandomStorePath();
     private TieredMessageStoreConfig storeConfig;
     private MessageQueue mq;
-
-    private final String storePath = FileUtils.getTempDirectory() + File.separator + "tiered_store_unit_test" + UUID.randomUUID();
 
     @Before
     public void setUp() {

@@ -14,7 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.rocketmq.tieredstore.container;
+package org.apache.rocketmq.tieredstore.file;
 
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
@@ -46,7 +46,7 @@ import org.apache.rocketmq.tieredstore.util.CQItemBufferUtil;
 import org.apache.rocketmq.tieredstore.util.MessageBufferUtil;
 import org.apache.rocketmq.tieredstore.util.TieredStoreUtil;
 
-public abstract class TieredFileChunk implements FileChunk {
+public class CompositeFlatFile implements CompositeAccess {
 
     protected static final Logger LOGGER = LoggerFactory.getLogger(TieredStoreUtil.TIERED_STORE_LOGGER_NAME);
 
@@ -70,7 +70,7 @@ public abstract class TieredFileChunk implements FileChunk {
     protected final Cache<String, Long> groupOffsetCache;
     protected final ConcurrentMap<InFlightRequestKey, InFlightRequestFuture> inFlightRequestMap;
 
-    public TieredFileChunk(TieredFileFactory fileQueueFactory, String filePath) {
+    public CompositeFlatFile(TieredFileAllocator fileQueueFactory, String filePath) {
         this.filePath = filePath;
         this.storeConfig = fileQueueFactory.getStoreConfig();
         this.readAheadFactor = this.storeConfig.getReadAheadMinFactor();
@@ -122,6 +122,11 @@ public abstract class TieredFileChunk implements FileChunk {
         return consumeQueue.getBaseOffset();
     }
 
+    @Override
+    public long getCommitLogDispatchCommitOffset() {
+        return commitLog.getDispatchCommitOffset();
+    }
+
     public long getConsumeQueueMinOffset() {
         return consumeQueue.getMinOffset() / TieredConsumeQueue.CONSUME_QUEUE_STORE_UNIT_SIZE;
     }
@@ -144,15 +149,15 @@ public abstract class TieredFileChunk implements FileChunk {
 
     @Override
     public CompletableFuture<ByteBuffer> getMessageAsync(long queueOffset) {
-        return readConsumeQueue(queueOffset).thenComposeAsync(cqBuffer -> {
+        return getConsumeQueueAsync(queueOffset).thenComposeAsync(cqBuffer -> {
             long commitLogOffset = CQItemBufferUtil.getCommitLogOffset(cqBuffer);
             int length = CQItemBufferUtil.getSize(cqBuffer);
-            return readCommitLog(commitLogOffset, length);
+            return getCommitLogAsync(commitLogOffset, length);
         });
     }
 
     @Override
-    public long binarySearchInQueueByTime(long timestamp, BoundaryType boundaryType) {
+    public long getOffsetInConsumeQueueByTime(long timestamp, BoundaryType boundaryType) {
         Pair<Long, Long> pair = consumeQueue.getQueueOffsetInFileByTime(timestamp, boundaryType);
         long minQueueOffset = pair.getLeft();
         long maxQueueOffset = pair.getRight();
@@ -180,7 +185,7 @@ public abstract class TieredFileChunk implements FileChunk {
                 case UPPER:
                     return maxQueueOffset;
                 default:
-                    LOGGER.warn("TieredFileChunk#getQueueOffsetByTime: unknown boundary boundaryType");
+                    LOGGER.warn("CompositeFlatFile#getQueueOffsetByTime: unknown boundary boundaryType");
                     break;
             }
         }
@@ -195,7 +200,7 @@ public abstract class TieredFileChunk implements FileChunk {
                 case UPPER:
                     return 0L;
                 default:
-                    LOGGER.warn("TieredFileChunk#getQueueOffsetByTime: unknown boundary boundaryType");
+                    LOGGER.warn("CompositeFlatFile#getQueueOffsetByTime: unknown boundary boundaryType");
                     break;
             }
         }
@@ -260,7 +265,7 @@ public abstract class TieredFileChunk implements FileChunk {
                     offset = previousAttempt;
                     break;
                 default:
-                    LOGGER.warn("TieredFileChunk#getQueueOffsetByTime: unknown boundary boundaryType");
+                    LOGGER.warn("CompositeFlatFile#getQueueOffsetByTime: unknown boundary boundaryType");
                     break;
             }
         } else {
@@ -291,7 +296,7 @@ public abstract class TieredFileChunk implements FileChunk {
                     break;
                 }
                 default: {
-                    LOGGER.warn("TieredFileChunk#getQueueOffsetByTime: unknown boundary boundaryType");
+                    LOGGER.warn("CompositeFlatFile#getQueueOffsetByTime: unknown boundary boundaryType");
                     break;
                 }
             }
@@ -305,11 +310,6 @@ public abstract class TieredFileChunk implements FileChunk {
             consumeQueue.setBaseOffset(offset * TieredConsumeQueue.CONSUME_QUEUE_STORE_UNIT_SIZE);
         }
         dispatchOffset = offset;
-    }
-
-    @Override
-    public long getBuildCQMaxOffset() {
-        return commitLog.getCommitMsgQueueOffset();
     }
 
     @Override
@@ -355,17 +355,17 @@ public abstract class TieredFileChunk implements FileChunk {
     }
 
     @Override
-    public CompletableFuture<ByteBuffer> readCommitLog(long offset, int length) {
+    public CompletableFuture<ByteBuffer> getCommitLogAsync(long offset, int length) {
         return commitLog.readAsync(offset, length);
     }
 
     @Override
-    public CompletableFuture<ByteBuffer> readConsumeQueue(long queueOffset) {
-        return readConsumeQueue(queueOffset, 1);
+    public CompletableFuture<ByteBuffer> getConsumeQueueAsync(long queueOffset) {
+        return getConsumeQueueAsync(queueOffset, 1);
     }
 
     @Override
-    public CompletableFuture<ByteBuffer> readConsumeQueue(long queueOffset, int count) {
+    public CompletableFuture<ByteBuffer> getConsumeQueueAsync(long queueOffset, int count) {
         return consumeQueue.readAsync(queueOffset * TieredConsumeQueue.CONSUME_QUEUE_STORE_UNIT_SIZE,
             count * TieredConsumeQueue.CONSUME_QUEUE_STORE_UNIT_SIZE);
     }
@@ -473,7 +473,7 @@ public abstract class TieredFileChunk implements FileChunk {
         if (getClass() != obj.getClass()) {
             return false;
         }
-        return StringUtils.equals(filePath, ((TieredFileChunk) obj).filePath);
+        return StringUtils.equals(filePath, ((CompositeFlatFile) obj).filePath);
     }
 
     public void shutdown() {
@@ -490,7 +490,7 @@ public abstract class TieredFileChunk implements FileChunk {
             metadataStore.deleteFileSegment(filePath, FileSegmentType.COMMIT_LOG);
             metadataStore.deleteFileSegment(filePath, FileSegmentType.CONSUME_QUEUE);
         } catch (Exception e) {
-            LOGGER.error("TieredFileChunk#destroy: clean metadata failed: ", e);
+            LOGGER.error("CompositeFlatFile#destroy: clean metadata failed: ", e);
         }
     }
 }

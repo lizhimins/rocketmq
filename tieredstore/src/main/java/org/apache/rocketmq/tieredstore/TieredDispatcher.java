@@ -43,8 +43,8 @@ import org.apache.rocketmq.tieredstore.common.AppendResult;
 import org.apache.rocketmq.tieredstore.common.FileSegmentType;
 import org.apache.rocketmq.tieredstore.common.TieredMessageStoreConfig;
 import org.apache.rocketmq.tieredstore.common.TieredStoreExecutor;
-import org.apache.rocketmq.tieredstore.container.TieredContainerManager;
-import org.apache.rocketmq.tieredstore.container.TieredFileChunkWithQueue;
+import org.apache.rocketmq.tieredstore.file.CompositeQueueFlatFile;
+import org.apache.rocketmq.tieredstore.file.TieredFlatFileManager;
 import org.apache.rocketmq.tieredstore.metrics.TieredStoreMetricsConstant;
 import org.apache.rocketmq.tieredstore.metrics.TieredStoreMetricsManager;
 import org.apache.rocketmq.tieredstore.util.CQItemBufferUtil;
@@ -56,28 +56,28 @@ public class TieredDispatcher extends ServiceThread implements CommitLogDispatch
     private static final Logger logger = LoggerFactory.getLogger(TieredStoreUtil.TIERED_STORE_LOGGER_NAME);
 
     private final MessageStore defaultStore;
-    private final TieredContainerManager tieredContainerManager;
+    private final TieredFlatFileManager tieredFlatFileManager;
     private final TieredMessageStoreConfig storeConfig;
     private final String brokerName;
 
-    private ConcurrentMap<TieredFileChunkWithQueue, List<DispatchRequest>> dispatchRequestReadMap;
-    private ConcurrentMap<TieredFileChunkWithQueue, List<DispatchRequest>> dispatchRequestWriteMap;
+    private ConcurrentMap<CompositeQueueFlatFile, List<DispatchRequest>> dispatchRequestReadMap;
+    private ConcurrentMap<CompositeQueueFlatFile, List<DispatchRequest>> dispatchRequestWriteMap;
     private final ReentrantLock dispatchRequestListLock;
 
     public TieredDispatcher(MessageStore defaultStore, TieredMessageStoreConfig storeConfig) {
         this.defaultStore = defaultStore;
         this.storeConfig = storeConfig;
         this.brokerName = storeConfig.getBrokerName();
-        this.tieredContainerManager = TieredContainerManager.getInstance(storeConfig);
+        this.tieredFlatFileManager = TieredFlatFileManager.getInstance(storeConfig);
         this.dispatchRequestReadMap = new ConcurrentHashMap<>();
         this.dispatchRequestWriteMap = new ConcurrentHashMap<>();
         this.dispatchRequestListLock = new ReentrantLock();
 
-        TieredStoreExecutor.COMMON_SCHEDULED_EXECUTOR.scheduleWithFixedDelay(() -> {
+        TieredStoreExecutor.commonScheduledExecutor.scheduleWithFixedDelay(() -> {
             try {
-                for (TieredFileChunkWithQueue container : tieredContainerManager.getAllMQContainer()) {
+                for (CompositeQueueFlatFile container : tieredFlatFileManager.getAllMQContainer()) {
                     if (!container.getFileChunkLock().isLocked()) {
-                        TieredStoreExecutor.DISPATCH_EXECUTOR.execute(() -> {
+                        TieredStoreExecutor.dispatchExecutor.execute(() -> {
                             try {
                                 dispatchByMQContainer(container);
                             } catch (Throwable throwable) {
@@ -90,9 +90,9 @@ public class TieredDispatcher extends ServiceThread implements CommitLogDispatch
             }
         }, 30, 10, TimeUnit.SECONDS);
 
-        TieredStoreExecutor.COMMON_SCHEDULED_EXECUTOR.scheduleWithFixedDelay(() -> {
+        TieredStoreExecutor.commonScheduledExecutor.scheduleWithFixedDelay(() -> {
             try {
-                for (TieredFileChunkWithQueue container : tieredContainerManager.getAllMQContainer()) {
+                for (CompositeQueueFlatFile container : tieredFlatFileManager.getAllMQContainer()) {
                     container.persistMetadata();
                 }
             } catch (Throwable e) {
@@ -111,8 +111,8 @@ public class TieredDispatcher extends ServiceThread implements CommitLogDispatch
             return;
         }
 
-        TieredFileChunkWithQueue container =
-            tieredContainerManager.getOrCreateMQContainer(new MessageQueue(topic, brokerName, request.getQueueId()));
+        CompositeQueueFlatFile container =
+            tieredFlatFileManager.getOrCreateMQContainer(new MessageQueue(topic, brokerName, request.getQueueId()));
         if (container == null) {
             logger.error("[Bug]TieredDispatcher#dispatch: dispatch failed, can not create container: topic: {}, queueId: {}", request.getTopic(), request.getQueueId());
             return;
@@ -182,7 +182,7 @@ public class TieredDispatcher extends ServiceThread implements CommitLogDispatch
         } else {
             if (!container.getFileChunkLock().isLocked()) {
                 try {
-                    TieredStoreExecutor.DISPATCH_EXECUTOR.execute(() -> {
+                    TieredStoreExecutor.dispatchExecutor.execute(() -> {
                         try {
                             dispatchByMQContainer(container);
                         } catch (Throwable throwable) {
@@ -195,7 +195,7 @@ public class TieredDispatcher extends ServiceThread implements CommitLogDispatch
         }
     }
 
-    protected void dispatchByMQContainer(TieredFileChunkWithQueue container) {
+    protected void dispatchByMQContainer(CompositeQueueFlatFile container) {
         if (stopped) {
             return;
         }
@@ -283,7 +283,7 @@ public class TieredDispatcher extends ServiceThread implements CommitLogDispatch
         }
         // If this queue dispatch falls too far, dispatch again immediately
         if (container.getDispatchOffset() < maxOffsetInQueue && !container.getFileChunkLock().isLocked()) {
-            TieredStoreExecutor.DISPATCH_EXECUTOR.execute(() -> {
+            TieredStoreExecutor.dispatchExecutor.execute(() -> {
                 try {
                     dispatchByMQContainer(container);
                 } catch (Throwable throwable) {
@@ -293,7 +293,7 @@ public class TieredDispatcher extends ServiceThread implements CommitLogDispatch
         }
     }
 
-    public void handleAppendCommitLogResult(AppendResult result, TieredFileChunkWithQueue container,
+    public void handleAppendCommitLogResult(AppendResult result, CompositeQueueFlatFile container,
         long queueOffset,
         long dispatchOffset, long newCommitLogOffset, int size, long tagCode, ByteBuffer message) {
         MessageQueue mq = container.getMessageQueue();
@@ -333,7 +333,7 @@ public class TieredDispatcher extends ServiceThread implements CommitLogDispatch
             dispatchRequest.setOffsetId(MessageBufferUtil.getOffsetId(message));
             List<DispatchRequest> requestList = dispatchRequestWriteMap.computeIfAbsent(container, k -> new ArrayList<>());
             requestList.add(dispatchRequest);
-            if (requestList.get(0).getConsumeQueueOffset() >= container.getBuildCQMaxOffset()) {
+            if (requestList.get(0).getConsumeQueueOffset() >= container.getConsumeQueueMaxOffset()) {
                 wakeup();
             }
         } finally {
@@ -382,8 +382,8 @@ public class TieredDispatcher extends ServiceThread implements CommitLogDispatch
         Map<MessageQueue, Long> cqMetricsMap = new HashMap<>();
         Map<MessageQueue, Long> ifMetricsMap = new HashMap<>();
 
-        for (Map.Entry<TieredFileChunkWithQueue, List<DispatchRequest>> entry : dispatchRequestReadMap.entrySet()) {
-            TieredFileChunkWithQueue container = entry.getKey();
+        for (Map.Entry<CompositeQueueFlatFile, List<DispatchRequest>> entry : dispatchRequestReadMap.entrySet()) {
+            CompositeQueueFlatFile container = entry.getKey();
             List<DispatchRequest> requestList = entry.getValue();
             if (container.isClosed()) {
                 requestList.clear();
@@ -400,7 +400,7 @@ public class TieredDispatcher extends ServiceThread implements CommitLogDispatch
                 }
 
                 // wait uploading commitLog
-                if (container.getBuildCQMaxOffset() < request.getConsumeQueueOffset()) {
+                if (container.getCommitLogDispatchCommitOffset() < request.getConsumeQueueOffset()) {
                     break;
                 }
 

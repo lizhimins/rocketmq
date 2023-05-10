@@ -14,7 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.rocketmq.tieredstore.container;
+package org.apache.rocketmq.tieredstore.file;
 
 import com.google.common.annotations.VisibleForTesting;
 import java.nio.ByteBuffer;
@@ -38,9 +38,9 @@ public class TieredConsumeQueue {
      */
     public static final int CONSUME_QUEUE_STORE_UNIT_SIZE = 8 + 4 + 8;
 
-    private final TieredFileQueue fileQueue;
+    private final TieredFlatFile fileQueue;
 
-    public TieredConsumeQueue(TieredFileFactory fileQueueFactory, String filePath) {
+    public TieredConsumeQueue(TieredFileAllocator fileQueueFactory, String filePath) {
         this.fileQueue = fileQueueFactory.createQueueForConsumeQueue(filePath);
     }
 
@@ -49,7 +49,7 @@ public class TieredConsumeQueue {
     }
 
     @VisibleForTesting
-    public TieredFileQueue getFileQueue() {
+    public TieredFlatFile getFileQueue() {
         return fileQueue;
     }
 

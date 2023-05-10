@@ -14,13 +14,10 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.rocketmq.tieredstore.container;
+package org.apache.rocketmq.tieredstore.file;
 
-import java.io.File;
 import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.util.UUID;
-import org.apache.commons.io.FileUtils;
 import org.apache.rocketmq.common.message.MessageQueue;
 import org.apache.rocketmq.store.ConsumeQueue;
 import org.apache.rocketmq.store.DispatchRequest;
@@ -29,6 +26,7 @@ import org.apache.rocketmq.tieredstore.common.AppendResult;
 import org.apache.rocketmq.tieredstore.common.BoundaryType;
 import org.apache.rocketmq.tieredstore.common.FileSegmentType;
 import org.apache.rocketmq.tieredstore.common.TieredMessageStoreConfig;
+import org.apache.rocketmq.tieredstore.common.TieredStoreExecutor;
 import org.apache.rocketmq.tieredstore.metadata.QueueMetadata;
 import org.apache.rocketmq.tieredstore.metadata.TieredMetadataStore;
 import org.apache.rocketmq.tieredstore.mock.MemoryFileSegment;
@@ -40,14 +38,12 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
-public class TieredFileChunkWithQueueTest {
+public class CompositeQueueFlatFileTest {
 
-    private final String storePath =
-        FileUtils.getTempDirectory() + File.separator + "tiered_store_unit_test" + UUID.randomUUID();
-
+    private final String storePath = TieredStoreTestUtil.getRandomStorePath();
     private TieredMessageStoreConfig storeConfig;
     private TieredMetadataStore metadataStore;
-    private TieredFileFactory tieredFileFactory;
+    private TieredFileAllocator tieredFileAllocator;
     private MessageQueue mq;
 
     @Before
@@ -58,9 +54,10 @@ public class TieredFileChunkWithQueueTest {
         storeConfig.setTieredBackendServiceProvider("org.apache.rocketmq.tieredstore.mock.MemoryFileSegment");
         storeConfig.setCommitLogRollingInterval(0);
         storeConfig.setCommitLogRollingMinimumSize(999);
-        mq = new MessageQueue("TieredFileChunkWithQueueTest", storeConfig.getBrokerName(), 0);
+        mq = new MessageQueue("CompositeQueueFlatFileTest", storeConfig.getBrokerName(), 0);
         metadataStore = TieredStoreUtil.getMetadataStore(storeConfig);
-        tieredFileFactory = new TieredFileFactory(storeConfig);
+        tieredFileAllocator = new TieredFileAllocator(storeConfig);
+        TieredStoreExecutor.init();
     }
 
     @After
@@ -68,18 +65,19 @@ public class TieredFileChunkWithQueueTest {
         TieredStoreTestUtil.destroyContainerManager();
         TieredStoreTestUtil.destroyMetadataStore();
         TieredStoreTestUtil.destroyTempDir(storePath);
+        TieredStoreExecutor.shutdown();
     }
 
     @Test
     public void testAppendCommitLog() {
-        TieredFileChunkWithQueue container = new TieredFileChunkWithQueue(tieredFileFactory, mq);
+        CompositeQueueFlatFile container = new CompositeQueueFlatFile(tieredFileAllocator, mq);
         ByteBuffer message = MessageBufferUtilTest.buildMessageBuffer();
         AppendResult result = container.appendCommitLog(message);
         Assert.assertEquals(AppendResult.OFFSET_INCORRECT, result);
         Assert.assertEquals(0L, container.commitLog.getFileQueue().getFileToWrite().getAppendPosition());
         Assert.assertEquals(0L, container.commitLog.getFileQueue().getFileToWrite().getCommitPosition());
 
-        container = new TieredFileChunkWithQueue(tieredFileFactory, mq);
+        container = new CompositeQueueFlatFile(tieredFileAllocator, mq);
         container.initOffset(6);
         result = container.appendCommitLog(message);
         Assert.assertEquals(AppendResult.SUCCESS, result);
@@ -89,8 +87,7 @@ public class TieredFileChunkWithQueueTest {
         Assert.assertEquals(AppendResult.SUCCESS, result);
 
         container.commit(true);
-
-        Assert.assertEquals(7, container.getBuildCQMaxOffset());
+        Assert.assertEquals(7, container.getCommitLogDispatchCommitOffset());
 
         container.cleanExpiredFile(0);
         container.destroyExpiredFile();
@@ -98,7 +95,7 @@ public class TieredFileChunkWithQueueTest {
 
     @Test
     public void testAppendConsumeQueue() {
-        TieredFileChunkWithQueue container = new TieredFileChunkWithQueue(tieredFileFactory, mq);
+        CompositeQueueFlatFile container = new CompositeQueueFlatFile(tieredFileAllocator, mq);
         DispatchRequest request = new DispatchRequest(
             mq.getTopic(), mq.getQueueId(), 51, 2, 3, 4);
         AppendResult result = container.appendConsumeQueue(request);
@@ -111,7 +108,7 @@ public class TieredFileChunkWithQueueTest {
         container.consumeQueue.getFileQueue().getFileToWrite();
 
         // Recreate will load metadata and build consume queue
-        container = new TieredFileChunkWithQueue(tieredFileFactory, mq);
+        container = new CompositeQueueFlatFile(tieredFileAllocator, mq);
         segment.initPosition(ConsumeQueue.CQ_STORE_UNIT_SIZE);
         result = container.appendConsumeQueue(request);
         Assert.assertEquals(AppendResult.SUCCESS, result);
@@ -134,10 +131,10 @@ public class TieredFileChunkWithQueueTest {
         // replace provider, need new factory again
         storeConfig.setTieredBackendServiceProvider(
             "org.apache.rocketmq.tieredstore.mock.MemoryFileSegmentWithoutCheck");
-        tieredFileFactory = new TieredFileFactory(storeConfig);
+        tieredFileAllocator = new TieredFileAllocator(storeConfig);
 
         // inject store time: 0, +100, +100, +100, +200
-        TieredFileChunkWithQueue container = new TieredFileChunkWithQueue(tieredFileFactory, mq);
+        CompositeQueueFlatFile container = new CompositeQueueFlatFile(tieredFileAllocator, mq);
         container.initOffset(50);
         long timestamp1 = System.currentTimeMillis();
         ByteBuffer buffer = MessageBufferUtilTest.buildMessageBuffer();
@@ -179,23 +176,23 @@ public class TieredFileChunkWithQueueTest {
         // commit message will increase max consume queue offset
         container.commit(true);
 
-        Assert.assertEquals(54, container.binarySearchInQueueByTime(timestamp3 + 1, BoundaryType.UPPER));
-        Assert.assertEquals(54, container.binarySearchInQueueByTime(timestamp3, BoundaryType.UPPER));
+        Assert.assertEquals(54, container.getOffsetInConsumeQueueByTime(timestamp3 + 1, BoundaryType.UPPER));
+        Assert.assertEquals(54, container.getOffsetInConsumeQueueByTime(timestamp3, BoundaryType.UPPER));
 
-        Assert.assertEquals(50, container.binarySearchInQueueByTime(timestamp1 - 1, BoundaryType.LOWER));
-        Assert.assertEquals(50, container.binarySearchInQueueByTime(timestamp1, BoundaryType.LOWER));
+        Assert.assertEquals(50, container.getOffsetInConsumeQueueByTime(timestamp1 - 1, BoundaryType.LOWER));
+        Assert.assertEquals(50, container.getOffsetInConsumeQueueByTime(timestamp1, BoundaryType.LOWER));
 
-        Assert.assertEquals(51, container.binarySearchInQueueByTime(timestamp1 + 1, BoundaryType.LOWER));
-        Assert.assertEquals(51, container.binarySearchInQueueByTime(timestamp2, BoundaryType.LOWER));
-        Assert.assertEquals(54, container.binarySearchInQueueByTime(timestamp2 + 1, BoundaryType.LOWER));
-        Assert.assertEquals(54, container.binarySearchInQueueByTime(timestamp3, BoundaryType.LOWER));
+        Assert.assertEquals(51, container.getOffsetInConsumeQueueByTime(timestamp1 + 1, BoundaryType.LOWER));
+        Assert.assertEquals(51, container.getOffsetInConsumeQueueByTime(timestamp2, BoundaryType.LOWER));
+        Assert.assertEquals(54, container.getOffsetInConsumeQueueByTime(timestamp2 + 1, BoundaryType.LOWER));
+        Assert.assertEquals(54, container.getOffsetInConsumeQueueByTime(timestamp3, BoundaryType.LOWER));
 
-        Assert.assertEquals(50, container.binarySearchInQueueByTime(timestamp1, BoundaryType.UPPER));
-        Assert.assertEquals(50, container.binarySearchInQueueByTime(timestamp1 + 1, BoundaryType.UPPER));
-        Assert.assertEquals(53, container.binarySearchInQueueByTime(timestamp2, BoundaryType.UPPER));
-        Assert.assertEquals(53, container.binarySearchInQueueByTime(timestamp2 + 1, BoundaryType.UPPER));
+        Assert.assertEquals(50, container.getOffsetInConsumeQueueByTime(timestamp1, BoundaryType.UPPER));
+        Assert.assertEquals(50, container.getOffsetInConsumeQueueByTime(timestamp1 + 1, BoundaryType.UPPER));
+        Assert.assertEquals(53, container.getOffsetInConsumeQueueByTime(timestamp2, BoundaryType.UPPER));
+        Assert.assertEquals(53, container.getOffsetInConsumeQueueByTime(timestamp2 + 1, BoundaryType.UPPER));
 
-        Assert.assertEquals(0, container.binarySearchInQueueByTime(timestamp1 - 1, BoundaryType.UPPER));
-        Assert.assertEquals(55, container.binarySearchInQueueByTime(timestamp3 + 1, BoundaryType.LOWER));
+        Assert.assertEquals(0, container.getOffsetInConsumeQueueByTime(timestamp1 - 1, BoundaryType.UPPER));
+        Assert.assertEquals(55, container.getOffsetInConsumeQueueByTime(timestamp3 + 1, BoundaryType.LOWER));
     }
 }

@@ -16,13 +16,10 @@
  */
 package org.apache.rocketmq.tieredstore;
 
-import java.io.File;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
-import java.util.UUID;
 import java.util.concurrent.TimeUnit;
-import org.apache.commons.io.FileUtils;
 import org.apache.commons.lang3.SystemUtils;
 import org.apache.commons.lang3.tuple.Triple;
 import org.apache.rocketmq.common.message.MessageQueue;
@@ -36,10 +33,10 @@ import org.apache.rocketmq.tieredstore.common.BoundaryType;
 import org.apache.rocketmq.tieredstore.common.SelectMappedBufferResultWrapper;
 import org.apache.rocketmq.tieredstore.common.TieredMessageStoreConfig;
 import org.apache.rocketmq.tieredstore.common.TieredStoreExecutor;
-import org.apache.rocketmq.tieredstore.container.TieredContainerManager;
-import org.apache.rocketmq.tieredstore.container.TieredFileChunk;
-import org.apache.rocketmq.tieredstore.container.TieredFileChunkWithQueue;
-import org.apache.rocketmq.tieredstore.container.TieredIndexFile;
+import org.apache.rocketmq.tieredstore.file.CompositeFlatFile;
+import org.apache.rocketmq.tieredstore.file.CompositeQueueFlatFile;
+import org.apache.rocketmq.tieredstore.file.TieredFlatFileManager;
+import org.apache.rocketmq.tieredstore.file.TieredIndexFile;
 import org.apache.rocketmq.tieredstore.util.MessageBufferUtil;
 import org.apache.rocketmq.tieredstore.util.MessageBufferUtilTest;
 import org.apache.rocketmq.tieredstore.util.TieredStoreUtil;
@@ -51,10 +48,10 @@ import org.junit.Before;
 import org.junit.Test;
 
 public class TieredMessageFetcherTest {
+
+    private final String storePath = TieredStoreTestUtil.getRandomStorePath();
     private TieredMessageStoreConfig storeConfig;
     private MessageQueue mq;
-
-    private final String storePath = FileUtils.getTempDirectory() + File.separator + "tiered_store_unit_test" + UUID.randomUUID();
 
     @Before
     public void setUp() {
@@ -79,12 +76,12 @@ public class TieredMessageFetcherTest {
     }
 
     public Triple<TieredMessageFetcher, ByteBuffer, ByteBuffer> buildFetcher() {
-        TieredContainerManager containerManager = TieredContainerManager.getInstance(storeConfig);
+        TieredFlatFileManager containerManager = TieredFlatFileManager.getInstance(storeConfig);
         TieredMessageFetcher fetcher = new TieredMessageFetcher(storeConfig);
         GetMessageResult getMessageResult = fetcher.getMessageAsync("group", mq.getTopic(), mq.getQueueId(), 0, 32, null).join();
         Assert.assertEquals(GetMessageStatus.NO_MATCHED_LOGIC_QUEUE, getMessageResult.getStatus());
 
-        TieredFileChunk container = containerManager.getOrCreateMQContainer(mq);
+        CompositeFlatFile container = containerManager.getOrCreateMQContainer(mq);
         container.initOffset(0);
 
         getMessageResult = fetcher.getMessageAsync("group", mq.getTopic(), mq.getQueueId(), 0, 32, null).join();
@@ -117,7 +114,7 @@ public class TieredMessageFetcherTest {
         TieredMessageFetcher fetcher = triple.getLeft();
         ByteBuffer msg1 = triple.getMiddle();
         ByteBuffer msg2 = triple.getRight();
-        TieredFileChunkWithQueue container = TieredContainerManager.getInstance(storeConfig).getMQContainer(mq);
+        CompositeQueueFlatFile container = TieredFlatFileManager.getInstance(storeConfig).getMQContainer(mq);
         Assert.assertNotNull(container);
 
         GetMessageResult getMessageResult = fetcher.getMessageFromTieredStoreAsync(container, 0, 32).join();
@@ -140,7 +137,7 @@ public class TieredMessageFetcherTest {
         TieredMessageFetcher fetcher = triple.getLeft();
         ByteBuffer msg1 = triple.getMiddle();
         ByteBuffer msg2 = triple.getRight();
-        TieredFileChunkWithQueue container = TieredContainerManager.getInstance(storeConfig).getMQContainer(mq);
+        CompositeQueueFlatFile container = TieredFlatFileManager.getInstance(storeConfig).getMQContainer(mq);
         Assert.assertNotNull(container);
 
         fetcher.recordCacheAccess(container, "prevent-invalid-cache", 0, new ArrayList<>());
@@ -197,7 +194,7 @@ public class TieredMessageFetcherTest {
     @Test
     public void testGetMessageStoreTimeStampAsync() {
         TieredMessageFetcher fetcher = new TieredMessageFetcher(storeConfig);
-        TieredFileChunk container = TieredContainerManager.getInstance(storeConfig).getOrCreateMQContainer(mq);
+        CompositeFlatFile container = TieredFlatFileManager.getInstance(storeConfig).getOrCreateMQContainer(mq);
         container.initOffset(0);
 
         ByteBuffer msg1 = MessageBufferUtilTest.buildMessageBuffer();
@@ -237,7 +234,7 @@ public class TieredMessageFetcherTest {
         TieredMessageFetcher fetcher = new TieredMessageFetcher(storeConfig);
         Assert.assertEquals(-1, fetcher.getOffsetInQueueByTime(mq.getTopic(), mq.getQueueId(), 0, BoundaryType.LOWER));
 
-        TieredFileChunkWithQueue container = TieredContainerManager.getInstance(storeConfig).getOrCreateMQContainer(mq);
+        CompositeQueueFlatFile container = TieredFlatFileManager.getInstance(storeConfig).getOrCreateMQContainer(mq);
         Assert.assertEquals(-1, fetcher.getOffsetInQueueByTime(mq.getTopic(), mq.getQueueId(), 0, BoundaryType.LOWER));
         Assert.assertNotNull(container);
 
@@ -267,7 +264,7 @@ public class TieredMessageFetcherTest {
         TieredMessageFetcher fetcher = new TieredMessageFetcher(storeConfig);
         Assert.assertEquals(0, fetcher.queryMessageAsync(mq.getTopic(), "key", 32, 0, Long.MAX_VALUE).join().getMessageMapedList().size());
 
-        TieredFileChunkWithQueue container = TieredContainerManager.getInstance(storeConfig).getOrCreateMQContainer(mq);
+        CompositeQueueFlatFile container = TieredFlatFileManager.getInstance(storeConfig).getOrCreateMQContainer(mq);
         Assert.assertEquals(0, fetcher.queryMessageAsync(mq.getTopic(), "key", 32, 0, Long.MAX_VALUE).join().getMessageMapedList().size());
 
         container.initOffset(0);
@@ -288,7 +285,7 @@ public class TieredMessageFetcherTest {
         request = new DispatchRequest(mq.getTopic(), mq.getQueueId(), MessageBufferUtilTest.MSG_LEN * 2, MessageBufferUtilTest.MSG_LEN, 0, 0, 0, "", "another-key", 0, 0, null);
         container.appendIndexFile(request);
         container.commit(true);
-        TieredIndexFile indexFile = TieredContainerManager.getIndexFile(storeConfig);
+        TieredIndexFile indexFile = TieredFlatFileManager.getIndexFile(storeConfig);
         indexFile.commit(true);
         Assert.assertEquals(1, fetcher.queryMessageAsync(mq.getTopic(), "key", 1, 0, Long.MAX_VALUE).join().getMessageMapedList().size());
 

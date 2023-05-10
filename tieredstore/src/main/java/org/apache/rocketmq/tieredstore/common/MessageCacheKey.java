@@ -17,19 +17,19 @@
 package org.apache.rocketmq.tieredstore.common;
 
 import java.util.Objects;
-import org.apache.rocketmq.tieredstore.container.TieredFileChunk;
+import org.apache.rocketmq.tieredstore.file.CompositeFlatFile;
 
 public class MessageCacheKey {
 
-    private final TieredFileChunk container;
+    private final CompositeFlatFile container;
     private final long offset;
 
-    public MessageCacheKey(TieredFileChunk container, long offset) {
+    public MessageCacheKey(CompositeFlatFile container, long offset) {
         this.container = container;
         this.offset = offset;
     }
 
-    public TieredFileChunk getContainer() {
+    public CompositeFlatFile getContainer() {
         return container;
     }
 

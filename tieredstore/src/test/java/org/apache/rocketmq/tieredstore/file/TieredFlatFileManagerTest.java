@@ -14,13 +14,10 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.rocketmq.tieredstore.container;
+package org.apache.rocketmq.tieredstore.file;
 
-import java.io.File;
 import java.io.IOException;
-import java.util.UUID;
 import java.util.concurrent.TimeUnit;
-import org.apache.commons.io.FileUtils;
 import org.apache.rocketmq.common.message.MessageQueue;
 import org.apache.rocketmq.tieredstore.TieredStoreTestUtil;
 import org.apache.rocketmq.tieredstore.common.TieredMessageStoreConfig;
@@ -33,12 +30,12 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
-public class TieredContainerManagerTest {
+public class TieredFlatFileManagerTest {
+
+    private final String storePath = TieredStoreTestUtil.getRandomStorePath();
     private TieredMessageStoreConfig storeConfig;
     private MessageQueue mq;
     private TieredMetadataStore metadataStore;
-
-    private final String storePath = FileUtils.getTempDirectory() + File.separator + "tiered_store_unit_test" + UUID.randomUUID();
 
     @Before
     public void setUp() {
@@ -46,7 +43,7 @@ public class TieredContainerManagerTest {
         storeConfig.setStorePathRootDir(storePath);
         storeConfig.setTieredBackendServiceProvider("org.apache.rocketmq.tieredstore.mock.MemoryFileSegment");
         storeConfig.setBrokerName(storeConfig.getBrokerName());
-        mq = new MessageQueue("TieredContainerManagerTest", storeConfig.getBrokerName(), 0);
+        mq = new MessageQueue("TieredFlatFileManagerTest", storeConfig.getBrokerName(), 0);
         metadataStore = TieredStoreUtil.getMetadataStore(storeConfig);
         TieredStoreExecutor.init();
     }
@@ -59,14 +56,13 @@ public class TieredContainerManagerTest {
         TieredStoreExecutor.shutdown();
     }
 
-
     @Test
     public void testLoadAndDestroy() {
         metadataStore.addTopic(mq.getTopic(), 0);
         metadataStore.addQueue(mq, 100);
         MessageQueue mq1 = new MessageQueue(mq.getTopic(), mq.getBrokerName(), 1);
         metadataStore.addQueue(mq1, 200);
-        TieredContainerManager containerManager = TieredContainerManager.getInstance(storeConfig);
+        TieredFlatFileManager containerManager = TieredFlatFileManager.getInstance(storeConfig);
         boolean load = containerManager.load();
         Assert.assertTrue(load);
 
@@ -74,11 +70,11 @@ public class TieredContainerManagerTest {
             .atMost(3, TimeUnit.SECONDS)
             .until(() -> containerManager.getAllMQContainer().size() == 2);
 
-        TieredFileChunk container = containerManager.getMQContainer(mq);
+        CompositeFlatFile container = containerManager.getMQContainer(mq);
         Assert.assertNotNull(container);
         Assert.assertEquals(100, container.getDispatchOffset());
 
-        TieredFileChunk container1 = containerManager.getMQContainer(mq1);
+        CompositeFlatFile container1 = containerManager.getMQContainer(mq1);
         Assert.assertNotNull(container1);
         Assert.assertEquals(200, container1.getDispatchOffset());
 

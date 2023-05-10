@@ -47,8 +47,8 @@ import org.apache.rocketmq.tieredstore.common.FileSegmentType;
 import org.apache.rocketmq.tieredstore.common.MessageCacheKey;
 import org.apache.rocketmq.tieredstore.common.SelectMappedBufferResultWrapper;
 import org.apache.rocketmq.tieredstore.common.TieredMessageStoreConfig;
-import org.apache.rocketmq.tieredstore.container.TieredContainerManager;
-import org.apache.rocketmq.tieredstore.container.TieredFileChunkWithQueue;
+import org.apache.rocketmq.tieredstore.file.CompositeQueueFlatFile;
+import org.apache.rocketmq.tieredstore.file.TieredFlatFileManager;
 import org.apache.rocketmq.tieredstore.metadata.TieredMetadataStore;
 import org.apache.rocketmq.tieredstore.util.TieredStoreUtil;
 
@@ -177,8 +177,8 @@ public class TieredStoreMetricsManager {
             .setDescription("Tiered store dispatch behind message count")
             .ofLongs()
             .buildWithCallback(measurement -> {
-                for (TieredFileChunkWithQueue container :
-                    TieredContainerManager.getInstance(storeConfig).getAllMQContainer()) {
+                for (CompositeQueueFlatFile container :
+                    TieredFlatFileManager.getInstance(storeConfig).getAllMQContainer()) {
 
                     MessageQueue mq = container.getMessageQueue();
                     long maxOffset = next.getMaxOffsetInQueue(mq.getTopic(), mq.getQueueId());
@@ -207,8 +207,8 @@ public class TieredStoreMetricsManager {
             .setUnit("seconds")
             .ofLongs()
             .buildWithCallback(measurement -> {
-                for (TieredFileChunkWithQueue container :
-                    TieredContainerManager.getInstance(storeConfig).getAllMQContainer()) {
+                for (CompositeQueueFlatFile container :
+                    TieredFlatFileManager.getInstance(storeConfig).getAllMQContainer()) {
 
                     MessageQueue mq = container.getMessageQueue();
                     long maxOffset = next.getMaxOffsetInQueue(mq.getTopic(), mq.getQueueId());
@@ -313,7 +313,7 @@ public class TieredStoreMetricsManager {
             .setUnit("milliseconds")
             .ofLongs()
             .buildWithCallback(measurement -> {
-                for (TieredFileChunkWithQueue container : TieredContainerManager.getInstance(storeConfig).getAllMQContainer()) {
+                for (CompositeQueueFlatFile container : TieredFlatFileManager.getInstance(storeConfig).getAllMQContainer()) {
                     long timestamp = container.getCommitLogBeginTimestamp();
                     if (timestamp > 0) {
                         MessageQueue mq = container.getMessageQueue();

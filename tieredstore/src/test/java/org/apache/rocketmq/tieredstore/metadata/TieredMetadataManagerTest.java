@@ -21,10 +21,8 @@ import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
-import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
-import org.apache.commons.io.FileUtils;
 import org.apache.rocketmq.common.message.MessageQueue;
 import org.apache.rocketmq.tieredstore.TieredStoreTestUtil;
 import org.apache.rocketmq.tieredstore.common.FileSegmentType;
@@ -37,14 +35,12 @@ import org.junit.Test;
 
 public class TieredMetadataManagerTest {
 
+    private final String storePath = TieredStoreTestUtil.getRandomStorePath();
     private MessageQueue mq0;
     private MessageQueue mq1;
     private MessageQueue mq2;
     private TieredMessageStoreConfig storeConfig;
     private TieredMetadataStore metadataStore;
-
-    private final String storePath =
-        FileUtils.getTempDirectory() + File.separator + "tiered_store_unit_test" + UUID.randomUUID();
 
     @Before
     public void setUp() {

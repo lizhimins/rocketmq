@@ -32,9 +32,9 @@ import org.apache.rocketmq.logging.org.slf4j.LoggerFactory;
 import org.apache.rocketmq.tieredstore.common.AppendResult;
 import org.apache.rocketmq.tieredstore.common.FileSegmentType;
 import org.apache.rocketmq.tieredstore.common.TieredMessageStoreConfig;
-import org.apache.rocketmq.tieredstore.container.TieredCommitLog;
-import org.apache.rocketmq.tieredstore.container.TieredConsumeQueue;
-import org.apache.rocketmq.tieredstore.container.TieredIndexFile;
+import org.apache.rocketmq.tieredstore.file.TieredCommitLog;
+import org.apache.rocketmq.tieredstore.file.TieredConsumeQueue;
+import org.apache.rocketmq.tieredstore.file.TieredIndexFile;
 import org.apache.rocketmq.tieredstore.exception.TieredStoreErrorCode;
 import org.apache.rocketmq.tieredstore.exception.TieredStoreException;
 import org.apache.rocketmq.tieredstore.util.MessageBufferUtil;
@@ -62,7 +62,7 @@ public abstract class TieredFileSegment implements Comparable<TieredFileSegment>
     private volatile long appendPosition;
 
     // only used in commitLog
-    private volatile long commitMsgQueueOffset = 0;
+    private volatile long dispatchCommitOffset = 0;
 
     private ByteBuffer codaBuffer;
     private List<ByteBuffer> uploadBufferList = new ArrayList<>();
@@ -119,8 +119,8 @@ public abstract class TieredFileSegment implements Comparable<TieredFileSegment>
         return commitPosition;
     }
 
-    public long getCommitMsgQueueOffset() {
-        return commitMsgQueueOffset;
+    public long getDispatchCommitOffset() {
+        return dispatchCommitOffset;
     }
 
     public long getMaxOffset() {
@@ -369,21 +369,23 @@ public abstract class TieredFileSegment implements Comparable<TieredFileSegment>
         if (bufferSize == 0) {
             return CompletableFuture.completedFuture(true);
         }
-        TieredFileSegmentInputStream inputStream = new TieredFileSegmentInputStream(fileType, baseOffset + commitPosition, bufferList, codaBuffer, bufferSize);
+        TieredFileSegmentInputStream inputStream = new TieredFileSegmentInputStream(
+            fileType, baseOffset + commitPosition, bufferList, codaBuffer, bufferSize);
         int finalBufferSize = bufferSize;
         try {
             flightCommitRequest = commit0(inputStream, commitPosition, bufferSize, fileType != FileSegmentType.INDEX)
                 .thenApply(result -> {
                     if (result) {
                         if (fileType == FileSegmentType.COMMIT_LOG && bufferList.size() > 0) {
-                            commitMsgQueueOffset = MessageBufferUtil.getQueueOffset(bufferList.get(bufferList.size() - 1));
+                            dispatchCommitOffset = MessageBufferUtil.getQueueOffset(bufferList.get(bufferList.size() - 1));
                         }
                         commitPosition += finalBufferSize;
                         return true;
                     }
                     sendBackBuffer(inputStream);
                     return false;
-                }).exceptionally(e -> handleCommitException(inputStream, e))
+                })
+                .exceptionally(e -> handleCommitException(inputStream, e))
                 .whenComplete((result, e) -> {
                     if (commitLock.availablePermits() == 0) {
                         logger.debug("TieredFileSegment#commitAsync: commit cost: {}ms, file: {}, item count: {}, buffer size: {}", stopwatch.elapsed(TimeUnit.MILLISECONDS), getPath(), bufferList.size(), finalBufferSize);
