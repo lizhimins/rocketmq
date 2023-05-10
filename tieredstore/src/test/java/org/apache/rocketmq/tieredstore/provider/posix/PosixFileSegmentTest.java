@@ -28,6 +28,7 @@ import org.apache.rocketmq.common.message.MessageQueue;
 import org.apache.rocketmq.tieredstore.TieredStoreTestUtil;
 import org.apache.rocketmq.tieredstore.common.FileSegmentType;
 import org.apache.rocketmq.tieredstore.common.TieredMessageStoreConfig;
+import org.apache.rocketmq.tieredstore.common.TieredStoreExecutor;
 import org.apache.rocketmq.tieredstore.util.TieredStoreUtil;
 import org.junit.After;
 import org.junit.Assert;
@@ -45,6 +46,7 @@ public class PosixFileSegmentTest {
         storeConfig = new TieredMessageStoreConfig();
         storeConfig.setTieredStoreFilePath(storePath);
         mq = new MessageQueue("OSSFileSegmentTest", "broker", 0);
+        TieredStoreExecutor.init();
     }
 
     @After
@@ -52,6 +54,7 @@ public class PosixFileSegmentTest {
         TieredStoreTestUtil.destroyContainerManager();
         TieredStoreTestUtil.destroyMetadataStore();
         TieredStoreTestUtil.destroyTempDir(storePath);
+        TieredStoreExecutor.shutdown();
     }
 
     @Test

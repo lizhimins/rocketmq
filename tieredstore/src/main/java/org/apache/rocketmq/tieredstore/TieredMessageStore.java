@@ -72,6 +72,7 @@ public class TieredMessageStore extends AbstractPluginMessageStore {
         TieredStoreUtil.addSystemTopic(storeConfig.getBrokerClusterName());
         TieredStoreUtil.addSystemTopic(brokerName);
 
+        TieredStoreExecutor.init();
         this.metadataStore = TieredStoreUtil.getMetadataStore(storeConfig);
         this.fetcher = new TieredMessageFetcher(storeConfig);
         this.dispatcher = new TieredDispatcher(next, storeConfig);
@@ -101,6 +102,11 @@ public class TieredMessageStore extends AbstractPluginMessageStore {
 
     public boolean viaTieredStorage(String topic, int queueId, long offset, int batchSize) {
         TieredMessageStoreConfig.TieredStorageLevel deepStorageLevel = storeConfig.getTieredStorageLevel();
+
+        if (deepStorageLevel.check(TieredMessageStoreConfig.TieredStorageLevel.FORCE)) {
+            return true;
+        }
+
         if (!deepStorageLevel.isEnable()) {
             return false;
         }
@@ -124,7 +130,7 @@ public class TieredMessageStore extends AbstractPluginMessageStore {
             && !next.checkInMemByConsumeOffset(topic, queueId, offset, batchSize)) {
             return true;
         }
-        return deepStorageLevel.check(TieredMessageStoreConfig.TieredStorageLevel.FORCE);
+        return false;
     }
 
     @Override
@@ -150,7 +156,7 @@ public class TieredMessageStore extends AbstractPluginMessageStore {
                     if (result.getStatus() == GetMessageStatus.OFFSET_FOUND_NULL ||
                         result.getStatus() == GetMessageStatus.OFFSET_OVERFLOW_ONE ||
                         result.getStatus() == GetMessageStatus.OFFSET_OVERFLOW_BADLY) {
-                        if (next.checkInDiskByConsumeOffset(topic, queueId, offset)) {
+                        if (next.checkInStoreByConsumeOffset(topic, queueId, offset)) {
                             logger.debug("TieredMessageStore#getMessageAsync: not found message, try to get message from next store: topic: {}, queue: {}, queue offset: {}, tiered store result: {}, min offset: {}, max offset: {}",
                                 topic, queueId, offset, result.getStatus(), result.getMinOffset(), result.getMaxOffset());
                             TieredStoreMetricsManager.fallbackTotal.add(1, latencyAttributes);

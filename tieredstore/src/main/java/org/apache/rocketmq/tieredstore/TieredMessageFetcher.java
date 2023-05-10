@@ -232,7 +232,7 @@ public class TieredMessageFetcher {
                         batchSize, size, queueOffset, minOffset, queueOffset + batchSize - 1, maxOffset);
                 }
                 return maxOffset;
-            }, TieredStoreExecutor.FETCH_DATA_EXECUTOR);
+            }, TieredStoreExecutor.fetchDataExecutor);
     }
 
     private CompletableFuture<GetMessageResult> getMessageFromCacheAsync(TieredFileChunkWithQueue container,
@@ -336,7 +336,7 @@ public class TieredMessageFetcher {
                     }
                     newResult.setNextBeginOffset(queueOffset + newResult.getMessageMapedList().size());
                     return newResult;
-                }, TieredStoreExecutor.FETCH_DATA_EXECUTOR);
+                }, TieredStoreExecutor.fetchDataExecutor);
 
             List<Pair<Integer, CompletableFuture<Long>>> futureList = new ArrayList<>();
             CompletableFuture<Long> inflightRequestFuture = resultFuture.thenApply(result ->
@@ -394,7 +394,7 @@ public class TieredMessageFetcher {
             }
 
             return container.readCommitLog(firstCommitLogOffset, (int) length);
-        }, TieredStoreExecutor.FETCH_DATA_EXECUTOR);
+        }, TieredStoreExecutor.fetchDataExecutor);
 
         return readConsumeQueueFuture.thenCombineAsync(readCommitLogFuture, (cqBuffer, msgBuffer) -> {
             List<Pair<Integer, Integer>> msgList = MessageBufferUtil.splitMessageBuffer(cqBuffer, msgBuffer);
@@ -424,7 +424,7 @@ public class TieredMessageFetcher {
             result.setStatus(GetMessageStatus.MESSAGE_WAS_REMOVING);
             result.setNextBeginOffset(nextBeginOffset);
             return result;
-        }, TieredStoreExecutor.FETCH_DATA_EXECUTOR).exceptionally(e -> {
+        }, TieredStoreExecutor.fetchDataExecutor).exceptionally(e -> {
             MessageQueue mq = container.getMessageQueue();
             LOGGER.warn("TieredMessageFetcher#getMessageFromTieredStoreAsync: get message failed: topic: {} queueId: {}", mq.getTopic(), mq.getQueueId(), e);
             result.setStatus(GetMessageStatus.OFFSET_FOUND_NULL);
@@ -491,7 +491,7 @@ public class TieredMessageFetcher {
                 long commitLogOffset = CQItemBufferUtil.getCommitLogOffset(cqItem);
                 int size = CQItemBufferUtil.getSize(cqItem);
                 return container.readCommitLog(commitLogOffset, size);
-            }, TieredStoreExecutor.FETCH_DATA_EXECUTOR)
+            }, TieredStoreExecutor.fetchDataExecutor)
             .thenApply(MessageBufferUtil::getStoreTimeStamp)
             .exceptionally(e -> {
                 LOGGER.error("TieredMessageFetcher#getMessageStoreTimeStampAsync: get or decode message failed: topic: {}, queue: {}, offset: {}", topic, queueId, queueOffset, e);
