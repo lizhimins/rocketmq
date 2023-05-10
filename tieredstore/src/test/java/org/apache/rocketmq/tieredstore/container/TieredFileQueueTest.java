@@ -74,12 +74,13 @@ public class TieredFileQueueTest {
             FileSegmentType.COMMIT_LOG, queue, 100, storeConfig);
         fileSegment.initPosition(fileSegment.getSize());
 
-        TieredFileQueue fileQueue = fileQueueFactory.createQueueForCommitLog(storePath);
+        String filePath = TieredStoreUtil.toPath(queue);
+        TieredFileQueue fileQueue = fileQueueFactory.createQueueForCommitLog(filePath);
         fileQueue.updateFileSegment(fileSegment);
 
         TieredMetadataStore metadataStore = TieredStoreUtil.getMetadataStore(storeConfig);
         FileSegmentMetadata metadata =
-            metadataStore.getFileSegment(fileSegment.getPath(), FileSegmentType.COMMIT_LOG, 100);
+            metadataStore.getFileSegment(filePath, FileSegmentType.COMMIT_LOG, 100);
         Assert.assertEquals(fileSegment.getPath(), metadata.getPath());
         Assert.assertEquals(FileSegmentType.COMMIT_LOG, FileSegmentType.valueOf(metadata.getType()));
         Assert.assertEquals(100, metadata.getBaseOffset());

@@ -29,19 +29,20 @@ public class TieredStoreExecutor {
 
     private static final int QUEUE_CAPACITY = 10000;
 
-    private static final BlockingQueue<Runnable> DISPATCH_THREAD_POOL_QUEUE;
-    private static final BlockingQueue<Runnable> FETCH_DATA_THREAD_POOL_QUEUE;
-    private static final BlockingQueue<Runnable> COMPACT_INDEX_FILE_THREAD_POOL_QUEUE;
+    // Visible for monitor
+    public static BlockingQueue<Runnable> DISPATCH_THREAD_POOL_QUEUE;
+    public static BlockingQueue<Runnable> FETCH_DATA_THREAD_POOL_QUEUE;
+    public static BlockingQueue<Runnable> COMPACT_INDEX_FILE_THREAD_POOL_QUEUE;
 
-    public static final ScheduledExecutorService COMMON_SCHEDULED_EXECUTOR;
-    public static final ScheduledExecutorService COMMIT_EXECUTOR;
-    public static final ScheduledExecutorService CLEAN_EXPIRED_FILE_EXECUTOR;
+    public static ScheduledExecutorService COMMON_SCHEDULED_EXECUTOR;
+    public static ScheduledExecutorService COMMIT_EXECUTOR;
+    public static ScheduledExecutorService CLEAN_EXPIRED_FILE_EXECUTOR;
 
-    public static final ExecutorService DISPATCH_EXECUTOR;
-    public static final ExecutorService FETCH_DATA_EXECUTOR;
-    public static final ExecutorService COMPACT_INDEX_FILE_EXECUTOR;
+    public static ExecutorService DISPATCH_EXECUTOR;
+    public static ExecutorService FETCH_DATA_EXECUTOR;
+    public static ExecutorService COMPACT_INDEX_FILE_EXECUTOR;
 
-    static {
+    public static void init() {
         DISPATCH_THREAD_POOL_QUEUE = new LinkedBlockingQueue<>(QUEUE_CAPACITY);
         DISPATCH_EXECUTOR = new ThreadPoolExecutor(
             Math.max(2, Runtime.getRuntime().availableProcessors()),
@@ -83,11 +84,24 @@ public class TieredStoreExecutor {
     }
 
     public static void shutdown() {
-        DISPATCH_EXECUTOR.shutdown();
-        COMMON_SCHEDULED_EXECUTOR.shutdown();
-        COMMIT_EXECUTOR.shutdown();
-        CLEAN_EXPIRED_FILE_EXECUTOR.shutdown();
-        FETCH_DATA_EXECUTOR.shutdown();
-        COMPACT_INDEX_FILE_EXECUTOR.shutdown();
+        shutdownExecutor(DISPATCH_EXECUTOR);
+        shutdownExecutor(COMMON_SCHEDULED_EXECUTOR);
+        shutdownExecutor(COMMIT_EXECUTOR);
+        shutdownExecutor(CLEAN_EXPIRED_FILE_EXECUTOR);
+        shutdownExecutor(FETCH_DATA_EXECUTOR);
+        shutdownExecutor(COMPACT_INDEX_FILE_EXECUTOR);
+    }
+
+    private static void shutdownExecutor(ExecutorService executor) {
+        if (executor != null) {
+            executor.shutdown();
+            try {
+                if (!executor.awaitTermination(5, TimeUnit.SECONDS)) {
+                    executor.shutdownNow();
+                }
+            } catch (InterruptedException e) {
+                executor.shutdownNow();
+            }
+        }
     }
 }
