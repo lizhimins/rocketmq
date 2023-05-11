@@ -98,7 +98,7 @@ public class TieredMessageStoreTest {
             Assert.fail(e.getClass().getCanonicalName() + ": " + e.getMessage());
         }
 
-        TieredFlatFileManager.getInstance(store.getStoreConfig()).getOrCreateMQContainer(mq);
+        TieredFlatFileManager.getInstance(store.getStoreConfig()).getOrCreateFlatFileIfAbsent(mq);
     }
 
     @After
@@ -113,7 +113,7 @@ public class TieredMessageStoreTest {
         containerManager = Mockito.mock(TieredFlatFileManager.class);
         CompositeQueueFlatFile container = Mockito.mock(CompositeQueueFlatFile.class);
         when(container.getConsumeQueueCommitOffset()).thenReturn(Long.MAX_VALUE);
-        when(containerManager.getMQContainer(mq)).thenReturn(container);
+        when(containerManager.getFlatFile(mq)).thenReturn(container);
         try {
             Field field = store.getClass().getDeclaredField("containerManager");
             field.setAccessible(true);
@@ -252,12 +252,12 @@ public class TieredMessageStoreTest {
     @Test
     public void testGetMinOffsetInQueue() {
         mockContainer();
-        CompositeQueueFlatFile container = containerManager.getMQContainer(mq);
+        CompositeQueueFlatFile container = containerManager.getFlatFile(mq);
         when(nextStore.getMinOffsetInQueue(anyString(), anyInt())).thenReturn(100L);
-        when(containerManager.getMQContainer(mq)).thenReturn(null);
+        when(containerManager.getFlatFile(mq)).thenReturn(null);
         Assert.assertEquals(100L, store.getMinOffsetInQueue(mq.getTopic(), mq.getQueueId()));
 
-        when(containerManager.getMQContainer(mq)).thenReturn(container);
+        when(containerManager.getFlatFile(mq)).thenReturn(container);
         when(container.getConsumeQueueMinOffset()).thenReturn(10L);
         Assert.assertEquals(10L, store.getMinOffsetInQueue(mq.getTopic(), mq.getQueueId()));
     }
@@ -266,7 +266,7 @@ public class TieredMessageStoreTest {
     public void testCleanUnusedTopics() {
         Set<String> topicSet = new HashSet<>();
         store.cleanUnusedTopic(topicSet);
-        Assert.assertNull(TieredFlatFileManager.getInstance(store.getStoreConfig()).getMQContainer(mq));
+        Assert.assertNull(TieredFlatFileManager.getInstance(store.getStoreConfig()).getFlatFile(mq));
         Assert.assertNull(TieredStoreUtil.getMetadataStore(store.getStoreConfig()).getTopic(mq.getTopic()));
         Assert.assertNull(TieredStoreUtil.getMetadataStore(store.getStoreConfig()).getQueue(mq));
     }
@@ -276,7 +276,7 @@ public class TieredMessageStoreTest {
         Set<String> topicSet = new HashSet<>();
         topicSet.add(mq.getTopic());
         store.deleteTopics(topicSet);
-        Assert.assertNull(TieredFlatFileManager.getInstance(store.getStoreConfig()).getMQContainer(mq));
+        Assert.assertNull(TieredFlatFileManager.getInstance(store.getStoreConfig()).getFlatFile(mq));
         Assert.assertNull(TieredStoreUtil.getMetadataStore(store.getStoreConfig()).getTopic(mq.getTopic()));
         Assert.assertNull(TieredStoreUtil.getMetadataStore(store.getStoreConfig()).getQueue(mq));
     }

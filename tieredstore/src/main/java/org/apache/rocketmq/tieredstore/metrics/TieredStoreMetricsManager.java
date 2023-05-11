@@ -178,7 +178,7 @@ public class TieredStoreMetricsManager {
             .ofLongs()
             .buildWithCallback(measurement -> {
                 for (CompositeQueueFlatFile container :
-                    TieredFlatFileManager.getInstance(storeConfig).getAllMQContainer()) {
+                    TieredFlatFileManager.getInstance(storeConfig).deepCopyFlatFileToList()) {
 
                     MessageQueue mq = container.getMessageQueue();
                     long maxOffset = next.getMaxOffsetInQueue(mq.getTopic(), mq.getQueueId());
@@ -208,7 +208,7 @@ public class TieredStoreMetricsManager {
             .ofLongs()
             .buildWithCallback(measurement -> {
                 for (CompositeQueueFlatFile container :
-                    TieredFlatFileManager.getInstance(storeConfig).getAllMQContainer()) {
+                    TieredFlatFileManager.getInstance(storeConfig).deepCopyFlatFileToList()) {
 
                     MessageQueue mq = container.getMessageQueue();
                     long maxOffset = next.getMaxOffsetInQueue(mq.getTopic(), mq.getQueueId());
@@ -313,7 +313,7 @@ public class TieredStoreMetricsManager {
             .setUnit("milliseconds")
             .ofLongs()
             .buildWithCallback(measurement -> {
-                for (CompositeQueueFlatFile container : TieredFlatFileManager.getInstance(storeConfig).getAllMQContainer()) {
+                for (CompositeQueueFlatFile container : TieredFlatFileManager.getInstance(storeConfig).deepCopyFlatFileToList()) {
                     long timestamp = container.getCommitLogBeginTimestamp();
                     if (timestamp > 0) {
                         MessageQueue mq = container.getMessageQueue();

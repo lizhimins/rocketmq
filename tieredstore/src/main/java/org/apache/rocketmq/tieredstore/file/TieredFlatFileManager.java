@@ -44,7 +44,7 @@ public class TieredFlatFileManager {
     private final TieredMetadataStore metadataStore;
     private final TieredMessageStoreConfig storeConfig;
     private final TieredFileAllocator tieredFileAllocator;
-    private final ConcurrentMap<MessageQueue, CompositeQueueFlatFile> messageQueueContainerMap;
+    private final ConcurrentMap<MessageQueue, CompositeQueueFlatFile> queueFlatFileMap;
 
     public TieredFlatFileManager(TieredMessageStoreConfig storeConfig)
         throws ClassNotFoundException, NoSuchMethodException {
@@ -52,10 +52,9 @@ public class TieredFlatFileManager {
         this.storeConfig = storeConfig;
         this.metadataStore = TieredStoreUtil.getMetadataStore(storeConfig);
         this.tieredFileAllocator = new TieredFileAllocator(storeConfig);
-        this.messageQueueContainerMap = new ConcurrentHashMap<>();
+        this.queueFlatFileMap = new ConcurrentHashMap<>();
         this.doScheduleTask();
     }
-
 
     public static TieredFlatFileManager getInstance(TieredMessageStoreConfig storeConfig) {
         if (storeConfig == null) {
@@ -101,14 +100,15 @@ public class TieredFlatFileManager {
         TieredStoreExecutor.commonScheduledExecutor.scheduleWithFixedDelay(() -> {
             try {
                 Random random = new Random();
-                for (CompositeQueueFlatFile container : getAllMQContainer()) {
+                for (CompositeQueueFlatFile container : deepCopyFlatFileToList()) {
                     int delay = random.nextInt(storeConfig.getMaxCommitJitter());
                     TieredStoreExecutor.commitExecutor.schedule(() -> {
                         try {
                             container.commitCommitLog();
                         } catch (Throwable e) {
                             MessageQueue mq = container.getMessageQueue();
-                            logger.error("commit commitLog periodically failed: topic: {}, queue: {}", mq.getTopic(), mq.getQueueId(), e);
+                            logger.error("commit commitLog periodically failed: topic: {}, queue: {}",
+                                mq.getTopic(), mq.getQueueId(), e);
                         }
                     }, delay, TimeUnit.MILLISECONDS);
                     TieredStoreExecutor.commitExecutor.schedule(() -> {
@@ -116,7 +116,8 @@ public class TieredFlatFileManager {
                             container.commitConsumeQueue();
                         } catch (Throwable e) {
                             MessageQueue mq = container.getMessageQueue();
-                            logger.error("commit consumeQueue periodically failed: topic: {}, queue: {}", mq.getTopic(), mq.getQueueId(), e);
+                            logger.error("commit consumeQueue periodically failed: topic: {}, queue: {}",
+                                mq.getTopic(), mq.getQueueId(), e);
                         }
                     }, delay, TimeUnit.MILLISECONDS);
                 }
@@ -136,9 +137,10 @@ public class TieredFlatFileManager {
 
         TieredStoreExecutor.commonScheduledExecutor.scheduleWithFixedDelay(() -> {
             try {
-                long expiredTimeStamp = System.currentTimeMillis() - (long) storeConfig.getTieredStoreFileReservedTime() * 60 * 60 * 1000;
+                long expiredTimeStamp = System.currentTimeMillis() -
+                    TimeUnit.HOURS.toMillis(storeConfig.getTieredStoreFileReservedTime());
                 Random random = new Random();
-                for (CompositeQueueFlatFile container : getAllMQContainer()) {
+                for (CompositeQueueFlatFile container : deepCopyFlatFileToList()) {
                     int delay = random.nextInt(storeConfig.getMaxCommitJitter());
                     TieredStoreExecutor.cleanExpiredFileExecutor.schedule(() -> {
                         container.getFileChunkLock().lock();
@@ -146,7 +148,7 @@ public class TieredFlatFileManager {
                             container.cleanExpiredFile(expiredTimeStamp);
                             container.destroyExpiredFile();
                             if (container.getConsumeQueueBaseOffset() == -1) {
-                                destroyContainer(container.getMessageQueue());
+                                destroyCompositeFile(container.getMessageQueue());
                             }
                         } finally {
                             container.getFileChunkLock().unlock();
@@ -158,7 +160,7 @@ public class TieredFlatFileManager {
                     indexFile.destroyExpiredFile();
                 }
             } catch (Throwable e) {
-                logger.error("clean container expired file failed: ", e);
+                logger.error("clean expired flat file failed: ", e);
             }
         }, 30, 30, TimeUnit.SECONDS);
     }
@@ -167,7 +169,7 @@ public class TieredFlatFileManager {
         try {
             AtomicLong topicSequenceNumber = new AtomicLong();
             List<Future<?>> futureList = new ArrayList<>();
-            messageQueueContainerMap.clear();
+            queueFlatFileMap.clear();
             metadataStore.iterateTopic(topicMetadata -> {
                 topicSequenceNumber.set(Math.max(topicSequenceNumber.get(), topicMetadata.getTopicId()));
                 Future<?> future = TieredStoreExecutor.dispatchExecutor.submit(() -> {
@@ -176,12 +178,12 @@ public class TieredFlatFileManager {
                     }
                     try {
                         metadataStore.iterateQueue(topicMetadata.getTopic(),
-                            queueMetadata -> getOrCreateMQContainer(
+                            queueMetadata -> getOrCreateFlatFileIfAbsent(
                                 new MessageQueue(topicMetadata.getTopic(),
                                     storeConfig.getBrokerName(),
                                     queueMetadata.getQueue().getQueueId())));
                     } catch (Exception e) {
-                        logger.error("load mq container from metadata failed", e);
+                        logger.error("load mq composite flat file from metadata failed", e);
                     }
                 });
                 futureList.add(future);
@@ -193,14 +195,14 @@ public class TieredFlatFileManager {
             }
             metadataStore.setTopicSequenceNumber(topicSequenceNumber.incrementAndGet());
         } catch (Exception e) {
-            logger.error("load mq container from metadata failed", e);
+            logger.error("load mq composite flat file from metadata failed", e);
             return false;
         }
         return true;
     }
 
     public void cleanup() {
-        messageQueueContainerMap.clear();
+        queueFlatFileMap.clear();
         cleanStaticReference();
     }
 
@@ -210,35 +212,36 @@ public class TieredFlatFileManager {
     }
 
     @Nullable
-    public CompositeQueueFlatFile getOrCreateMQContainer(MessageQueue messageQueue) {
-        return messageQueueContainerMap.computeIfAbsent(messageQueue, mq -> {
+    public CompositeQueueFlatFile getOrCreateFlatFileIfAbsent(MessageQueue messageQueue) {
+        return queueFlatFileMap.computeIfAbsent(messageQueue, mq -> {
             try {
-                logger.info("TieredFlatFileManager#getOrCreateMQContainer: try to create new container: topic: {}, queueId: {}",
+                logger.info("TieredFlatFileManager#getOrCreateFlatFileIfAbsent: " +
+                        "try to create new flat file: topic: {}, queueId: {}",
                     messageQueue.getTopic(), messageQueue.getQueueId());
                 return new CompositeQueueFlatFile(tieredFileAllocator, mq);
             } catch (Exception e) {
-                logger.error("TieredFlatFileManager#getOrCreateMQContainer: create new container failed: topic: {}, queueId: {}",
+                logger.error("TieredFlatFileManager#getOrCreateFlatFileIfAbsent: " +
+                        "create new flat file: topic: {}, queueId: {}",
                     messageQueue.getTopic(), messageQueue.getQueueId(), e);
                 return null;
             }
         });
     }
 
-    @Nullable
-    public CompositeQueueFlatFile getMQContainer(MessageQueue messageQueue) {
-        return messageQueueContainerMap.get(messageQueue);
+    public CompositeQueueFlatFile getFlatFile(MessageQueue messageQueue) {
+        return queueFlatFileMap.get(messageQueue);
     }
 
-    public ImmutableList<CompositeQueueFlatFile> getAllMQContainer() {
-        return ImmutableList.copyOf(messageQueueContainerMap.values());
+    public ImmutableList<CompositeQueueFlatFile> deepCopyFlatFileToList() {
+        return ImmutableList.copyOf(queueFlatFileMap.values());
     }
 
     public void shutdown() {
         if (indexFile != null) {
             indexFile.commit(true);
         }
-        for (CompositeFlatFile container : getAllMQContainer()) {
-            container.shutdown();
+        for (CompositeFlatFile flatFile : deepCopyFlatFileToList()) {
+            flatFile.shutdown();
         }
     }
 
@@ -246,18 +249,19 @@ public class TieredFlatFileManager {
         if (indexFile != null) {
             indexFile.destroy();
         }
-        ImmutableList<CompositeQueueFlatFile> containerList = getAllMQContainer();
+        ImmutableList<CompositeQueueFlatFile> flatFileList = deepCopyFlatFileToList();
         cleanup();
-        for (CompositeFlatFile container : containerList) {
-            container.destroy();
+        for (CompositeFlatFile flatFile : flatFileList) {
+            flatFile.destroy();
         }
     }
 
-    public void destroyContainer(MessageQueue mq) {
-        CompositeQueueFlatFile container = messageQueueContainerMap.remove(mq);
+    public void destroyCompositeFile(MessageQueue mq) {
+        CompositeQueueFlatFile container = queueFlatFileMap.remove(mq);
         if (container != null) {
             MessageQueue messageQueue = container.getMessageQueue();
-            logger.info("BlobContainerManager#destroyContainer: try to destroy container: topic: {}, queueId: {}",
+            logger.info("TieredFlatFileManager#destroyCompositeFile: " +
+                    "try to destroy composite flat file: topic: {}, queueId: {}",
                 messageQueue.getTopic(), messageQueue.getQueueId());
             container.destroy();
         }

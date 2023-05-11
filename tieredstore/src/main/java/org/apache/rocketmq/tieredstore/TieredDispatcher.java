@@ -75,7 +75,7 @@ public class TieredDispatcher extends ServiceThread implements CommitLogDispatch
 
         TieredStoreExecutor.commonScheduledExecutor.scheduleWithFixedDelay(() -> {
             try {
-                for (CompositeQueueFlatFile container : tieredFlatFileManager.getAllMQContainer()) {
+                for (CompositeQueueFlatFile container : tieredFlatFileManager.deepCopyFlatFileToList()) {
                     if (!container.getFileChunkLock().isLocked()) {
                         TieredStoreExecutor.dispatchExecutor.execute(() -> {
                             try {
@@ -92,7 +92,7 @@ public class TieredDispatcher extends ServiceThread implements CommitLogDispatch
 
         TieredStoreExecutor.commonScheduledExecutor.scheduleWithFixedDelay(() -> {
             try {
-                for (CompositeQueueFlatFile container : tieredFlatFileManager.getAllMQContainer()) {
+                for (CompositeQueueFlatFile container : tieredFlatFileManager.deepCopyFlatFileToList()) {
                     container.persistMetadata();
                 }
             } catch (Throwable e) {
@@ -112,7 +112,7 @@ public class TieredDispatcher extends ServiceThread implements CommitLogDispatch
         }
 
         CompositeQueueFlatFile container =
-            tieredFlatFileManager.getOrCreateMQContainer(new MessageQueue(topic, brokerName, request.getQueueId()));
+            tieredFlatFileManager.getOrCreateFlatFileIfAbsent(new MessageQueue(topic, brokerName, request.getQueueId()));
         if (container == null) {
             logger.error("[Bug]TieredDispatcher#dispatch: dispatch failed, can not create container: topic: {}, queueId: {}", request.getTopic(), request.getQueueId());
             return;

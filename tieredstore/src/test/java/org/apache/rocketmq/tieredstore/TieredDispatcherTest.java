@@ -95,10 +95,10 @@ public class TieredDispatcherTest {
         Mockito.when(defaultMessageStore.selectOneMessageByOffset(7, MessageBufferUtilTest.MSG_LEN)).thenReturn(mockResult);
         DispatchRequest request = new DispatchRequest(mq.getTopic(), mq.getQueueId(), 6, 7, MessageBufferUtilTest.MSG_LEN, 1);
         dispatcher.dispatch(request);
-        Assert.assertNotNull(containerManager.getMQContainer(mq));
-        Assert.assertEquals(7, Objects.requireNonNull(containerManager.getMQContainer(mq)).getDispatchOffset());
+        Assert.assertNotNull(containerManager.getFlatFile(mq));
+        Assert.assertEquals(7, Objects.requireNonNull(containerManager.getFlatFile(mq)).getDispatchOffset());
 
-        CompositeQueueFlatFile container = containerManager.getOrCreateMQContainer(mq);
+        CompositeQueueFlatFile container = containerManager.getOrCreateFlatFileIfAbsent(mq);
         Assert.assertNotNull(container);
         container.commit(true);
         Assert.assertEquals(6, container.getConsumeQueueMaxOffset());
@@ -167,7 +167,7 @@ public class TieredDispatcherTest {
         mockResult = new SelectMappedBufferResult(0, msg, MessageBufferUtilTest.MSG_LEN, null);
         Mockito.when(defaultStore.selectOneMessageByOffset(8, MessageBufferUtilTest.MSG_LEN)).thenReturn(mockResult);
 
-        dispatcher.dispatchByMQContainer(containerManager.getOrCreateMQContainer(mq));
-        Assert.assertEquals(8, containerManager.getMQContainer(mq).getDispatchOffset());
+        dispatcher.dispatchByMQContainer(containerManager.getOrCreateFlatFileIfAbsent(mq));
+        Assert.assertEquals(8, containerManager.getFlatFile(mq).getDispatchOffset());
     }
 }

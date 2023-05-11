@@ -435,7 +435,7 @@ public class TieredMessageFetcher {
 
     public CompletableFuture<GetMessageResult> getMessageAsync(String group, String topic, int queueId,
         long queueOffset, int maxMsgNums, final MessageFilter messageFilter) {
-        CompositeQueueFlatFile container = containerManager.getMQContainer(new MessageQueue(topic, brokerName, queueId));
+        CompositeQueueFlatFile container = containerManager.getFlatFile(new MessageQueue(topic, brokerName, queueId));
         if (container == null) {
             GetMessageResult result = new GetMessageResult();
             result.setNextBeginOffset(queueOffset);
@@ -472,7 +472,7 @@ public class TieredMessageFetcher {
     }
 
     public CompletableFuture<Long> getEarliestMessageTimeAsync(String topic, int queueId) {
-        CompositeFlatFile container = containerManager.getMQContainer(new MessageQueue(topic, brokerName, queueId));
+        CompositeFlatFile container = containerManager.getFlatFile(new MessageQueue(topic, brokerName, queueId));
         if (container == null) {
             return CompletableFuture.completedFuture(-1L);
         }
@@ -482,7 +482,7 @@ public class TieredMessageFetcher {
     }
 
     public CompletableFuture<Long> getMessageStoreTimeStampAsync(String topic, int queueId, long queueOffset) {
-        CompositeFlatFile container = containerManager.getMQContainer(new MessageQueue(topic, brokerName, queueId));
+        CompositeFlatFile container = containerManager.getFlatFile(new MessageQueue(topic, brokerName, queueId));
         if (container == null) {
             return CompletableFuture.completedFuture(-1L);
         }
@@ -501,7 +501,7 @@ public class TieredMessageFetcher {
 
     public long getOffsetInQueueByTime(String topic, int queueId, long timestamp,
         BoundaryType type) {
-        CompositeFlatFile container = containerManager.getMQContainer(new MessageQueue(topic, brokerName, queueId));
+        CompositeFlatFile container = containerManager.getFlatFile(new MessageQueue(topic, brokerName, queueId));
         if (container == null) {
             return -1L;
         }
@@ -555,7 +555,7 @@ public class TieredMessageFetcher {
                         }
 
                         int queueId = indexBuffer.getInt(indexOffset + 4 + 4);
-                        CompositeFlatFile container = TieredFlatFileManager.getInstance(storeConfig).getMQContainer(new MessageQueue(topic, brokerName, queueId));
+                        CompositeFlatFile container = TieredFlatFileManager.getInstance(storeConfig).getFlatFile(new MessageQueue(topic, brokerName, queueId));
                         if (container == null) {
                             continue;
                         }

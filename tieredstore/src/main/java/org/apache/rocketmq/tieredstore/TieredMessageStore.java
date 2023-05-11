@@ -111,7 +111,7 @@ public class TieredMessageStore extends AbstractPluginMessageStore {
             return false;
         }
 
-        CompositeFlatFile container = containerManager.getMQContainer(new MessageQueue(topic, brokerName, queueId));
+        CompositeFlatFile container = containerManager.getFlatFile(new MessageQueue(topic, brokerName, queueId));
         if (container == null) {
             return false;
         }
@@ -203,7 +203,7 @@ public class TieredMessageStore extends AbstractPluginMessageStore {
     @Override
     public long getMinOffsetInQueue(String topic, int queueId) {
         long minOffsetInNextStore = next.getMinOffsetInQueue(topic, queueId);
-        CompositeFlatFile container = containerManager.getMQContainer(new MessageQueue(topic, brokerName, queueId));
+        CompositeFlatFile container = containerManager.getFlatFile(new MessageQueue(topic, brokerName, queueId));
         if (container == null) {
             return minOffsetInNextStore;
         }
@@ -411,9 +411,9 @@ public class TieredMessageStore extends AbstractPluginMessageStore {
         String topic = topicMetadata.getTopic();
         metadataStore.iterateQueue(topic, queueMetadata -> {
             MessageQueue mq = queueMetadata.getQueue();
-            CompositeFlatFile container = containerManager.getMQContainer(mq);
+            CompositeFlatFile container = containerManager.getFlatFile(mq);
             if (container != null) {
-                containerManager.destroyContainer(mq);
+                containerManager.destroyCompositeFile(mq);
                 try {
                     metadataStore.deleteQueue(mq);
                 } catch (Exception e) {

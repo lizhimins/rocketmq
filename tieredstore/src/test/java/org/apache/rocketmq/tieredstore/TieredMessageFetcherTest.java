@@ -81,7 +81,7 @@ public class TieredMessageFetcherTest {
         GetMessageResult getMessageResult = fetcher.getMessageAsync("group", mq.getTopic(), mq.getQueueId(), 0, 32, null).join();
         Assert.assertEquals(GetMessageStatus.NO_MATCHED_LOGIC_QUEUE, getMessageResult.getStatus());
 
-        CompositeFlatFile container = containerManager.getOrCreateMQContainer(mq);
+        CompositeFlatFile container = containerManager.getOrCreateFlatFileIfAbsent(mq);
         container.initOffset(0);
 
         getMessageResult = fetcher.getMessageAsync("group", mq.getTopic(), mq.getQueueId(), 0, 32, null).join();
@@ -114,7 +114,7 @@ public class TieredMessageFetcherTest {
         TieredMessageFetcher fetcher = triple.getLeft();
         ByteBuffer msg1 = triple.getMiddle();
         ByteBuffer msg2 = triple.getRight();
-        CompositeQueueFlatFile container = TieredFlatFileManager.getInstance(storeConfig).getMQContainer(mq);
+        CompositeQueueFlatFile container = TieredFlatFileManager.getInstance(storeConfig).getFlatFile(mq);
         Assert.assertNotNull(container);
 
         GetMessageResult getMessageResult = fetcher.getMessageFromTieredStoreAsync(container, 0, 32).join();
@@ -137,7 +137,7 @@ public class TieredMessageFetcherTest {
         TieredMessageFetcher fetcher = triple.getLeft();
         ByteBuffer msg1 = triple.getMiddle();
         ByteBuffer msg2 = triple.getRight();
-        CompositeQueueFlatFile container = TieredFlatFileManager.getInstance(storeConfig).getMQContainer(mq);
+        CompositeQueueFlatFile container = TieredFlatFileManager.getInstance(storeConfig).getFlatFile(mq);
         Assert.assertNotNull(container);
 
         fetcher.recordCacheAccess(container, "prevent-invalid-cache", 0, new ArrayList<>());
@@ -194,7 +194,7 @@ public class TieredMessageFetcherTest {
     @Test
     public void testGetMessageStoreTimeStampAsync() {
         TieredMessageFetcher fetcher = new TieredMessageFetcher(storeConfig);
-        CompositeFlatFile container = TieredFlatFileManager.getInstance(storeConfig).getOrCreateMQContainer(mq);
+        CompositeFlatFile container = TieredFlatFileManager.getInstance(storeConfig).getOrCreateFlatFileIfAbsent(mq);
         container.initOffset(0);
 
         ByteBuffer msg1 = MessageBufferUtilTest.buildMessageBuffer();
@@ -234,7 +234,7 @@ public class TieredMessageFetcherTest {
         TieredMessageFetcher fetcher = new TieredMessageFetcher(storeConfig);
         Assert.assertEquals(-1, fetcher.getOffsetInQueueByTime(mq.getTopic(), mq.getQueueId(), 0, BoundaryType.LOWER));
 
-        CompositeQueueFlatFile container = TieredFlatFileManager.getInstance(storeConfig).getOrCreateMQContainer(mq);
+        CompositeQueueFlatFile container = TieredFlatFileManager.getInstance(storeConfig).getOrCreateFlatFileIfAbsent(mq);
         Assert.assertEquals(-1, fetcher.getOffsetInQueueByTime(mq.getTopic(), mq.getQueueId(), 0, BoundaryType.LOWER));
         Assert.assertNotNull(container);
 
@@ -264,7 +264,7 @@ public class TieredMessageFetcherTest {
         TieredMessageFetcher fetcher = new TieredMessageFetcher(storeConfig);
         Assert.assertEquals(0, fetcher.queryMessageAsync(mq.getTopic(), "key", 32, 0, Long.MAX_VALUE).join().getMessageMapedList().size());
 
-        CompositeQueueFlatFile container = TieredFlatFileManager.getInstance(storeConfig).getOrCreateMQContainer(mq);
+        CompositeQueueFlatFile container = TieredFlatFileManager.getInstance(storeConfig).getOrCreateFlatFileIfAbsent(mq);
         Assert.assertEquals(0, fetcher.queryMessageAsync(mq.getTopic(), "key", 32, 0, Long.MAX_VALUE).join().getMessageMapedList().size());
 
         container.initOffset(0);

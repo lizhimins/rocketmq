@@ -68,24 +68,24 @@ public class TieredFlatFileManagerTest {
 
         Awaitility.await()
             .atMost(3, TimeUnit.SECONDS)
-            .until(() -> containerManager.getAllMQContainer().size() == 2);
+            .until(() -> containerManager.deepCopyFlatFileToList().size() == 2);
 
-        CompositeFlatFile container = containerManager.getMQContainer(mq);
+        CompositeFlatFile container = containerManager.getFlatFile(mq);
         Assert.assertNotNull(container);
         Assert.assertEquals(100, container.getDispatchOffset());
 
-        CompositeFlatFile container1 = containerManager.getMQContainer(mq1);
+        CompositeFlatFile container1 = containerManager.getFlatFile(mq1);
         Assert.assertNotNull(container1);
         Assert.assertEquals(200, container1.getDispatchOffset());
 
-        containerManager.destroyContainer(mq);
+        containerManager.destroyCompositeFile(mq);
         Assert.assertTrue(container.isClosed());
-        Assert.assertNull(containerManager.getMQContainer(mq));
+        Assert.assertNull(containerManager.getFlatFile(mq));
         Assert.assertNull(metadataStore.getQueue(mq));
 
         containerManager.destroy();
         Assert.assertTrue(container1.isClosed());
-        Assert.assertNull(containerManager.getMQContainer(mq1));
+        Assert.assertNull(containerManager.getFlatFile(mq1));
         Assert.assertNull(metadataStore.getQueue(mq1));
     }
 }
