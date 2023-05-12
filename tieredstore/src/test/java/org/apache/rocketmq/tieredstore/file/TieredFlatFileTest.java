@@ -70,7 +70,7 @@ public class TieredFlatFileTest {
         fileSegment.initPosition(fileSegment.getSize());
 
         String filePath = TieredStoreUtil.toPath(queue);
-        TieredFlatFile fileQueue = fileQueueFactory.createQueueForCommitLog(filePath);
+        TieredFlatFile fileQueue = fileQueueFactory.createFlatFileForCommitLog(filePath);
         fileQueue.updateFileSegment(fileSegment);
 
         TieredMetadataStore metadataStore = TieredStoreUtil.getMetadataStore(storeConfig);
@@ -112,7 +112,7 @@ public class TieredFlatFileTest {
      */
     @Test
     public void testGetFileSegment() {
-        TieredFlatFile fileQueue = fileQueueFactory.createQueueForCommitLog(TieredStoreUtil.toPath(queue));
+        TieredFlatFile fileQueue = fileQueueFactory.createFlatFileForCommitLog(TieredStoreUtil.toPath(queue));
         fileQueue.setBaseOffset(0);
         TieredFileSegment segment1 = fileQueue.getFileToWrite();
         segment1.initPosition(1000);
@@ -133,7 +133,7 @@ public class TieredFlatFileTest {
 
     @Test
     public void testAppendAndRead() {
-        TieredFlatFile fileQueue = fileQueueFactory.createQueueForConsumeQueue(TieredStoreUtil.toPath(queue));
+        TieredFlatFile fileQueue = fileQueueFactory.createFlatFileForConsumeQueue(TieredStoreUtil.toPath(queue));
         fileQueue.setBaseOffset(0);
         Assert.assertEquals(0, fileQueue.getMinOffset());
         Assert.assertEquals(0, fileQueue.getDispatchCommitOffset());
@@ -171,7 +171,7 @@ public class TieredFlatFileTest {
     @Test
     public void testLoadFromMetadata() {
         String filePath = TieredStoreUtil.toPath(queue);
-        TieredFlatFile fileQueue = fileQueueFactory.createQueueForCommitLog(filePath);
+        TieredFlatFile fileQueue = fileQueueFactory.createFlatFileForCommitLog(filePath);
 
         MemoryFileSegment fileSegment1 =
             new MemoryFileSegment(FileSegmentType.COMMIT_LOG, queue, 100, storeConfig);
@@ -187,7 +187,7 @@ public class TieredFlatFileTest {
 
         // Set instance to null and reload from disk
         TieredStoreUtil.metadataStoreInstance = null;
-        fileQueue = fileQueueFactory.createQueueForCommitLog(filePath);
+        fileQueue = fileQueueFactory.createFlatFileForCommitLog(filePath);
         Assert.assertEquals(2, fileQueue.getNeedCommitFileSegmentList().size());
         TieredFileSegment file1 = fileQueue.getFileByIndex(0);
         Assert.assertNotNull(file1);
@@ -206,7 +206,7 @@ public class TieredFlatFileTest {
     @Test
     public void testCheckFileSize() {
         String filePath = TieredStoreUtil.toPath(queue);
-        TieredFlatFile tieredFlatFile = fileQueueFactory.createQueueForCommitLog(filePath);
+        TieredFlatFile tieredFlatFile = fileQueueFactory.createFlatFileForCommitLog(filePath);
 
         TieredFileSegment fileSegment1 = new MemoryFileSegment(
             FileSegmentType.CONSUME_QUEUE, queue, 100, storeConfig);
@@ -221,7 +221,7 @@ public class TieredFlatFileTest {
         tieredFlatFile.updateFileSegment(fileSegment2);
         tieredFlatFile.updateFileSegment(fileSegment2);
 
-        TieredFlatFile fileQueue = fileQueueFactory.createQueueForConsumeQueue(filePath);
+        TieredFlatFile fileQueue = fileQueueFactory.createFlatFileForConsumeQueue(filePath);
         Assert.assertEquals(1, fileQueue.getNeedCommitFileSegmentList().size());
 
         fileSegment1 = fileQueue.getFileByIndex(0);
@@ -242,7 +242,7 @@ public class TieredFlatFileTest {
     @Test
     public void testCleanExpiredFile() {
         String filePath = TieredStoreUtil.toPath(queue);
-        TieredFlatFile tieredFlatFile = fileQueueFactory.createQueueForCommitLog(filePath);
+        TieredFlatFile tieredFlatFile = fileQueueFactory.createFlatFileForCommitLog(filePath);
 
         TieredFileSegment fileSegment1 = new MemoryFileSegment(
             FileSegmentType.CONSUME_QUEUE, queue, 100, storeConfig);
@@ -261,7 +261,7 @@ public class TieredFlatFileTest {
         tieredFlatFile.updateFileSegment(fileSegment2);
         tieredFlatFile.updateFileSegment(fileSegment2);
 
-        TieredFlatFile fileQueue = fileQueueFactory.createQueueForConsumeQueue(filePath);
+        TieredFlatFile fileQueue = fileQueueFactory.createFlatFileForConsumeQueue(filePath);
         Assert.assertEquals(2, fileQueue.getFileSegmentCount());
 
         TieredMetadataStore metadataStore = TieredStoreUtil.getMetadataStore(storeConfig);
@@ -286,14 +286,14 @@ public class TieredFlatFileTest {
     @Test
     public void testRollingNewFile() {
         String filePath = TieredStoreUtil.toPath(queue);
-        TieredFlatFile tieredFlatFile = fileQueueFactory.createQueueForCommitLog(filePath);
+        TieredFlatFile tieredFlatFile = fileQueueFactory.createFlatFileForCommitLog(filePath);
 
         TieredFileSegment fileSegment1 = new MemoryFileSegment(
             FileSegmentType.CONSUME_QUEUE, queue, 100, storeConfig);
         fileSegment1.initPosition(fileSegment1.getSize() - 100);
         tieredFlatFile.updateFileSegment(fileSegment1);
 
-        TieredFlatFile fileQueue = fileQueueFactory.createQueueForConsumeQueue(filePath);
+        TieredFlatFile fileQueue = fileQueueFactory.createFlatFileForConsumeQueue(filePath);
         Assert.assertEquals(1, fileQueue.getFileSegmentCount());
 
         fileQueue.rollingNewFile();

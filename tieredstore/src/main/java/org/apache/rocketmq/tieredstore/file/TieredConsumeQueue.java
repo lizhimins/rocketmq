@@ -29,8 +29,6 @@ import org.apache.rocketmq.tieredstore.util.TieredStoreUtil;
 
 public class TieredConsumeQueue {
 
-    private static final Logger log = LoggerFactory.getLogger(TieredStoreUtil.TIERED_STORE_LOGGER_NAME);
-
     /**
      * commit log offset: long, 8 bytes
      * message size: int, 4 bytes
@@ -38,43 +36,43 @@ public class TieredConsumeQueue {
      */
     public static final int CONSUME_QUEUE_STORE_UNIT_SIZE = 8 + 4 + 8;
 
-    private final TieredFlatFile fileQueue;
+    private final TieredFlatFile flatFile;
 
     public TieredConsumeQueue(TieredFileAllocator fileQueueFactory, String filePath) {
-        this.fileQueue = fileQueueFactory.createQueueForConsumeQueue(filePath);
+        this.flatFile = fileQueueFactory.createFlatFileForConsumeQueue(filePath);
     }
 
     public boolean isInitialized() {
-        return fileQueue.getBaseOffset() != -1;
+        return flatFile.getBaseOffset() != -1;
     }
 
     @VisibleForTesting
-    public TieredFlatFile getFileQueue() {
-        return fileQueue;
+    public TieredFlatFile getFlatFile() {
+        return flatFile;
     }
 
     public long getBaseOffset() {
-        return fileQueue.getBaseOffset();
+        return flatFile.getBaseOffset();
     }
 
     public void setBaseOffset(long baseOffset) {
-        fileQueue.setBaseOffset(baseOffset);
+        flatFile.setBaseOffset(baseOffset);
     }
 
     public long getMinOffset() {
-        return fileQueue.getMinOffset();
+        return flatFile.getMinOffset();
     }
 
     public long getCommitOffset() {
-        return fileQueue.getCommitOffset();
+        return flatFile.getCommitOffset();
     }
 
     public long getMaxOffset() {
-        return fileQueue.getMaxOffset();
+        return flatFile.getMaxOffset();
     }
 
     public long getEndTimestamp() {
-        return fileQueue.getFileToWrite().getMaxTimestamp();
+        return flatFile.getFileToWrite().getMaxTimestamp();
     }
 
     public AppendResult append(final long offset, final int size, final long tagsCode, long timeStamp) {
@@ -87,27 +85,27 @@ public class TieredConsumeQueue {
         cqItem.putInt(size);
         cqItem.putLong(tagsCode);
         cqItem.flip();
-        return fileQueue.append(cqItem, timeStamp, commit);
+        return flatFile.append(cqItem, timeStamp, commit);
     }
 
     public CompletableFuture<ByteBuffer> readAsync(long offset, int length) {
-        return fileQueue.readAsync(offset, length);
+        return flatFile.readAsync(offset, length);
     }
 
     public void commit(boolean sync) {
-        fileQueue.commit(sync);
+        flatFile.commit(sync);
     }
 
     public void cleanExpiredFile(long expireTimestamp) {
-        fileQueue.cleanExpiredFile(expireTimestamp);
+        flatFile.cleanExpiredFile(expireTimestamp);
     }
 
     public void destroyExpiredFile() {
-        fileQueue.destroyExpiredFile();
+        flatFile.destroyExpiredFile();
     }
 
     protected Pair<Long, Long> getQueueOffsetInFileByTime(long timestamp, BoundaryType boundaryType) {
-        TieredFileSegment fileSegment = fileQueue.getFileByTime(timestamp, boundaryType);
+        TieredFileSegment fileSegment = flatFile.getFileByTime(timestamp, boundaryType);
         if (fileSegment == null) {
             return Pair.of(-1L, -1L);
         }
@@ -116,6 +114,6 @@ public class TieredConsumeQueue {
     }
 
     public void destroy() {
-        fileQueue.destroy();
+        flatFile.destroy();
     }
 }

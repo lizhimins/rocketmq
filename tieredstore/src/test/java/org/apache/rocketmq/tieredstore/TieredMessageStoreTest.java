@@ -115,7 +115,7 @@ public class TieredMessageStoreTest {
         when(container.getConsumeQueueCommitOffset()).thenReturn(Long.MAX_VALUE);
         when(containerManager.getFlatFile(mq)).thenReturn(container);
         try {
-            Field field = store.getClass().getDeclaredField("containerManager");
+            Field field = store.getClass().getDeclaredField("flatFileManager");
             field.setAccessible(true);
             field.set(store, containerManager);
         } catch (NoSuchFieldException | IllegalAccessException e) {

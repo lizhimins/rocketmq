@@ -63,7 +63,7 @@ public class TieredIndexFile {
     private static final String COMPACT_FILE_NAME = "2222";
 
     private final TieredMessageStoreConfig storeConfig;
-    private final TieredFlatFile fileQueue;
+    private final TieredFlatFile flatFile;
     private final int maxHashSlotNum;
     private final int maxIndexNum;
     private final int fileMaxSize;
@@ -77,9 +77,9 @@ public class TieredIndexFile {
 
     protected TieredIndexFile(TieredFileAllocator fileQueueFactory, String filePath) throws IOException {
         this.storeConfig = fileQueueFactory.getStoreConfig();
-        this.fileQueue = fileQueueFactory.createQueueForIndexFile(filePath);
-        if (fileQueue.getBaseOffset() == -1) {
-            fileQueue.setBaseOffset(0);
+        this.flatFile = fileQueueFactory.createFlatFileForIndexFile(filePath);
+        if (flatFile.getBaseOffset() == -1) {
+            flatFile.setBaseOffset(0);
         }
         this.maxHashSlotNum = storeConfig.getTieredStoreIndexFileMaxHashSlotNum();
         this.maxIndexNum = storeConfig.getTieredStoreIndexFileMaxIndexNum();
@@ -112,7 +112,7 @@ public class TieredIndexFile {
                     }
                     if (inflightCompactFuture.isDone() && preMappedFile != null && preMappedFile.isAvailable()) {
                         inflightCompactFuture = TieredStoreExecutor.compactIndexFileExecutor.submit(
-                            new CompactTask(storeConfig, preMappedFile, fileQueue), null);
+                            new CompactTask(storeConfig, preMappedFile, flatFile), null);
                     }
                 }
             } finally {
@@ -165,7 +165,7 @@ public class TieredIndexFile {
         if (preFileExists) {
             synchronized (TieredIndexFile.class) {
                 if (inflightCompactFuture.isDone()) {
-                    inflightCompactFuture = TieredStoreExecutor.compactIndexFileExecutor.submit(new CompactTask(storeConfig, preMappedFile, fileQueue), null);
+                    inflightCompactFuture = TieredStoreExecutor.compactIndexFileExecutor.submit(new CompactTask(storeConfig, preMappedFile, flatFile), null);
                 }
             }
         }
@@ -198,7 +198,7 @@ public class TieredIndexFile {
     private void tryToCompactPreFile() throws IOException {
         synchronized (TieredIndexFile.class) {
             if (inflightCompactFuture.isDone()) {
-                inflightCompactFuture = TieredStoreExecutor.compactIndexFileExecutor.submit(new CompactTask(storeConfig, preMappedFile, fileQueue), null);
+                inflightCompactFuture = TieredStoreExecutor.compactIndexFileExecutor.submit(new CompactTask(storeConfig, preMappedFile, flatFile), null);
             }
         }
     }
@@ -261,7 +261,7 @@ public class TieredIndexFile {
     public CompletableFuture<List<Pair<Long, ByteBuffer>>> queryAsync(String topic, String key, long beginTime, long endTime) {
         int hashCode = indexKeyHashMethod(buildKey(topic, key));
         int slotPosition = hashCode % maxHashSlotNum;
-        List<TieredFileSegment> fileSegmentList = fileQueue.getFileListByTime(beginTime, endTime);
+        List<TieredFileSegment> fileSegmentList = flatFile.getFileListByTime(beginTime, endTime);
         CompletableFuture<List<Pair<Long, ByteBuffer>>> future = null;
         for (int i = fileSegmentList.size() - 1; i >= 0; i--) {
             TieredFileSegment fileSegment = fileSegmentList.get(i);
@@ -311,7 +311,7 @@ public class TieredIndexFile {
     }
 
     public void commit(boolean sync) {
-        fileQueue.commit(sync);
+        flatFile.commit(sync);
         if (sync) {
             try {
                 inflightCompactFuture.get();
@@ -321,11 +321,11 @@ public class TieredIndexFile {
     }
 
     public void cleanExpiredFile(long expireTimestamp) {
-        fileQueue.cleanExpiredFile(expireTimestamp);
+        flatFile.cleanExpiredFile(expireTimestamp);
     }
 
     public void destroyExpiredFile() {
-        fileQueue.destroyExpiredFile();
+        flatFile.destroyExpiredFile();
     }
 
     public void destroy() {
@@ -341,7 +341,7 @@ public class TieredIndexFile {
         if (compactFile.exists()) {
             compactFile.delete();
         }
-        fileQueue.destroy();
+        flatFile.destroy();
     }
 
     static class CompactTask implements Runnable {

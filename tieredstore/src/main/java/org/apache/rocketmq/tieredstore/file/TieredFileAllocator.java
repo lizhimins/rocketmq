@@ -37,7 +37,7 @@ public class TieredFileAllocator {
         return storeConfig;
     }
 
-    public TieredFlatFile createQueueForCommitLog(String filePath) {
+    public TieredFlatFile createFlatFileForCommitLog(String filePath) {
         TieredFlatFile tieredFlatFile =
             new TieredFlatFile(fileSegmentAllocator, FileSegmentType.COMMIT_LOG, filePath);
         if (tieredFlatFile.getBaseOffset() == -1L) {
@@ -46,11 +46,11 @@ public class TieredFileAllocator {
         return tieredFlatFile;
     }
 
-    public TieredFlatFile createQueueForConsumeQueue(String filePath) {
+    public TieredFlatFile createFlatFileForConsumeQueue(String filePath) {
         return new TieredFlatFile(fileSegmentAllocator, FileSegmentType.CONSUME_QUEUE, filePath);
     }
 
-    public TieredFlatFile createQueueForIndexFile(String filePath) {
+    public TieredFlatFile createFlatFileForIndexFile(String filePath) {
         return new TieredFlatFile(fileSegmentAllocator, FileSegmentType.INDEX, filePath);
     }
 }

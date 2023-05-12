@@ -74,8 +74,8 @@ public class CompositeQueueFlatFileTest {
         ByteBuffer message = MessageBufferUtilTest.buildMessageBuffer();
         AppendResult result = container.appendCommitLog(message);
         Assert.assertEquals(AppendResult.OFFSET_INCORRECT, result);
-        Assert.assertEquals(0L, container.commitLog.getFileQueue().getFileToWrite().getAppendPosition());
-        Assert.assertEquals(0L, container.commitLog.getFileQueue().getFileToWrite().getCommitPosition());
+        Assert.assertEquals(0L, container.commitLog.getFlatFile().getFileToWrite().getAppendPosition());
+        Assert.assertEquals(0L, container.commitLog.getFlatFile().getFileToWrite().getCommitPosition());
 
         container = new CompositeQueueFlatFile(tieredFileAllocator, mq);
         container.initOffset(6);
@@ -104,8 +104,8 @@ public class CompositeQueueFlatFileTest {
         // Create new segment in file queue
         MemoryFileSegment segment = new MemoryFileSegment(FileSegmentType.CONSUME_QUEUE, mq, 20, storeConfig);
         segment.initPosition(segment.getSize());
-        container.consumeQueue.getFileQueue().setBaseOffset(20L);
-        container.consumeQueue.getFileQueue().getFileToWrite();
+        container.consumeQueue.getFlatFile().setBaseOffset(20L);
+        container.consumeQueue.getFlatFile().getFileToWrite();
 
         // Recreate will load metadata and build consume queue
         container = new CompositeQueueFlatFile(tieredFileAllocator, mq);
@@ -163,7 +163,7 @@ public class CompositeQueueFlatFileTest {
         container.appendCommitLog(buffer, true);
 
         // append message to consume queue
-        container.consumeQueue.getFileQueue().setBaseOffset(50 * ConsumeQueue.CQ_STORE_UNIT_SIZE);
+        container.consumeQueue.getFlatFile().setBaseOffset(50 * ConsumeQueue.CQ_STORE_UNIT_SIZE);
 
         for (int i = 0; i < 5; i++) {
             AppendResult appendResult = container.appendConsumeQueue(new DispatchRequest(

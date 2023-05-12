@@ -19,6 +19,7 @@ package org.apache.rocketmq.tieredstore.file;
 import com.google.common.annotations.VisibleForTesting;
 import java.nio.ByteBuffer;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
 import org.apache.rocketmq.logging.org.slf4j.Logger;
 import org.apache.rocketmq.logging.org.slf4j.LoggerFactory;
 import org.apache.rocketmq.tieredstore.common.AppendResult;
@@ -29,7 +30,7 @@ import org.apache.rocketmq.tieredstore.util.TieredStoreUtil;
 
 public class TieredCommitLog {
 
-    private static final Logger logger = LoggerFactory.getLogger(TieredStoreUtil.TIERED_STORE_LOGGER_NAME);
+    private static final Logger log = LoggerFactory.getLogger(TieredStoreUtil.TIERED_STORE_LOGGER_NAME);
 
     /**
      * item size: int, 4 bytes
@@ -40,36 +41,36 @@ public class TieredCommitLog {
     public static final int BLANK_MAGIC_CODE = 0xBBCCDDEE ^ 1880681586 + 8;
 
     private final TieredMessageStoreConfig storeConfig;
-    private final TieredFlatFile fileQueue;
+    private final TieredFlatFile flatFile;
 
     public TieredCommitLog(TieredFileAllocator fileQueueFactory, String filePath) {
         this.storeConfig = fileQueueFactory.getStoreConfig();
-        this.fileQueue = fileQueueFactory.createQueueForCommitLog(filePath);
+        this.flatFile = fileQueueFactory.createFlatFileForCommitLog(filePath);
     }
 
     @VisibleForTesting
-    public TieredFlatFile getFileQueue() {
-        return fileQueue;
+    public TieredFlatFile getFlatFile() {
+        return flatFile;
     }
 
     public long getMinOffset() {
-        return fileQueue.getMinOffset();
+        return flatFile.getMinOffset();
     }
 
     public long getCommitOffset() {
-        return fileQueue.getCommitOffset();
+        return flatFile.getCommitOffset();
     }
 
     public long getDispatchCommitOffset() {
-        return fileQueue.getDispatchCommitOffset();
+        return flatFile.getDispatchCommitOffset();
     }
 
     public long getMaxOffset() {
-        return fileQueue.getMaxOffset();
+        return flatFile.getMaxOffset();
     }
 
     public long getBeginTimestamp() {
-        TieredFileSegment firstIndexFile = fileQueue.getFileByIndex(0);
+        TieredFileSegment firstIndexFile = flatFile.getFileByIndex(0);
         if (firstIndexFile == null) {
             return -1L;
         }
@@ -78,47 +79,47 @@ public class TieredCommitLog {
     }
 
     public long getEndTimestamp() {
-        return fileQueue.getFileToWrite().getMaxTimestamp();
+        return flatFile.getFileToWrite().getMaxTimestamp();
     }
 
     public AppendResult append(ByteBuffer byteBuf) {
-        return fileQueue.append(byteBuf, MessageBufferUtil.getStoreTimeStamp(byteBuf));
+        return flatFile.append(byteBuf, MessageBufferUtil.getStoreTimeStamp(byteBuf));
     }
 
     public AppendResult append(ByteBuffer byteBuf, boolean commit) {
-        return fileQueue.append(byteBuf, MessageBufferUtil.getStoreTimeStamp(byteBuf), commit);
+        return flatFile.append(byteBuf, MessageBufferUtil.getStoreTimeStamp(byteBuf), commit);
     }
 
     public CompletableFuture<ByteBuffer> readAsync(long offset, int length) {
-        return fileQueue.readAsync(offset, length);
+        return flatFile.readAsync(offset, length);
     }
 
     public void commit(boolean sync) {
-        fileQueue.commit(sync);
+        flatFile.commit(sync);
     }
 
     public void cleanExpiredFile(long expireTimestamp) {
-        fileQueue.cleanExpiredFile(expireTimestamp);
+        flatFile.cleanExpiredFile(expireTimestamp);
     }
 
     public void destroyExpiredFile() {
-        fileQueue.destroyExpiredFile();
-        if (fileQueue.getFileSegmentCount() == 0) {
+        flatFile.destroyExpiredFile();
+        if (flatFile.getFileSegmentCount() == 0) {
             return;
         }
-        TieredFileSegment fileSegment = fileQueue.getFileToWrite();
+        TieredFileSegment fileSegment = flatFile.getFileToWrite();
         try {
             if (System.currentTimeMillis() - fileSegment.getMaxTimestamp() >
-                (long) storeConfig.getCommitLogRollingInterval() * 60 * 60 * 1000
+                TimeUnit.HOURS.toMillis(storeConfig.getCommitLogRollingInterval())
                 && fileSegment.getSize() > storeConfig.getCommitLogRollingMinimumSize()) {
-                fileQueue.rollingNewFile();
+                flatFile.rollingNewFile();
             }
         } catch (Exception e) {
-            logger.error("Rolling to next file failed:", e);
+            log.error("Rolling to next file failed", e);
         }
     }
 
     public void destroy() {
-        fileQueue.destroy();
+        flatFile.destroy();
     }
 }
