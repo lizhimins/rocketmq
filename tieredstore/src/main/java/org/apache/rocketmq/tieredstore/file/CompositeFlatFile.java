@@ -60,7 +60,7 @@ public class CompositeFlatFile implements CompositeAccess {
      */
     protected volatile long dispatchOffset;
 
-    protected final ReentrantLock fileChunkLock;
+    protected final ReentrantLock compositeFlatFileLock;
     protected final TieredMessageStoreConfig storeConfig;
     protected final TieredMetadataStore metadataStore;
 
@@ -75,7 +75,7 @@ public class CompositeFlatFile implements CompositeAccess {
         this.storeConfig = fileQueueFactory.getStoreConfig();
         this.readAheadFactor = this.storeConfig.getReadAheadMinFactor();
         this.metadataStore = TieredStoreUtil.getMetadataStore(this.storeConfig);
-        this.fileChunkLock = new ReentrantLock();
+        this.compositeFlatFileLock = new ReentrantLock();
         this.inFlightRequestMap = new ConcurrentHashMap<>();
         this.commitLog = new TieredCommitLog(fileQueueFactory, filePath);
         this.consumeQueue = new TieredConsumeQueue(fileQueueFactory, filePath);
@@ -102,8 +102,8 @@ public class CompositeFlatFile implements CompositeAccess {
         return closed;
     }
 
-    public ReentrantLock getFileChunkLock() {
-        return fileChunkLock;
+    public ReentrantLock getCompositeFlatFileLock() {
+        return compositeFlatFileLock;
     }
 
     public long getCommitLogMinOffset() {

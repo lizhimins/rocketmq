@@ -76,7 +76,7 @@ public class TieredDispatcher extends ServiceThread implements CommitLogDispatch
         TieredStoreExecutor.commonScheduledExecutor.scheduleWithFixedDelay(() -> {
             try {
                 for (CompositeQueueFlatFile container : tieredFlatFileManager.deepCopyFlatFileToList()) {
-                    if (!container.getFileChunkLock().isLocked()) {
+                    if (!container.getCompositeFlatFileLock().isLocked()) {
                         TieredStoreExecutor.dispatchExecutor.execute(() -> {
                             try {
                                 dispatchByMQContainer(container);
@@ -131,20 +131,20 @@ public class TieredDispatcher extends ServiceThread implements CommitLogDispatch
 
         if (request.getConsumeQueueOffset() == container.getDispatchOffset()) {
             try {
-                if (container.getFileChunkLock().isLocked() || !container.getFileChunkLock().tryLock(1, TimeUnit.MILLISECONDS)) {
+                if (container.getCompositeFlatFileLock().isLocked() || !container.getCompositeFlatFileLock().tryLock(1, TimeUnit.MILLISECONDS)) {
                     return;
                 }
             } catch (Exception e) {
                 logger.warn("TieredDispatcher#dispatch: dispatch failed, can not get container lock: topic: {}, queueId: {}", request.getTopic(), request.getQueueId(), e);
-                if (container.getFileChunkLock().isLocked()) {
-                    container.getFileChunkLock().unlock();
+                if (container.getCompositeFlatFileLock().isLocked()) {
+                    container.getCompositeFlatFileLock().unlock();
                 }
                 return;
             }
 
             // double check
             if (request.getConsumeQueueOffset() != container.getDispatchOffset()) {
-                container.getFileChunkLock().unlock();
+                container.getCompositeFlatFileLock().unlock();
                 return;
             }
 
@@ -152,7 +152,7 @@ public class TieredDispatcher extends ServiceThread implements CommitLogDispatch
             if (message == null) {
                 logger.error("TieredDispatcher#dispatch: dispatch failed, can not get message from next store: topic: {}, queueId: {}, commitLog offset: {}, size: {}",
                     request.getTopic(), request.getQueueId(), request.getCommitLogOffset(), request.getMsgSize());
-                container.getFileChunkLock().unlock();
+                container.getCompositeFlatFileLock().unlock();
                 return;
             }
 
@@ -177,10 +177,10 @@ public class TieredDispatcher extends ServiceThread implements CommitLogDispatch
                 logger.error("TieredDispatcher#dispatch: dispatch failed: topic: {}, queueId: {}, queue offset: {}", request.getTopic(), request.getQueueId(), request.getConsumeQueueOffset(), throwable);
             } finally {
                 message.release();
-                container.getFileChunkLock().unlock();
+                container.getCompositeFlatFileLock().unlock();
             }
         } else {
-            if (!container.getFileChunkLock().isLocked()) {
+            if (!container.getCompositeFlatFileLock().isLocked()) {
                 try {
                     TieredStoreExecutor.dispatchExecutor.execute(() -> {
                         try {
@@ -222,13 +222,13 @@ public class TieredDispatcher extends ServiceThread implements CommitLogDispatch
         }
 
         try {
-            if (!container.getFileChunkLock().tryLock(200, TimeUnit.MILLISECONDS)) {
+            if (!container.getCompositeFlatFileLock().tryLock(200, TimeUnit.MILLISECONDS)) {
                 return;
             }
         } catch (Exception e) {
             logger.warn("TieredDispatcher#dispatchByMQContainer: dispatch failed, can not get container lock: topic: {}, queueId: {}", mq.getTopic(), mq.getQueueId(), e);
-            if (container.getFileChunkLock().isLocked()) {
-                container.getFileChunkLock().unlock();
+            if (container.getCompositeFlatFileLock().isLocked()) {
+                container.getCompositeFlatFileLock().unlock();
             }
             return;
         }
@@ -279,10 +279,10 @@ public class TieredDispatcher extends ServiceThread implements CommitLogDispatch
                 .build();
             TieredStoreMetricsManager.messagesDispatchTotal.add(queueOffset - beforeOffset, attributes);
         } finally {
-            container.getFileChunkLock().unlock();
+            container.getCompositeFlatFileLock().unlock();
         }
         // If this queue dispatch falls too far, dispatch again immediately
-        if (container.getDispatchOffset() < maxOffsetInQueue && !container.getFileChunkLock().isLocked()) {
+        if (container.getDispatchOffset() < maxOffsetInQueue && !container.getCompositeFlatFileLock().isLocked()) {
             TieredStoreExecutor.dispatchExecutor.execute(() -> {
                 try {
                     dispatchByMQContainer(container);
@@ -412,7 +412,7 @@ public class TieredDispatcher extends ServiceThread implements CommitLogDispatch
                 } else if (result == AppendResult.OFFSET_INCORRECT) {
                     logger.error("build consumeQueue and indexFile failed, offset is messed up, try to rebuild cq: topic: {}, queue: {}, queue offset: {}, max queue offset: {}"
                         , request.getTopic(), request.getQueueId(), request.getConsumeQueueOffset(), container.getConsumeQueueMaxOffset());
-                    container.getFileChunkLock().lock();
+                    container.getCompositeFlatFileLock().lock();
                     try {
                         // rollback dispatch offset, this operation will cause duplicate message in commitLog
                         container.initOffset(container.getConsumeQueueMaxOffset());
@@ -421,7 +421,7 @@ public class TieredDispatcher extends ServiceThread implements CommitLogDispatch
                         requestList.clear();
                         break;
                     } finally {
-                        container.getFileChunkLock().unlock();
+                        container.getCompositeFlatFileLock().unlock();
                     }
                 } else {
                     logger.warn("build consumeQueue failed, result: {}, topic: {}, queue: {}, queue offset: {}",

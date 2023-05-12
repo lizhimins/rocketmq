@@ -143,7 +143,7 @@ public class TieredFlatFileManager {
                 for (CompositeQueueFlatFile container : deepCopyFlatFileToList()) {
                     int delay = random.nextInt(storeConfig.getMaxCommitJitter());
                     TieredStoreExecutor.cleanExpiredFileExecutor.schedule(() -> {
-                        container.getFileChunkLock().lock();
+                        container.getCompositeFlatFileLock().lock();
                         try {
                             container.cleanExpiredFile(expiredTimeStamp);
                             container.destroyExpiredFile();
@@ -151,7 +151,7 @@ public class TieredFlatFileManager {
                                 destroyCompositeFile(container.getMessageQueue());
                             }
                         } finally {
-                            container.getFileChunkLock().unlock();
+                            container.getCompositeFlatFileLock().unlock();
                         }
                     }, delay, TimeUnit.MILLISECONDS);
                 }
