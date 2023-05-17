@@ -96,40 +96,69 @@ public class TieredFlatFileManager {
         return indexFile;
     }
 
+    public void doCommit() {
+        Random random = new Random();
+        for (CompositeQueueFlatFile container : deepCopyFlatFileToList()) {
+            int delay = random.nextInt(storeConfig.getMaxCommitJitter());
+            TieredStoreExecutor.commitExecutor.schedule(() -> {
+                try {
+                    container.commitCommitLog();
+                } catch (Throwable e) {
+                    MessageQueue mq = container.getMessageQueue();
+                    logger.error("commit commitLog periodically failed: topic: {}, queue: {}",
+                        mq.getTopic(), mq.getQueueId(), e);
+                }
+            }, delay, TimeUnit.MILLISECONDS);
+            TieredStoreExecutor.commitExecutor.schedule(() -> {
+                try {
+                    container.commitConsumeQueue();
+                } catch (Throwable e) {
+                    MessageQueue mq = container.getMessageQueue();
+                    logger.error("commit consumeQueue periodically failed: topic: {}, queue: {}",
+                        mq.getTopic(), mq.getQueueId(), e);
+                }
+            }, delay, TimeUnit.MILLISECONDS);
+        }
+        TieredStoreExecutor.commitExecutor.schedule(() -> {
+            try {
+                if (indexFile != null) {
+                    indexFile.commit(true);
+                }
+            } catch (Throwable e) {
+                logger.error("commit indexFile periodically failed", e);
+            }
+        }, 0, TimeUnit.MILLISECONDS);
+    }
+
+    public void doCleanExpiredFile() {
+        long expiredTimeStamp = System.currentTimeMillis() -
+            TimeUnit.HOURS.toMillis(storeConfig.getTieredStoreFileReservedTime());
+        Random random = new Random();
+        for (CompositeQueueFlatFile container : deepCopyFlatFileToList()) {
+            int delay = random.nextInt(storeConfig.getMaxCommitJitter());
+            TieredStoreExecutor.cleanExpiredFileExecutor.schedule(() -> {
+                container.getCompositeFlatFileLock().lock();
+                try {
+                    container.cleanExpiredFile(expiredTimeStamp);
+                    container.destroyExpiredFile();
+                    if (container.getConsumeQueueBaseOffset() == -1) {
+                        destroyCompositeFile(container.getMessageQueue());
+                    }
+                } finally {
+                    container.getCompositeFlatFileLock().unlock();
+                }
+            }, delay, TimeUnit.MILLISECONDS);
+        }
+        if (indexFile != null) {
+            indexFile.cleanExpiredFile(expiredTimeStamp);
+            indexFile.destroyExpiredFile();
+        }
+    }
+
     private void doScheduleTask() {
         TieredStoreExecutor.commonScheduledExecutor.scheduleWithFixedDelay(() -> {
             try {
-                Random random = new Random();
-                for (CompositeQueueFlatFile container : deepCopyFlatFileToList()) {
-                    int delay = random.nextInt(storeConfig.getMaxCommitJitter());
-                    TieredStoreExecutor.commitExecutor.schedule(() -> {
-                        try {
-                            container.commitCommitLog();
-                        } catch (Throwable e) {
-                            MessageQueue mq = container.getMessageQueue();
-                            logger.error("commit commitLog periodically failed: topic: {}, queue: {}",
-                                mq.getTopic(), mq.getQueueId(), e);
-                        }
-                    }, delay, TimeUnit.MILLISECONDS);
-                    TieredStoreExecutor.commitExecutor.schedule(() -> {
-                        try {
-                            container.commitConsumeQueue();
-                        } catch (Throwable e) {
-                            MessageQueue mq = container.getMessageQueue();
-                            logger.error("commit consumeQueue periodically failed: topic: {}, queue: {}",
-                                mq.getTopic(), mq.getQueueId(), e);
-                        }
-                    }, delay, TimeUnit.MILLISECONDS);
-                }
-                TieredStoreExecutor.commitExecutor.schedule(() -> {
-                    try {
-                        if (indexFile != null) {
-                            indexFile.commit(true);
-                        }
-                    } catch (Throwable e) {
-                        logger.error("commit indexFile periodically failed", e);
-                    }
-                }, 0, TimeUnit.MILLISECONDS);
+                doCommit();
             } catch (Throwable e) {
                 logger.error("commit container periodically failed: ", e);
             }
@@ -137,28 +166,7 @@ public class TieredFlatFileManager {
 
         TieredStoreExecutor.commonScheduledExecutor.scheduleWithFixedDelay(() -> {
             try {
-                long expiredTimeStamp = System.currentTimeMillis() -
-                    TimeUnit.HOURS.toMillis(storeConfig.getTieredStoreFileReservedTime());
-                Random random = new Random();
-                for (CompositeQueueFlatFile container : deepCopyFlatFileToList()) {
-                    int delay = random.nextInt(storeConfig.getMaxCommitJitter());
-                    TieredStoreExecutor.cleanExpiredFileExecutor.schedule(() -> {
-                        container.getCompositeFlatFileLock().lock();
-                        try {
-                            container.cleanExpiredFile(expiredTimeStamp);
-                            container.destroyExpiredFile();
-                            if (container.getConsumeQueueBaseOffset() == -1) {
-                                destroyCompositeFile(container.getMessageQueue());
-                            }
-                        } finally {
-                            container.getCompositeFlatFileLock().unlock();
-                        }
-                    }, delay, TimeUnit.MILLISECONDS);
-                }
-                if (indexFile != null) {
-                    indexFile.cleanExpiredFile(expiredTimeStamp);
-                    indexFile.destroyExpiredFile();
-                }
+                doCleanExpiredFile();
             } catch (Throwable e) {
                 logger.error("clean expired flat file failed: ", e);
             }
