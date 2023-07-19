@@ -141,8 +141,9 @@ public class TieredCommitLog {
     }
 
     public void cleanExpiredFile(long expireTimestamp) {
-        flatFile.cleanExpiredFile(expireTimestamp);
-        correctMinOffset();
+        if (flatFile.cleanExpiredFile(expireTimestamp) > 0) {
+            correctMinOffset();
+        }
     }
 
     public void destroyExpiredFile() {
