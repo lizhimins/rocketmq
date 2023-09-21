@@ -52,21 +52,18 @@ choose_gc_log_directory()
 
 choose_gc_log_directory
 
-JAVA_OPT="${JAVA_OPT} -server -Xms1g -Xmx1g -Xmn256m -XX:PermSize=128m -XX:MaxPermSize=320m"
-JAVA_OPT="${JAVA_OPT} -XX:+UseConcMarkSweepGC -XX:+UseCMSCompactAtFullCollection -XX:CMSInitiatingOccupancyFraction=70 -XX:+CMSParallelRemarkEnabled -XX:SoftRefLRUPolicyMSPerMB=0 -XX:+CMSClassUnloadingEnabled -XX:SurvivorRatio=8 -XX:+DisableExplicitGC"
-JAVA_OPT="${JAVA_OPT} -verbose:gc -Xloggc:${GC_LOG_DIR}/rmq_run_class_gc_%p_%t.log -XX:+PrintGCDetails"
+JAVA_OPT="${JAVA_OPT} -server -Xms2g -Xmx2g -Xmn512m -XX:PermSize=128m -XX:MaxPermSize=320m"
 JAVA_OPT="${JAVA_OPT} -XX:-OmitStackTraceInFastThrow"
 JAVA_OPT="${JAVA_OPT} -XX:-UseLargePages"
 JAVA_OPT="${JAVA_OPT} -XX:+PerfDisableSharedMem"
 #JAVA_OPT="${JAVA_OPT} -Xdebug -Xrunjdwp:transport=dt_socket,address=9555,server=y,suspend=n"
 JAVA_OPT="${JAVA_OPT} -cp ${CLASSPATH}"
-JAVA_OPT="${JAVA_OPT} -Djava.ext.dirs=${JAVA_HOME}/jre/lib/ext:${BASE_DIR}/lib:${JAVA_HOME}/lib/ext"
 JAVA_OPT="${JAVA_OPT} -Drmq.logback.configurationFile=${BASE_DIR}/conf/rmq.client.logback.xml"
 
 if [ -z "$JAVA_HOME" ]; then
   JAVA_HOME=/usr/java
 fi
 
-JAVA="$JAVA_HOME/bin/java"
+JAVA="/usr/bin/java"
 
 $JAVA ${JAVA_OPT} $@

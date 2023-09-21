@@ -571,6 +571,12 @@ public class DefaultMessageStore implements MessageStore {
         }
 
         long beginTime = this.getSystemClock().now();
+        if (brokerConfig.isNotPersistToMessageStore()) {
+            this.storeStatsService.setPutMessageEntireTimeMax(this.getSystemClock().now() - beginTime);
+            return CompletableFuture.completedFuture(
+                new PutMessageResult(PutMessageStatus.PUT_OK, new AppendMessageResult(AppendMessageStatus.PUT_OK)));
+        }
+
         CompletableFuture<PutMessageResult> putResultFuture = this.commitLog.asyncPutMessage(msg);
 
         putResultFuture.thenAccept(result -> {

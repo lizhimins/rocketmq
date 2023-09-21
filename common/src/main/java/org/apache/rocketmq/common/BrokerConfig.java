@@ -404,6 +404,8 @@ public class BrokerConfig extends BrokerIdentity {
 
     private int splitRegistrationSize = 800;
 
+    private boolean notPersistToMessageStore = false;
+
     public long getMaxPopPollingSize() {
         return maxPopPollingSize;
     }
@@ -1754,5 +1756,13 @@ public class BrokerConfig extends BrokerIdentity {
 
     public void setSplitRegistrationSize(int splitRegistrationSize) {
         this.splitRegistrationSize = splitRegistrationSize;
+    }
+
+    public boolean isNotPersistToMessageStore() {
+        return notPersistToMessageStore;
+    }
+
+    public void setNotPersistToMessageStore(boolean notPersistToMessageStore) {
+        this.notPersistToMessageStore = notPersistToMessageStore;
     }
 }
