@@ -17,15 +17,7 @@
 
 package org.apache.rocketmq.tieredstore.file;
 
-import java.util.Arrays;
-import java.util.HashSet;
-import java.util.Set;
-import org.apache.commons.lang3.StringUtils;
-import org.apache.rocketmq.common.message.MessageConst;
 import org.apache.rocketmq.common.message.MessageQueue;
-import org.apache.rocketmq.store.DispatchRequest;
-import org.apache.rocketmq.tieredstore.common.AppendResult;
-import org.apache.rocketmq.tieredstore.index.IndexService;
 import org.apache.rocketmq.tieredstore.metadata.QueueMetadata;
 import org.apache.rocketmq.tieredstore.metadata.TopicMetadata;
 import org.apache.rocketmq.tieredstore.util.TieredStoreUtil;
@@ -33,75 +25,60 @@ import org.apache.rocketmq.tieredstore.util.TieredStoreUtil;
 public class CompositeQueueFlatFile extends CompositeFlatFile {
 
     private final MessageQueue messageQueue;
-    private long topicSequenceNumber;
-    private QueueMetadata queueMetadata;
-    private final IndexService indexStoreService;
+    private final TopicMetadata topicMetadata;
+    private final QueueMetadata queueMetadata;
 
     public CompositeQueueFlatFile(TieredFileAllocator fileQueueFactory, MessageQueue messageQueue) {
+
         super(fileQueueFactory, TieredStoreUtil.toPath(messageQueue));
         this.messageQueue = messageQueue;
-        this.recoverQueueMetadata();
-        this.indexStoreService = TieredFlatFileManager.getTieredIndexService(storeConfig);
+        this.topicMetadata = this.recoverTopicMetadata();
+        this.queueMetadata = this.recoverQueueMetadata();
     }
 
     @Override
-    public void initOffset(long offset) {
-        if (!consumeQueue.isInitialized()) {
-            queueMetadata.setMinOffset(offset);
-            queueMetadata.setMaxOffset(offset);
-            metadataStore.updateQueue(queueMetadata);
-        }
-        super.initOffset(offset);
+    public long initOffset(long offset) {
+        long dispatchOffset = super.initOffset(offset);
+        this.flushMetadata();
+        return dispatchOffset;
     }
 
-    public void recoverQueueMetadata() {
+    public TopicMetadata recoverTopicMetadata() {
         TopicMetadata topicMetadata = this.metadataStore.getTopic(messageQueue.getTopic());
         if (topicMetadata == null) {
             topicMetadata = this.metadataStore.addTopic(messageQueue.getTopic(), -1L);
         }
-        this.topicSequenceNumber = topicMetadata.getTopicId();
+        return topicMetadata;
+    }
 
-        queueMetadata = this.metadataStore.getQueue(messageQueue);
+    public QueueMetadata recoverQueueMetadata() {
+        QueueMetadata queueMetadata = this.metadataStore.getQueue(messageQueue);
         if (queueMetadata == null) {
-            queueMetadata = this.metadataStore.addQueue(messageQueue, -1);
+            queueMetadata = this.metadataStore.addQueue(messageQueue, -1L);
         }
         if (queueMetadata.getMaxOffset() < queueMetadata.getMinOffset()) {
             queueMetadata.setMaxOffset(queueMetadata.getMinOffset());
         }
+        return queueMetadata;
     }
 
     public void flushMetadata() {
-        try {
-            queueMetadata.setMinOffset(super.getConsumeQueueMinOffset());
-            queueMetadata.setMaxOffset(super.getConsumeQueueMaxOffset());
-            metadataStore.updateQueue(queueMetadata);
-        } catch (Exception e) {
-            LOGGER.error("CompositeFlatFile#flushMetadata error, topic: {}, queue: {}",
-                messageQueue.getTopic(), messageQueue.getQueueId(), e);
-        }
-    }
-
-    /**
-     * Building indexes with offsetId is no longer supported because offsetId has changed in tiered storage
-     */
-    public AppendResult appendIndexFile(DispatchRequest request) {
-        if (closed) {
-            return AppendResult.FILE_CLOSED;
-        }
-
-        Set<String> keySet = new HashSet<>(
-            Arrays.asList(request.getKeys().split(MessageConst.KEY_SEPARATOR)));
-        if (StringUtils.isNotBlank(request.getUniqKey())) {
-            keySet.add(request.getUniqKey());
-        }
-
-        return indexStoreService.putKey(
-            messageQueue.getTopic(), (int) topicSequenceNumber, messageQueue.getQueueId(), keySet,
-            request.getCommitLogOffset(), request.getMsgSize(), request.getStoreTimestamp());
+        queueMetadata.setMinOffset(super.getConsumeQueueMinOffset());
+        queueMetadata.setMaxOffset(super.getConsumeQueueCommitOffset());
+        queueMetadata.setUpdateTimestamp(System.currentTimeMillis());
+        metadataStore.updateQueue(queueMetadata);
     }
 
     public MessageQueue getMessageQueue() {
         return messageQueue;
+    }
+
+    public TopicMetadata getTopicMetadata() {
+        return topicMetadata;
+    }
+
+    public QueueMetadata getQueueMetadata() {
+        return queueMetadata;
     }
 
     @Override

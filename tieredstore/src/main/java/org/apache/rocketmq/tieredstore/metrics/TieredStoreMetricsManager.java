@@ -43,7 +43,7 @@ import org.apache.rocketmq.common.metrics.NopObservableLongGauge;
 import org.apache.rocketmq.logging.org.slf4j.Logger;
 import org.apache.rocketmq.logging.org.slf4j.LoggerFactory;
 import org.apache.rocketmq.store.MessageStore;
-import org.apache.rocketmq.tieredstore.TieredMessageFetcher;
+import org.apache.rocketmq.tieredstore.MessageStoreFetcherImpl;
 import org.apache.rocketmq.tieredstore.common.FileSegmentType;
 import org.apache.rocketmq.tieredstore.common.MessageCacheKey;
 import org.apache.rocketmq.tieredstore.common.SelectBufferResultWrapper;
@@ -145,7 +145,9 @@ public class TieredStoreMetricsManager {
     }
 
     public static void init(Meter meter, Supplier<AttributesBuilder> attributesBuilderSupplier,
-        TieredMessageStoreConfig storeConfig, TieredMessageFetcher fetcher, MessageStore next) {
+        TieredMessageStoreConfig storeConfig, MessageStoreFetcherImpl fetcher,
+        TieredFlatFileManager flatFileManager, MessageStore next) {
+
         TieredStoreMetricsManager.attributesBuilderSupplier = attributesBuilderSupplier;
 
         apiLatency = meter.histogramBuilder(HISTOGRAM_API_LATENCY)
@@ -176,8 +178,7 @@ public class TieredStoreMetricsManager {
             .setDescription("Tiered store dispatch behind message count")
             .ofLongs()
             .buildWithCallback(measurement -> {
-                for (CompositeQueueFlatFile flatFile :
-                    TieredFlatFileManager.getInstance(storeConfig).deepCopyFlatFileToList()) {
+                for (CompositeQueueFlatFile flatFile : flatFileManager.deepCopyFlatFileToList()) {
 
                     MessageQueue mq = flatFile.getMessageQueue();
                     long maxOffset = next.getMaxOffsetInQueue(mq.getTopic(), mq.getQueueId());
@@ -206,8 +207,7 @@ public class TieredStoreMetricsManager {
             .setUnit("seconds")
             .ofLongs()
             .buildWithCallback(measurement -> {
-                for (CompositeQueueFlatFile flatFile :
-                    TieredFlatFileManager.getInstance(storeConfig).deepCopyFlatFileToList()) {
+                for (CompositeQueueFlatFile flatFile : flatFileManager.deepCopyFlatFileToList()) {
 
                     MessageQueue mq = flatFile.getMessageQueue();
                     long maxOffset = next.getMaxOffsetInQueue(mq.getTopic(), mq.getQueueId());
@@ -284,7 +284,7 @@ public class TieredStoreMetricsManager {
             .buildWithCallback(measurement -> {
                 Map<String, Map<FileSegmentType, Long>> topicFileSizeMap = new HashMap<>();
                 try {
-                    TieredMetadataStore metadataStore = TieredStoreUtil.getMetadataStore(storeConfig);
+                    TieredMetadataStore metadataStore = flatFileManager.getMetadataStore();
                     metadataStore.iterateFileSegment(fileSegment -> {
                         Map<FileSegmentType, Long> subMap =
                             topicFileSizeMap.computeIfAbsent(fileSegment.getPath(), k -> new HashMap<>());
@@ -312,7 +312,7 @@ public class TieredStoreMetricsManager {
             .setUnit("milliseconds")
             .ofLongs()
             .buildWithCallback(measurement -> {
-                for (CompositeQueueFlatFile flatFile : TieredFlatFileManager.getInstance(storeConfig).deepCopyFlatFileToList()) {
+                for (CompositeQueueFlatFile flatFile : flatFileManager.deepCopyFlatFileToList()) {
                     long timestamp = flatFile.getCommitLogBeginTimestamp();
                     if (timestamp > 0) {
                         MessageQueue mq = flatFile.getMessageQueue();

@@ -37,11 +37,13 @@ import org.apache.rocketmq.common.ThreadFactoryImpl;
 import org.apache.rocketmq.logging.org.slf4j.Logger;
 import org.apache.rocketmq.logging.org.slf4j.LoggerFactory;
 import org.apache.rocketmq.store.logfile.DefaultMappedFile;
-import org.apache.rocketmq.tieredstore.TieredStoreTestUtil;
+import org.apache.rocketmq.tieredstore.MessageStoreTest;
 import org.apache.rocketmq.tieredstore.common.AppendResult;
 import org.apache.rocketmq.tieredstore.common.TieredMessageStoreConfig;
 import org.apache.rocketmq.tieredstore.common.TieredStoreExecutor;
 import org.apache.rocketmq.tieredstore.file.TieredFileAllocator;
+import org.apache.rocketmq.tieredstore.metadata.TieredMetadataManager;
+import org.apache.rocketmq.tieredstore.metadata.TieredMetadataStore;
 import org.apache.rocketmq.tieredstore.util.TieredStoreUtil;
 import org.junit.After;
 import org.junit.Assert;
@@ -77,7 +79,8 @@ public class IndexStoreServiceTest {
         storeConfig.setTieredStoreIndexFileMaxHashSlotNum(5);
         storeConfig.setTieredStoreIndexFileMaxIndexNum(20);
         storeConfig.setTieredBackendServiceProvider("org.apache.rocketmq.tieredstore.provider.posix.PosixFileSegment");
-        fileAllocator = new TieredFileAllocator(storeConfig);
+        TieredMetadataStore metadataStore = new TieredMetadataManager(storeConfig);
+        fileAllocator = new TieredFileAllocator(metadataStore, storeConfig);
     }
 
     @After
@@ -86,9 +89,9 @@ public class IndexStoreServiceTest {
             indexService.shutdown();
             indexService.destroy();
         }
-        TieredStoreTestUtil.destroyMetadataStore();
-        TieredStoreTestUtil.destroyTempDir(storeConfig.getStorePathRootDir());
-        TieredStoreTestUtil.destroyTempDir(storeConfig.getTieredStoreFilePath());
+        MessageStoreTest.destroyMetadataStore();
+        MessageStoreTest.destroyTempDir(storeConfig.getStorePathRootDir());
+        MessageStoreTest.destroyTempDir(storeConfig.getTieredStoreFilePath());
         TieredStoreExecutor.shutdown();
     }
 

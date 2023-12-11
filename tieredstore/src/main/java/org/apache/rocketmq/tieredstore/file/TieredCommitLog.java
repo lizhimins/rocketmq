@@ -29,10 +29,11 @@ import org.apache.rocketmq.tieredstore.provider.TieredFileSegment;
 import org.apache.rocketmq.tieredstore.util.MessageBufferUtil;
 import org.apache.rocketmq.tieredstore.util.TieredStoreUtil;
 
+import static org.apache.rocketmq.tieredstore.file.CompositeFlatFile.OFFSET_NOT_EXIST;
+
 public class TieredCommitLog {
 
     private static final Logger log = LoggerFactory.getLogger(TieredStoreUtil.TIERED_STORE_LOGGER_NAME);
-    private static final Long NOT_EXIST_MIN_OFFSET = -1L;
 
     /**
      * item size: int, 4 bytes
@@ -44,13 +45,13 @@ public class TieredCommitLog {
 
     private final TieredMessageStoreConfig storeConfig;
     private final TieredFlatFile flatFile;
-    private final AtomicLong minConsumeQueueOffset;
+    private final AtomicLong consumeQueueMinOffset;
 
     public TieredCommitLog(TieredFileAllocator fileQueueFactory, String filePath) {
         this.storeConfig = fileQueueFactory.getStoreConfig();
         this.flatFile = fileQueueFactory.createFlatFileForCommitLog(filePath);
-        this.minConsumeQueueOffset = new AtomicLong(NOT_EXIST_MIN_OFFSET);
-        this.correctMinOffsetAsync();
+        this.consumeQueueMinOffset = new AtomicLong(OFFSET_NOT_EXIST);
+        this.correctMinOffsetAsync().join();
     }
 
     @VisibleForTesting
@@ -66,25 +67,25 @@ public class TieredCommitLog {
         return flatFile.getCommitOffset();
     }
 
-    public long getMinConsumeQueueOffset() {
-        return minConsumeQueueOffset.get() != NOT_EXIST_MIN_OFFSET ? minConsumeQueueOffset.get() : correctMinOffset();
-    }
-
-    public long getDispatchCommitOffset() {
-        return flatFile.getDispatchCommitOffset();
-    }
-
     public long getMaxOffset() {
         return flatFile.getMaxOffset();
     }
 
+    public long getMinConsumeQueueOffset() {
+        return consumeQueueMinOffset.get() != OFFSET_NOT_EXIST ? consumeQueueMinOffset.get() : correctMinOffset();
+    }
+
+    public long getCommitConsumeQueueOffset() {
+        return flatFile.getDispatchCommitOffset();
+    }
+
     public long getBeginTimestamp() {
-        TieredFileSegment firstIndexFile = flatFile.getFileByIndex(0);
-        if (firstIndexFile == null) {
+        TieredFileSegment fileSegment = flatFile.getFileByIndex(0);
+        if (fileSegment == null) {
             return -1L;
         }
-        long beginTimestamp = firstIndexFile.getMinTimestamp();
-        return beginTimestamp != Long.MAX_VALUE ? beginTimestamp : -1;
+        long beginTimestamp = fileSegment.getMinTimestamp();
+        return beginTimestamp != Long.MAX_VALUE ? beginTimestamp : -1L;
     }
 
     public long getEndTimestamp() {
@@ -97,27 +98,27 @@ public class TieredCommitLog {
         } catch (Exception e) {
             log.error("Correct min offset failed in clean expired file", e);
         }
-        return NOT_EXIST_MIN_OFFSET;
+        return OFFSET_NOT_EXIST;
     }
 
     public synchronized CompletableFuture<Long> correctMinOffsetAsync() {
         if (flatFile.getFileSegmentCount() == 0) {
-            this.minConsumeQueueOffset.set(NOT_EXIST_MIN_OFFSET);
-            return CompletableFuture.completedFuture(NOT_EXIST_MIN_OFFSET);
+            this.consumeQueueMinOffset.set(OFFSET_NOT_EXIST);
+            return CompletableFuture.completedFuture(OFFSET_NOT_EXIST);
         }
 
         // queue offset field length is 8
         int length = MessageBufferUtil.QUEUE_OFFSET_POSITION + 8;
         if (flatFile.getCommitOffset() - flatFile.getMinOffset() < length) {
-            this.minConsumeQueueOffset.set(NOT_EXIST_MIN_OFFSET);
-            return CompletableFuture.completedFuture(NOT_EXIST_MIN_OFFSET);
+            this.consumeQueueMinOffset.set(OFFSET_NOT_EXIST);
+            return CompletableFuture.completedFuture(OFFSET_NOT_EXIST);
         }
 
         try {
             return this.flatFile.readAsync(this.flatFile.getMinOffset(), length)
                 .thenApply(buffer -> {
                     long offset = MessageBufferUtil.getQueueOffset(buffer);
-                    minConsumeQueueOffset.set(offset);
+                    consumeQueueMinOffset.set(offset);
                     log.debug("Correct commitlog min cq offset success, " +
                             "filePath={}, min cq offset={}, commitlog range={}-{}",
                         flatFile.getFilePath(), offset, flatFile.getMinOffset(), flatFile.getCommitOffset());
@@ -126,28 +127,33 @@ public class TieredCommitLog {
                 .exceptionally(throwable -> {
                     log.warn("Correct commitlog min cq offset error, filePath={}, range={}-{}",
                         flatFile.getFilePath(), flatFile.getMinOffset(), flatFile.getCommitOffset(), throwable);
-                    return minConsumeQueueOffset.get();
+                    return consumeQueueMinOffset.get();
                 });
         } catch (Exception e) {
             log.error("Correct commitlog min cq offset error, filePath={}", flatFile.getFilePath(), e);
         }
-        return CompletableFuture.completedFuture(minConsumeQueueOffset.get());
+        return CompletableFuture.completedFuture(consumeQueueMinOffset.get());
     }
 
     public AppendResult append(ByteBuffer byteBuf) {
         return flatFile.append(byteBuf, MessageBufferUtil.getStoreTimeStamp(byteBuf));
     }
 
-    public AppendResult append(ByteBuffer byteBuf, boolean commit) {
-        return flatFile.append(byteBuf, MessageBufferUtil.getStoreTimeStamp(byteBuf), commit);
+    public void commit(boolean sync) {
+        flatFile.commit(sync);
     }
 
     public CompletableFuture<ByteBuffer> readAsync(long offset, int length) {
         return flatFile.readAsync(offset, length);
     }
 
-    public void commit(boolean sync) {
-        flatFile.commit(sync);
+    public void rollingNewFile() {
+        TieredFileSegment fileSegment = flatFile.getFileToWrite();
+        if (System.currentTimeMillis() - fileSegment.getMaxTimestamp() >
+            TimeUnit.HOURS.toMillis(storeConfig.getCommitLogRollingInterval())
+            && fileSegment.getAppendPosition() > storeConfig.getCommitLogRollingMinimumSize()) {
+            flatFile.rollingNewFile();
+        }
     }
 
     public void cleanExpiredFile(long expireTimestamp) {
@@ -158,19 +164,6 @@ public class TieredCommitLog {
 
     public void destroyExpiredFile() {
         flatFile.destroyExpiredFile();
-        if (flatFile.getFileSegmentCount() == 0) {
-            return;
-        }
-        TieredFileSegment fileSegment = flatFile.getFileToWrite();
-        try {
-            if (System.currentTimeMillis() - fileSegment.getMaxTimestamp() >
-                TimeUnit.HOURS.toMillis(storeConfig.getCommitLogRollingInterval())
-                && fileSegment.getAppendPosition() > storeConfig.getCommitLogRollingMinimumSize()) {
-                flatFile.rollingNewFile();
-            }
-        } catch (Exception e) {
-            log.error("Rolling to next file failed", e);
-        }
     }
 
     public void destroy() {

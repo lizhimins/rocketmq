@@ -19,9 +19,10 @@ package org.apache.rocketmq.tieredstore.file;
 import java.io.IOException;
 import java.util.concurrent.TimeUnit;
 import org.apache.rocketmq.common.message.MessageQueue;
-import org.apache.rocketmq.tieredstore.TieredStoreTestUtil;
+import org.apache.rocketmq.tieredstore.MessageStoreTest;
 import org.apache.rocketmq.tieredstore.common.TieredMessageStoreConfig;
 import org.apache.rocketmq.tieredstore.common.TieredStoreExecutor;
+import org.apache.rocketmq.tieredstore.metadata.TieredMetadataManager;
 import org.apache.rocketmq.tieredstore.metadata.TieredMetadataStore;
 import org.apache.rocketmq.tieredstore.util.TieredStoreUtil;
 import org.awaitility.Awaitility;
@@ -32,7 +33,7 @@ import org.junit.Test;
 
 public class TieredFlatFileManagerTest {
 
-    private final String storePath = TieredStoreTestUtil.getRandomStorePath();
+    private final String storePath = MessageStoreTest.getRandomStorePath();
     private TieredMessageStoreConfig storeConfig;
     private MessageQueue mq;
     private TieredMetadataStore metadataStore;
@@ -44,25 +45,23 @@ public class TieredFlatFileManagerTest {
         storeConfig.setTieredBackendServiceProvider("org.apache.rocketmq.tieredstore.provider.memory.MemoryFileSegment");
         storeConfig.setBrokerName(storeConfig.getBrokerName());
         mq = new MessageQueue("TieredFlatFileManagerTest", storeConfig.getBrokerName(), 0);
-        metadataStore = TieredStoreUtil.getMetadataStore(storeConfig);
+        metadataStore = new TieredMetadataManager(storeConfig);
         TieredStoreExecutor.init();
     }
 
     @After
     public void tearDown() throws IOException {
-        TieredStoreTestUtil.destroyCompositeFlatFileManager();
-        TieredStoreTestUtil.destroyMetadataStore();
-        TieredStoreTestUtil.destroyTempDir(storePath);
+        MessageStoreTest.deleteStoreDirectory(storePath);
         TieredStoreExecutor.shutdown();
     }
 
     @Test
-    public void testLoadAndDestroy() {
+    public void testLoadAndDestroy() throws ClassNotFoundException, NoSuchMethodException {
         metadataStore.addTopic(mq.getTopic(), 0);
         metadataStore.addQueue(mq, 100);
         MessageQueue mq1 = new MessageQueue(mq.getTopic(), mq.getBrokerName(), 1);
         metadataStore.addQueue(mq1, 200);
-        TieredFlatFileManager flatFileManager = TieredFlatFileManager.getInstance(storeConfig);
+        TieredFlatFileManager flatFileManager = new TieredFlatFileManager(metadataStore, storeConfig);
         boolean load = flatFileManager.load();
         Assert.assertTrue(load);
 
@@ -83,7 +82,7 @@ public class TieredFlatFileManagerTest {
         flatFile1.initOffset(200L);
         Assert.assertEquals(200, flatFile1.getDispatchOffset());
 
-        flatFileManager.destroyCompositeFile(mq);
+        flatFileManager.destroyFile(mq);
         Assert.assertTrue(flatFile.isClosed());
         Assert.assertNull(flatFileManager.getFlatFile(mq));
         Assert.assertNull(metadataStore.getQueue(mq));

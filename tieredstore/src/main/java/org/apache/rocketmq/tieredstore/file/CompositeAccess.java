@@ -18,11 +18,13 @@ package org.apache.rocketmq.tieredstore.file;
 
 import java.nio.ByteBuffer;
 import java.util.concurrent.CompletableFuture;
+import org.apache.rocketmq.common.message.Message;
+import org.apache.rocketmq.common.message.MessageQueue;
 import org.apache.rocketmq.store.DispatchRequest;
 import org.apache.rocketmq.tieredstore.common.AppendResult;
 import org.apache.rocketmq.common.BoundaryType;
 
-interface CompositeAccess {
+public interface CompositeAccess {
 
     /**
      * Initializes the offset for the flat file.
@@ -30,15 +32,7 @@ interface CompositeAccess {
      *
      * @param offset init offset for consume queue
      */
-    void initOffset(long offset);
-
-    /**
-     * Appends a message to the commit log file, but does not commit it immediately
-     *
-     * @param message the message to append
-     * @return append result
-     */
-    AppendResult appendCommitLog(ByteBuffer message);
+    long initOffset(long offset);
 
     /**
      * Appends a message to the commit log file
@@ -46,7 +40,7 @@ interface CompositeAccess {
      * @param message the message to append
      * @return append result
      */
-    AppendResult appendCommitLog(ByteBuffer message, boolean commit);
+    AppendResult appendCommitLog(ByteBuffer message);
 
     /**
      * Append message to consume queue file, but does not commit it immediately
@@ -57,15 +51,6 @@ interface CompositeAccess {
     AppendResult appendConsumeQueue(DispatchRequest request);
 
     /**
-     * Append message to consume queue file
-     *
-     * @param request the dispatch request
-     * @param commit  whether to commit
-     * @return append result
-     */
-    AppendResult appendConsumeQueue(DispatchRequest request, boolean commit);
-
-    /**
      * Persist commit log file
      */
     void commitCommitLog();
@@ -74,11 +59,6 @@ interface CompositeAccess {
      * Persist the consume queue file
      */
     void commitConsumeQueue();
-
-    /**
-     * Persist commit log file and consume queue file
-     */
-    void commit(boolean sync);
 
     /**
      * Asynchronously retrieves the message at the specified consume queue offset

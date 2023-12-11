@@ -40,7 +40,7 @@ public class TieredConsumeQueue {
     }
 
     public boolean isInitialized() {
-        return flatFile.getBaseOffset() != -1;
+        return flatFile.getBaseOffset() != -1L;
     }
 
     @VisibleForTesting
@@ -68,29 +68,18 @@ public class TieredConsumeQueue {
         return flatFile.getMaxOffset();
     }
 
-    public long getEndTimestamp() {
-        return flatFile.getFileToWrite().getMaxTimestamp();
-    }
-
     public AppendResult append(final long offset, final int size, final long tagsCode, long timeStamp) {
-        return append(offset, size, tagsCode, timeStamp, false);
-    }
-
-    public AppendResult append(final long offset, final int size, final long tagsCode, long timeStamp, boolean commit) {
         ByteBuffer cqItem = ByteBuffer.allocate(CONSUME_QUEUE_STORE_UNIT_SIZE);
-        cqItem.putLong(offset);
-        cqItem.putInt(size);
-        cqItem.putLong(tagsCode);
-        cqItem.flip();
-        return flatFile.append(cqItem, timeStamp, commit);
-    }
-
-    public CompletableFuture<ByteBuffer> readAsync(long offset, int length) {
-        return flatFile.readAsync(offset, length);
+        cqItem.putLong(offset).putInt(size).putLong(tagsCode).flip();
+        return flatFile.append(cqItem, timeStamp, true);
     }
 
     public void commit(boolean sync) {
         flatFile.commit(sync);
+    }
+
+    public CompletableFuture<ByteBuffer> readAsync(long offset, int length) {
+        return flatFile.readAsync(offset, length);
     }
 
     public void cleanExpiredFile(long expireTimestamp) {

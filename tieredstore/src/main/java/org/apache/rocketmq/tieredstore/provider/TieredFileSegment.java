@@ -144,7 +144,7 @@ public abstract class TieredFileSegment implements Comparable<TieredFileSegment>
     }
 
     public void setFull() {
-        setFull(true);
+        this.setFull(true);
     }
 
     public void setFull(boolean appendCoda) {

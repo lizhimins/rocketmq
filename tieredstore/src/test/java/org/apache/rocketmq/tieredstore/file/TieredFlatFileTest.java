@@ -18,11 +18,12 @@ package org.apache.rocketmq.tieredstore.file;
 
 import org.apache.rocketmq.common.BoundaryType;
 import org.apache.rocketmq.common.message.MessageQueue;
-import org.apache.rocketmq.tieredstore.TieredStoreTestUtil;
+import org.apache.rocketmq.tieredstore.MessageStoreTest;
 import org.apache.rocketmq.tieredstore.common.FileSegmentType;
 import org.apache.rocketmq.tieredstore.common.TieredMessageStoreConfig;
 import org.apache.rocketmq.tieredstore.common.TieredStoreExecutor;
 import org.apache.rocketmq.tieredstore.metadata.FileSegmentMetadata;
+import org.apache.rocketmq.tieredstore.metadata.TieredMetadataManager;
 import org.apache.rocketmq.tieredstore.metadata.TieredMetadataStore;
 import org.apache.rocketmq.tieredstore.provider.TieredFileSegment;
 import org.apache.rocketmq.tieredstore.provider.memory.MemoryFileSegment;
@@ -39,7 +40,7 @@ import java.util.List;
 
 public class TieredFlatFileTest {
 
-    private final String storePath = TieredStoreTestUtil.getRandomStorePath();
+    private final String storePath = MessageStoreTest.getRandomStorePath();
     private MessageQueue queue;
     private TieredMessageStoreConfig storeConfig;
     private TieredFileAllocator fileQueueFactory;
@@ -51,13 +52,13 @@ public class TieredFlatFileTest {
         storeConfig.setStorePathRootDir(storePath);
         storeConfig.setTieredBackendServiceProvider("org.apache.rocketmq.tieredstore.provider.memory.MemoryFileSegment");
         queue = new MessageQueue("TieredFlatFileTest", storeConfig.getBrokerName(), 0);
-        fileQueueFactory = new TieredFileAllocator(storeConfig);
+        TieredMetadataStore metadataStore = new TieredMetadataManager(storeConfig);
+        fileQueueFactory = new TieredFileAllocator(metadataStore, storeConfig);
     }
 
     @After
     public void tearDown() throws IOException {
-        TieredStoreTestUtil.destroyMetadataStore();
-        TieredStoreTestUtil.destroyTempDir(storePath);
+        MessageStoreTest.deleteStoreDirectory(storePath);
         TieredStoreExecutor.shutdown();
     }
 
@@ -77,7 +78,7 @@ public class TieredFlatFileTest {
         TieredFlatFile fileQueue = fileQueueFactory.createFlatFileForCommitLog(filePath);
         fileQueue.updateFileSegment(fileSegment);
 
-        TieredMetadataStore metadataStore = TieredStoreUtil.getMetadataStore(storeConfig);
+        TieredMetadataStore metadataStore = new TieredMetadataManager(storeConfig);
         FileSegmentMetadata metadata =
             metadataStore.getFileSegment(filePath, FileSegmentType.COMMIT_LOG, 100);
         Assert.assertEquals(fileSegment.getPath(), metadata.getPath());
@@ -190,7 +191,6 @@ public class TieredFlatFileTest {
         fileQueue.updateFileSegment(fileSegment2);
 
         // Set instance to null and reload from disk
-        TieredStoreUtil.metadataStoreInstance = null;
         fileQueue = fileQueueFactory.createFlatFileForCommitLog(filePath);
         Assert.assertEquals(2, fileQueue.getNeedCommitFileSegmentList().size());
         TieredFileSegment file1 = fileQueue.getFileByIndex(0);
@@ -268,7 +268,7 @@ public class TieredFlatFileTest {
         TieredFlatFile fileQueue = fileQueueFactory.createFlatFileForConsumeQueue(filePath);
         Assert.assertEquals(2, fileQueue.getFileSegmentCount());
 
-        TieredMetadataStore metadataStore = TieredStoreUtil.getMetadataStore(storeConfig);
+        TieredMetadataStore metadataStore = new TieredMetadataManager(storeConfig);
         fileQueue.cleanExpiredFile(file1CreateTimeStamp);
         fileQueue.destroyExpiredFile();
         Assert.assertEquals(1, fileQueue.getFileSegmentCount());

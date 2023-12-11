@@ -29,13 +29,15 @@ public class FileSegmentAllocator {
 
     private static final Logger log = LoggerFactory.getLogger(TieredStoreUtil.TIERED_STORE_LOGGER_NAME);
 
+    private final TieredMetadataStore metadataStore;
     private final TieredMessageStoreConfig storeConfig;
-
     private final Constructor<? extends TieredFileSegment> fileSegmentConstructor;
 
-    public FileSegmentAllocator(
-        TieredMessageStoreConfig storeConfig) throws ClassNotFoundException, NoSuchMethodException {
+    public FileSegmentAllocator(TieredMetadataStore metadataStore, TieredMessageStoreConfig storeConfig)
+        throws ClassNotFoundException, NoSuchMethodException {
+
         this.storeConfig = storeConfig;
+        this.metadataStore = metadataStore;
         Class<? extends TieredFileSegment> clazz =
             Class.forName(storeConfig.getTieredBackendServiceProvider()).asSubclass(TieredFileSegment.class);
         fileSegmentConstructor = clazz.getConstructor(
@@ -47,7 +49,7 @@ public class FileSegmentAllocator {
     }
 
     public TieredMetadataStore getMetadataStore() {
-        return TieredStoreUtil.getMetadataStore(storeConfig);
+        return metadataStore;
     }
 
     public TieredFileSegment createSegment(

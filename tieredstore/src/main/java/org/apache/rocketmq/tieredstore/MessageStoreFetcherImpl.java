@@ -50,7 +50,6 @@ import org.apache.rocketmq.tieredstore.file.CompositeQueueFlatFile;
 import org.apache.rocketmq.tieredstore.file.TieredConsumeQueue;
 import org.apache.rocketmq.tieredstore.file.TieredFlatFileManager;
 import org.apache.rocketmq.tieredstore.index.IndexItem;
-import org.apache.rocketmq.tieredstore.index.IndexService;
 import org.apache.rocketmq.tieredstore.metadata.TieredMetadataStore;
 import org.apache.rocketmq.tieredstore.metadata.TopicMetadata;
 import org.apache.rocketmq.tieredstore.metrics.TieredStoreMetricsConstant;
@@ -59,7 +58,7 @@ import org.apache.rocketmq.tieredstore.util.CQItemBufferUtil;
 import org.apache.rocketmq.tieredstore.util.MessageBufferUtil;
 import org.apache.rocketmq.tieredstore.util.TieredStoreUtil;
 
-public class TieredMessageFetcher implements MessageStoreFetcher {
+public class MessageStoreFetcherImpl implements MessageStoreFetcher {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(TieredStoreUtil.TIERED_STORE_LOGGER_NAME);
 
@@ -69,11 +68,11 @@ public class TieredMessageFetcher implements MessageStoreFetcher {
     private final TieredFlatFileManager flatFileManager;
     private final Cache<MessageCacheKey, SelectBufferResultWrapper> readAheadCache;
 
-    public TieredMessageFetcher(TieredMessageStoreConfig storeConfig) {
-        this.storeConfig = storeConfig;
+    public MessageStoreFetcherImpl(TieredFlatFileManager flatFileManager) {
+        this.storeConfig = flatFileManager.getStoreConfig();
         this.brokerName = storeConfig.getBrokerName();
-        this.metadataStore = TieredStoreUtil.getMetadataStore(storeConfig);
-        this.flatFileManager = TieredFlatFileManager.getInstance(storeConfig);
+        this.flatFileManager = flatFileManager;
+        this.metadataStore = flatFileManager.getMetadataStore();
         this.readAheadCache = this.initCache(storeConfig);
     }
 
@@ -172,7 +171,7 @@ public class TieredMessageFetcher implements MessageStoreFetcher {
                     futureList.add(Pair.of(requestBatchSize, future));
                 }
                 flatFile.putInflightRequest(group, queueOffset, maxCount * factor, futureList);
-                LOGGER.debug("TieredMessageFetcher#preFetchMessage: try to prefetch messages for later requests: next begin offset: {}, request offset: {}, factor: {}, flag: {}, request batch: {}, concurrency: {}",
+                LOGGER.debug("MessageStoreFetcherImpl#preFetchMessage: try to prefetch messages for later requests: next begin offset: {}, request offset: {}, factor: {}, flag: {}, request batch: {}, concurrency: {}",
                     nextBeginOffset, queueOffset, factor, flag, requestBatchSize, concurrency);
             }
         }
@@ -507,7 +506,7 @@ public class TieredMessageFetcher implements MessageStoreFetcher {
             }, TieredStoreExecutor.fetchDataExecutor)
             .thenApply(MessageBufferUtil::getStoreTimeStamp)
             .exceptionally(e -> {
-                LOGGER.error("TieredMessageFetcher#getMessageStoreTimeStampAsync: " +
+                LOGGER.error("MessageStoreFetcherImpl#getMessageStoreTimeStampAsync: " +
                     "get or decode message failed: topic: {}, queue: {}, offset: {}", topic, queueId, queueOffset, e);
                 return -1L;
             });
@@ -523,7 +522,7 @@ public class TieredMessageFetcher implements MessageStoreFetcher {
         try {
             return flatFile.getOffsetInConsumeQueueByTime(timestamp, type);
         } catch (Exception e) {
-            LOGGER.error("TieredMessageFetcher#getOffsetInQueueByTime: " +
+            LOGGER.error("MessageStoreFetcherImpl#getOffsetInQueueByTime: " +
                     "get offset in queue by time failed: topic: {}, queue: {}, timestamp: {}, type: {}",
                 topic, queueId, timestamp, type, e);
         }
@@ -533,8 +532,6 @@ public class TieredMessageFetcher implements MessageStoreFetcher {
     @Override
     public CompletableFuture<QueryMessageResult> queryMessageAsync(
         String topic, String key, int maxCount, long begin, long end) {
-
-        IndexService indexStoreService = TieredFlatFileManager.getTieredIndexService(storeConfig);
 
         long topicId;
         try {
@@ -549,7 +546,8 @@ public class TieredMessageFetcher implements MessageStoreFetcher {
             return CompletableFuture.completedFuture(new QueryMessageResult());
         }
 
-        CompletableFuture<List<IndexItem>> future = indexStoreService.queryAsync(topic, key, maxCount, begin, end);
+        CompletableFuture<List<IndexItem>> future =
+            flatFileManager.getIndexService().queryAsync(topic, key, maxCount, begin, end);
 
         return future.thenCompose(indexItemList -> {
             QueryMessageResult result = new QueryMessageResult();
@@ -581,5 +579,9 @@ public class TieredMessageFetcher implements MessageStoreFetcher {
                     result.getMessageBufferList().size(), topic, topicId, key, maxCount, begin, end);
             }
         });
+    }
+
+    public void shutdown() {
+
     }
 }

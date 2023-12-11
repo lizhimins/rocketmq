@@ -21,12 +21,13 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.List;
 import org.apache.rocketmq.common.message.MessageQueue;
-import org.apache.rocketmq.tieredstore.TieredStoreTestUtil;
+import org.apache.rocketmq.tieredstore.MessageStoreTest;
 import org.apache.rocketmq.tieredstore.common.AppendResult;
 import org.apache.rocketmq.tieredstore.common.FileSegmentType;
 import org.apache.rocketmq.tieredstore.common.TieredMessageStoreConfig;
 import org.apache.rocketmq.tieredstore.common.TieredStoreExecutor;
 import org.apache.rocketmq.tieredstore.metadata.FileSegmentMetadata;
+import org.apache.rocketmq.tieredstore.metadata.TieredMetadataManager;
 import org.apache.rocketmq.tieredstore.metadata.TieredMetadataStore;
 import org.apache.rocketmq.tieredstore.provider.TieredFileSegment;
 import org.apache.rocketmq.tieredstore.util.MessageBufferUtil;
@@ -39,7 +40,7 @@ import org.junit.Test;
 
 public class TieredCommitLogTest {
 
-    private final String storePath = TieredStoreTestUtil.getRandomStorePath();
+    private final String storePath = MessageStoreTest.getRandomStorePath();
     private MessageQueue mq;
     private TieredFileAllocator fileAllocator;
     private TieredMetadataStore metadataStore;
@@ -54,17 +55,15 @@ public class TieredCommitLogTest {
         storeConfig.setCommitLogRollingInterval(0);
         storeConfig.setTieredStoreCommitLogMaxSize(1000);
 
-        metadataStore = TieredStoreUtil.getMetadataStore(storeConfig);
-        fileAllocator = new TieredFileAllocator(storeConfig);
+        metadataStore = new TieredMetadataManager(storeConfig);
+        fileAllocator = new TieredFileAllocator(metadataStore, storeConfig);
         mq = new MessageQueue("CommitLogTest", storeConfig.getBrokerName(), 0);
         TieredStoreExecutor.init();
     }
 
     @After
     public void tearDown() throws IOException {
-        TieredStoreTestUtil.destroyCompositeFlatFileManager();
-        TieredStoreTestUtil.destroyMetadataStore();
-        TieredStoreTestUtil.destroyTempDir(storePath);
+        MessageStoreTest.deleteStoreDirectory(storePath);
         TieredStoreExecutor.shutdown();
     }
 
@@ -74,7 +73,7 @@ public class TieredCommitLogTest {
         TieredCommitLog tieredCommitLog = new TieredCommitLog(fileAllocator, filePath);
         Assert.assertEquals(0L, tieredCommitLog.getMinOffset());
         Assert.assertEquals(0L, tieredCommitLog.getCommitOffset());
-        Assert.assertEquals(0L, tieredCommitLog.getDispatchCommitOffset());
+        Assert.assertEquals(0L, tieredCommitLog.getCommitConsumeQueueOffset());
 
         // append some messages
         for (int i = 6; i < 50; i++) {

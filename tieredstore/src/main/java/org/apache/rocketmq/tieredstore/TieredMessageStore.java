@@ -16,6 +16,7 @@
  */
 package org.apache.rocketmq.tieredstore;
 
+import java.lang.reflect.Constructor;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
@@ -47,6 +48,7 @@ import org.apache.rocketmq.tieredstore.common.TieredMessageStoreConfig;
 import org.apache.rocketmq.tieredstore.common.TieredStoreExecutor;
 import org.apache.rocketmq.tieredstore.file.CompositeFlatFile;
 import org.apache.rocketmq.tieredstore.file.TieredFlatFileManager;
+import org.apache.rocketmq.tieredstore.index.IndexStoreService;
 import org.apache.rocketmq.tieredstore.metadata.TieredMetadataStore;
 import org.apache.rocketmq.tieredstore.metrics.TieredStoreMetricsConstant;
 import org.apache.rocketmq.tieredstore.metrics.TieredStoreMetricsManager;
@@ -63,14 +65,15 @@ public class TieredMessageStore extends AbstractPluginMessageStore {
     protected static final Logger logger = LoggerFactory.getLogger(TieredStoreUtil.TIERED_STORE_LOGGER_NAME);
 
     protected final String brokerName;
+    protected final MessageStore defaultStore;
     protected final TieredMessageStoreConfig storeConfig;
     protected final TieredMetadataStore metadataStore;
 
-    protected final TieredDispatcher dispatcher;
-    protected final TieredMessageFetcher fetcher;
+    protected final MessageStoreFetcherImpl fetcher;
+    protected final MessageStoreDispatcherImpl dispatcher;
     protected final TieredFlatFileManager flatFileManager;
 
-    public TieredMessageStore(MessageStorePluginContext context, MessageStore next) {
+    public TieredMessageStore(MessageStorePluginContext context, MessageStore next) throws Exception {
         super(context, next);
         this.storeConfig = new TieredMessageStoreConfig();
         context.registerConfiguration(storeConfig);
@@ -78,13 +81,47 @@ public class TieredMessageStore extends AbstractPluginMessageStore {
         TieredStoreUtil.addSystemTopic(storeConfig.getBrokerClusterName());
         TieredStoreUtil.addSystemTopic(brokerName);
 
+        this.defaultStore = next;
         TieredStoreExecutor.init();
-        this.metadataStore = TieredStoreUtil.getMetadataStore(storeConfig);
-        this.fetcher = new TieredMessageFetcher(storeConfig);
-        this.dispatcher = new TieredDispatcher(next, storeConfig);
+        this.metadataStore = this.getMetadataStore(storeConfig);
+        this.flatFileManager = new TieredFlatFileManager(metadataStore, storeConfig);
+        this.fetcher = new MessageStoreFetcherImpl(flatFileManager);
+        this.dispatcher = new MessageStoreDispatcherImpl(this);
+    }
 
-        this.flatFileManager = TieredFlatFileManager.getInstance(storeConfig);
-        next.addDispatcher(dispatcher);
+    public MessageStore getMessageStore() {
+        return defaultStore;
+    }
+
+    public TieredMetadataStore getMetadataStore(TieredMessageStoreConfig storeConfig) throws Exception {
+        Class<? extends TieredMetadataStore> clazz =
+            Class.forName(storeConfig.getTieredMetadataServiceProvider()).asSubclass(TieredMetadataStore.class);
+        Constructor<? extends TieredMetadataStore> constructor = clazz.getConstructor(TieredMessageStoreConfig.class);
+        return constructor.newInstance(storeConfig);
+    }
+
+    public String getBrokerName() {
+        return brokerName;
+    }
+
+    public MessageStore getDefaultStore() {
+        return defaultStore;
+    }
+
+    public TieredMetadataStore getMetadataStore() {
+        return metadataStore;
+    }
+
+    public MessageStoreFetcherImpl getFetcher() {
+        return fetcher;
+    }
+
+    public MessageStoreDispatcherImpl getDispatcher() {
+        return dispatcher;
+    }
+
+    public TieredFlatFileManager getFlatFileManager() {
+        return flatFileManager;
     }
 
     @Override
@@ -93,7 +130,6 @@ public class TieredMessageStore extends AbstractPluginMessageStore {
         boolean loadNextStore = next.load();
         boolean result = loadFlatFile && loadNextStore;
         if (result) {
-            dispatcher.initScheduleTask();
             dispatcher.start();
         }
         return result;
@@ -372,27 +408,36 @@ public class TieredMessageStore extends AbstractPluginMessageStore {
     @Override
     public void initMetrics(Meter meter, Supplier<AttributesBuilder> attributesBuilderSupplier) {
         super.initMetrics(meter, attributesBuilderSupplier);
-        TieredStoreMetricsManager.init(meter, attributesBuilderSupplier, storeConfig, fetcher, next);
+        TieredStoreMetricsManager.init(meter, attributesBuilderSupplier, storeConfig, fetcher, flatFileManager, next);
     }
 
     @Override
     public void shutdown() {
-        next.shutdown();
-
-        dispatcher.shutdown();
-        TieredFlatFileManager.getInstance(storeConfig).shutdown();
+        if (next != null) {
+            next.shutdown();
+        }
+        if (fetcher!= null) {
+            fetcher.shutdown();
+        }
+        if (dispatcher != null) {
+            dispatcher.shutdown();
+        }
+        if (flatFileManager != null) {
+            flatFileManager.shutdown();
+        }
         TieredStoreExecutor.shutdown();
     }
 
     @Override
     public void destroy() {
-        next.destroy();
-
-        TieredFlatFileManager.getInstance(storeConfig).destroy();
-        try {
+        if (next != null) {
+            next.destroy();
+        }
+        if (flatFileManager != null) {
+            flatFileManager.destroy();
+        }
+        if (metadataStore != null) {
             metadataStore.destroy();
-        } catch (Exception e) {
-            logger.error("TieredMessageStore#destroy: destroy metadata store failed", e);
         }
     }
 
@@ -428,7 +473,7 @@ public class TieredMessageStore extends AbstractPluginMessageStore {
                 return;
             }
             metadataStore.iterateQueue(topic, queueMetadata -> {
-                flatFileManager.destroyCompositeFile(queueMetadata.getQueue());
+                flatFileManager.destroyFile(queueMetadata.getQueue());
             });
             // delete topic metadata
             metadataStore.deleteTopic(topic);

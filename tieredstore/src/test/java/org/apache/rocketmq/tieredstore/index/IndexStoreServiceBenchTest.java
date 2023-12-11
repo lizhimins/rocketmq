@@ -33,6 +33,9 @@ import org.apache.rocketmq.tieredstore.common.AppendResult;
 import org.apache.rocketmq.tieredstore.common.TieredMessageStoreConfig;
 import org.apache.rocketmq.tieredstore.common.TieredStoreExecutor;
 import org.apache.rocketmq.tieredstore.file.TieredFileAllocator;
+import org.apache.rocketmq.tieredstore.file.TieredFlatFileManager;
+import org.apache.rocketmq.tieredstore.metadata.TieredMetadataManager;
+import org.apache.rocketmq.tieredstore.metadata.TieredMetadataStore;
 import org.apache.rocketmq.tieredstore.util.TieredStoreUtil;
 import org.junit.Assert;
 import org.junit.Ignore;
@@ -75,9 +78,9 @@ public class IndexStoreServiceBenchTest {
         storeConfig.setTieredBackendServiceProvider("org.apache.rocketmq.tieredstore.provider.posix.PosixFileSegment");
         storeConfig.setTieredStoreIndexFileMaxHashSlotNum(500 * 1000);
         storeConfig.setTieredStoreIndexFileMaxIndexNum(2000 * 1000);
-        TieredStoreUtil.getMetadataStore(storeConfig);
+        TieredMetadataStore metadataStore = new TieredMetadataManager(storeConfig);
         TieredStoreExecutor.init();
-        TieredFileAllocator tieredFileAllocator = new TieredFileAllocator(storeConfig);
+        TieredFileAllocator tieredFileAllocator = new TieredFileAllocator(metadataStore, storeConfig);
         indexStoreService = new IndexStoreService(tieredFileAllocator, storePath);
         indexStoreService.start();
     }

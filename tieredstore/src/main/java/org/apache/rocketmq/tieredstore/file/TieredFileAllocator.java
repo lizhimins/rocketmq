@@ -19,27 +19,34 @@ package org.apache.rocketmq.tieredstore.file;
 
 import org.apache.rocketmq.tieredstore.common.FileSegmentType;
 import org.apache.rocketmq.tieredstore.common.TieredMessageStoreConfig;
+import org.apache.rocketmq.tieredstore.metadata.TieredMetadataStore;
 import org.apache.rocketmq.tieredstore.provider.FileSegmentAllocator;
 
 public class TieredFileAllocator {
 
-    private final FileSegmentAllocator fileSegmentAllocator;
+    private final TieredMetadataStore metadataStore;
     private final TieredMessageStoreConfig storeConfig;
+    private final FileSegmentAllocator fileSegmentAllocator;
 
-    public TieredFileAllocator(TieredMessageStoreConfig storeConfig)
+    public TieredFileAllocator(TieredMetadataStore metadataStore, TieredMessageStoreConfig storeConfig)
         throws ClassNotFoundException, NoSuchMethodException {
 
+        this.metadataStore = metadataStore;
         this.storeConfig = storeConfig;
-        this.fileSegmentAllocator = new FileSegmentAllocator(storeConfig);
+        this.fileSegmentAllocator = new FileSegmentAllocator(metadataStore, storeConfig);
     }
 
     public TieredMessageStoreConfig getStoreConfig() {
         return storeConfig;
     }
 
+    public TieredMetadataStore getMetadataStore() {
+        return metadataStore;
+    }
+
     public TieredFlatFile createFlatFileForCommitLog(String filePath) {
         TieredFlatFile tieredFlatFile =
-            new TieredFlatFile(fileSegmentAllocator, FileSegmentType.COMMIT_LOG, filePath);
+            new TieredFlatFile(metadataStore, fileSegmentAllocator, FileSegmentType.COMMIT_LOG, filePath);
         if (tieredFlatFile.getBaseOffset() == -1L) {
             tieredFlatFile.setBaseOffset(0L);
         }
@@ -47,10 +54,10 @@ public class TieredFileAllocator {
     }
 
     public TieredFlatFile createFlatFileForConsumeQueue(String filePath) {
-        return new TieredFlatFile(fileSegmentAllocator, FileSegmentType.CONSUME_QUEUE, filePath);
+        return new TieredFlatFile(metadataStore, fileSegmentAllocator, FileSegmentType.CONSUME_QUEUE, filePath);
     }
 
     public TieredFlatFile createFlatFileForIndexFile(String filePath) {
-        return new TieredFlatFile(fileSegmentAllocator, FileSegmentType.INDEX, filePath);
+        return new TieredFlatFile(metadataStore, fileSegmentAllocator, FileSegmentType.INDEX, filePath);
     }
 }

@@ -60,9 +60,6 @@ public class TieredStoreUtil {
 
     private final static List<String> SYSTEM_TOPIC_WHITE_LIST = new LinkedList<>();
 
-    @VisibleForTesting
-    public volatile static TieredMetadataStore metadataStoreInstance;
-
     private static String formatSize(long size, long divider, String unitName) {
         return DEC_FORMAT.format((double) size / divider) + unitName;
     }
@@ -137,31 +134,6 @@ public class TieredStoreUtil {
             return true;
         }
         return TopicValidator.isSystemTopic(topic);
-    }
-
-    public static TieredMetadataStore getMetadataStore(TieredMessageStoreConfig storeConfig) {
-        if (storeConfig == null) {
-            return metadataStoreInstance;
-        }
-
-        if (metadataStoreInstance == null) {
-            synchronized (TieredMetadataStore.class) {
-                if (metadataStoreInstance == null) {
-                    try {
-                        Class<? extends TieredMetadataStore> clazz = Class.forName(
-                            storeConfig.getTieredMetadataServiceProvider()).asSubclass(TieredMetadataStore.class);
-                        Constructor<? extends TieredMetadataStore> constructor =
-                            clazz.getConstructor(TieredMessageStoreConfig.class);
-                        metadataStoreInstance = constructor.newInstance(storeConfig);
-                    } catch (Exception e) {
-                        logger.error("TieredMetadataStore#getInstance: " +
-                            "build metadata store failed, provider class: {}",
-                            storeConfig.getTieredMetadataServiceProvider(), e);
-                    }
-                }
-            }
-        }
-        return metadataStoreInstance;
     }
 
     public static String toPath(MessageQueue mq) {

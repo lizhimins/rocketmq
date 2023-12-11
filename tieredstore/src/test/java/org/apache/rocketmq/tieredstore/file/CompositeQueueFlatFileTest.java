@@ -21,12 +21,13 @@ import java.nio.ByteBuffer;
 import org.apache.rocketmq.common.message.MessageQueue;
 import org.apache.rocketmq.store.ConsumeQueue;
 import org.apache.rocketmq.store.DispatchRequest;
-import org.apache.rocketmq.tieredstore.TieredStoreTestUtil;
+import org.apache.rocketmq.tieredstore.MessageStoreTest;
 import org.apache.rocketmq.tieredstore.common.AppendResult;
 import org.apache.rocketmq.tieredstore.common.FileSegmentType;
 import org.apache.rocketmq.tieredstore.common.TieredMessageStoreConfig;
 import org.apache.rocketmq.tieredstore.common.TieredStoreExecutor;
 import org.apache.rocketmq.tieredstore.metadata.QueueMetadata;
+import org.apache.rocketmq.tieredstore.metadata.TieredMetadataManager;
 import org.apache.rocketmq.tieredstore.metadata.TieredMetadataStore;
 import org.apache.rocketmq.tieredstore.provider.memory.MemoryFileSegment;
 import org.apache.rocketmq.tieredstore.util.MessageBufferUtil;
@@ -40,7 +41,7 @@ import org.junit.Test;
 
 public class CompositeQueueFlatFileTest {
 
-    private final String storePath = TieredStoreTestUtil.getRandomStorePath();
+    private final String storePath = MessageStoreTest.getRandomStorePath();
     private TieredMessageStoreConfig storeConfig;
     private TieredMetadataStore metadataStore;
     private TieredFileAllocator tieredFileAllocator;
@@ -55,16 +56,14 @@ public class CompositeQueueFlatFileTest {
         storeConfig.setCommitLogRollingInterval(0);
         storeConfig.setCommitLogRollingMinimumSize(999);
         mq = new MessageQueue("CompositeQueueFlatFileTest", storeConfig.getBrokerName(), 0);
-        metadataStore = TieredStoreUtil.getMetadataStore(storeConfig);
-        tieredFileAllocator = new TieredFileAllocator(storeConfig);
+        metadataStore = new TieredMetadataManager(storeConfig);
+        tieredFileAllocator = new TieredFileAllocator(metadataStore, storeConfig);
         TieredStoreExecutor.init();
     }
 
     @After
     public void tearDown() throws IOException {
-        TieredStoreTestUtil.destroyCompositeFlatFileManager();
-        TieredStoreTestUtil.destroyMetadataStore();
-        TieredStoreTestUtil.destroyTempDir(storePath);
+        MessageStoreTest.deleteStoreDirectory(storePath);
         TieredStoreExecutor.shutdown();
     }
 
@@ -86,7 +85,8 @@ public class CompositeQueueFlatFileTest {
         result = flatFile.appendCommitLog(message);
         Assert.assertEquals(AppendResult.SUCCESS, result);
 
-        flatFile.commit(true);
+        flatFile.commitCommitLog();
+        flatFile.commitConsumeQueue();
         Assert.assertEquals(7, flatFile.getCommitLogDispatchCommitOffset());
 
         flatFile.cleanExpiredFile(0);
@@ -118,7 +118,8 @@ public class CompositeQueueFlatFileTest {
         result = file.appendConsumeQueue(request);
         Assert.assertEquals(AppendResult.SUCCESS, result);
 
-        file.commit(true);
+        file.commitCommitLog();
+        file.commitConsumeQueue();
         file.flushMetadata();
 
         QueueMetadata queueMetadata = metadataStore.getQueue(mq);
@@ -130,7 +131,7 @@ public class CompositeQueueFlatFileTest {
 
         // replace provider, need new factory again
         storeConfig.setTieredBackendServiceProvider("org.apache.rocketmq.tieredstore.provider.memory.MemoryFileSegmentWithoutCheck");
-        tieredFileAllocator = new TieredFileAllocator(storeConfig);
+        tieredFileAllocator = new TieredFileAllocator(metadataStore, storeConfig);
 
         // inject store time: 0, +100, +100, +100, +200
         CompositeQueueFlatFile flatFile = new CompositeQueueFlatFile(tieredFileAllocator, mq);
@@ -139,27 +140,27 @@ public class CompositeQueueFlatFileTest {
         ByteBuffer buffer = MessageBufferUtilTest.buildMockedMessageBuffer();
         buffer.putLong(MessageBufferUtil.QUEUE_OFFSET_POSITION, 50);
         buffer.putLong(MessageBufferUtil.STORE_TIMESTAMP_POSITION, timestamp1);
-        flatFile.appendCommitLog(buffer, true);
+        flatFile.appendCommitLog(buffer);
 
         long timestamp2 = timestamp1 + 100;
         buffer = MessageBufferUtilTest.buildMockedMessageBuffer();
         buffer.putLong(MessageBufferUtil.QUEUE_OFFSET_POSITION, 51);
         buffer.putLong(MessageBufferUtil.STORE_TIMESTAMP_POSITION, timestamp2);
-        flatFile.appendCommitLog(buffer, true);
+        flatFile.appendCommitLog(buffer);
         buffer = MessageBufferUtilTest.buildMockedMessageBuffer();
         buffer.putLong(MessageBufferUtil.QUEUE_OFFSET_POSITION, 52);
         buffer.putLong(MessageBufferUtil.STORE_TIMESTAMP_POSITION, timestamp2);
-        flatFile.appendCommitLog(buffer, true);
+        flatFile.appendCommitLog(buffer);
         buffer = MessageBufferUtilTest.buildMockedMessageBuffer();
         buffer.putLong(MessageBufferUtil.QUEUE_OFFSET_POSITION, 53);
         buffer.putLong(MessageBufferUtil.STORE_TIMESTAMP_POSITION, timestamp2);
-        flatFile.appendCommitLog(buffer, true);
+        flatFile.appendCommitLog(buffer);
 
         long timestamp3 = timestamp2 + 100;
         buffer = MessageBufferUtilTest.buildMockedMessageBuffer();
         buffer.putLong(MessageBufferUtil.QUEUE_OFFSET_POSITION, 54);
         buffer.putLong(MessageBufferUtil.STORE_TIMESTAMP_POSITION, timestamp3);
-        flatFile.appendCommitLog(buffer, true);
+        flatFile.appendCommitLog(buffer);
 
         // append message to consume queue
         flatFile.consumeQueue.getFlatFile().setBaseOffset(50 * ConsumeQueue.CQ_STORE_UNIT_SIZE);
@@ -168,12 +169,13 @@ public class CompositeQueueFlatFileTest {
             AppendResult appendResult = flatFile.appendConsumeQueue(new DispatchRequest(
                 mq.getTopic(), mq.getQueueId(), MessageBufferUtilTest.MSG_LEN * i,
                 MessageBufferUtilTest.MSG_LEN, 0, timestamp1, 50 + i,
-                "", "", 0, 0, null), true);
+                "", "", 0, 0, null));
             Assert.assertEquals(AppendResult.SUCCESS, appendResult);
         }
 
         // commit message will increase max consume queue offset
-        flatFile.commit(true);
+        flatFile.commitCommitLog();
+        flatFile.commitConsumeQueue();
 
         Assert.assertEquals(54, flatFile.getOffsetInConsumeQueueByTime(timestamp3 + 1, BoundaryType.UPPER));
         Assert.assertEquals(54, flatFile.getOffsetInConsumeQueueByTime(timestamp3, BoundaryType.UPPER));

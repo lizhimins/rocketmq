@@ -29,10 +29,12 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.ReentrantLock;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.tuple.Pair;
+import org.apache.rocketmq.common.BoundaryType;
 import org.apache.rocketmq.logging.org.slf4j.Logger;
 import org.apache.rocketmq.logging.org.slf4j.LoggerFactory;
 import org.apache.rocketmq.store.DispatchRequest;
@@ -45,14 +47,18 @@ import org.apache.rocketmq.tieredstore.metadata.TieredMetadataStore;
 import org.apache.rocketmq.tieredstore.util.CQItemBufferUtil;
 import org.apache.rocketmq.tieredstore.util.MessageBufferUtil;
 import org.apache.rocketmq.tieredstore.util.TieredStoreUtil;
-import org.apache.rocketmq.common.BoundaryType;
 
 public class CompositeFlatFile implements CompositeAccess {
 
-    protected static final Logger LOGGER = LoggerFactory.getLogger(TieredStoreUtil.TIERED_STORE_LOGGER_NAME);
+    protected static final Logger log = LoggerFactory.getLogger(TieredStoreUtil.TIERED_STORE_LOGGER_NAME);
 
+    protected static final long OFFSET_NOT_EXIST = -1L;
     protected volatile boolean closed = false;
-    protected int readAheadFactor;
+
+    protected final String filePath;
+    protected final ReentrantLock fileLock;
+    protected final TieredMessageStoreConfig storeConfig;
+    protected final TieredMetadataStore metadataStore;
 
     /**
      * Dispatch offset represents the offset of the messages that have been
@@ -60,29 +66,26 @@ public class CompositeFlatFile implements CompositeAccess {
      * It's consume queue current offset.
      */
     protected final AtomicLong dispatchOffset;
-
-    protected final ReentrantLock compositeFlatFileLock;
-    protected final TieredMessageStoreConfig storeConfig;
-    protected final TieredMetadataStore metadataStore;
-
-    protected final String filePath;
     protected final TieredCommitLog commitLog;
     protected final TieredConsumeQueue consumeQueue;
+    protected final AtomicInteger readAheadFactor;
     protected final Cache<String, Long> groupOffsetCache;
     protected final ConcurrentMap<InFlightRequestKey, InFlightRequestFuture> inFlightRequestMap;
 
-    public CompositeFlatFile(TieredFileAllocator fileQueueFactory, String filePath) {
+    public CompositeFlatFile(TieredFileAllocator fileAllocator, String filePath) {
+
         this.filePath = filePath;
-        this.storeConfig = fileQueueFactory.getStoreConfig();
-        this.readAheadFactor = this.storeConfig.getReadAheadMinFactor();
-        this.metadataStore = TieredStoreUtil.getMetadataStore(this.storeConfig);
-        this.compositeFlatFileLock = new ReentrantLock();
+        this.fileLock = new ReentrantLock();
+        this.storeConfig = fileAllocator.getStoreConfig();
+        this.metadataStore = fileAllocator.getMetadataStore();
+
         this.inFlightRequestMap = new ConcurrentHashMap<>();
-        this.commitLog = new TieredCommitLog(fileQueueFactory, filePath);
-        this.consumeQueue = new TieredConsumeQueue(fileQueueFactory, filePath);
+        this.commitLog = new TieredCommitLog(fileAllocator, filePath);
+        this.consumeQueue = new TieredConsumeQueue(fileAllocator, filePath);
         this.dispatchOffset = new AtomicLong(
-            this.consumeQueue.isInitialized() ? this.getConsumeQueueCommitOffset() : -1L);
+            this.consumeQueue.isInitialized() ? this.getConsumeQueueCommitOffset() : OFFSET_NOT_EXIST);
         this.groupOffsetCache = this.initOffsetCache();
+        this.readAheadFactor = new AtomicInteger(this.storeConfig.getReadAheadMinFactor());
     }
 
     private Cache<String, Long> initOffsetCache() {
@@ -99,8 +102,15 @@ public class CompositeFlatFile implements CompositeAccess {
         return closed;
     }
 
-    public ReentrantLock getCompositeFlatFileLock() {
-        return compositeFlatFileLock;
+    @Override
+    public long initOffset(long offset) {
+        if (consumeQueue.isInitialized()) {
+            dispatchOffset.set(this.getConsumeQueueCommitOffset());
+        } else {
+            consumeQueue.setBaseOffset(offset * TieredConsumeQueue.CONSUME_QUEUE_STORE_UNIT_SIZE);
+            dispatchOffset.set(offset);
+        }
+        return dispatchOffset.get();
     }
 
     public long getCommitLogMinOffset() {
@@ -117,11 +127,11 @@ public class CompositeFlatFile implements CompositeAccess {
 
     @Override
     public long getCommitLogDispatchCommitOffset() {
-        return commitLog.getDispatchCommitOffset();
+        return commitLog.getCommitConsumeQueueOffset();
     }
 
-    public long getConsumeQueueBaseOffset() {
-        return consumeQueue.getBaseOffset();
+    public long getDispatchOffset() {
+        return dispatchOffset.get();
     }
 
     public long getConsumeQueueMinOffset() {
@@ -138,17 +148,9 @@ public class CompositeFlatFile implements CompositeAccess {
         return consumeQueue.getMaxOffset() / TieredConsumeQueue.CONSUME_QUEUE_STORE_UNIT_SIZE;
     }
 
-    public long getConsumeQueueEndTimestamp() {
-        return consumeQueue.getEndTimestamp();
-    }
-
-    public long getDispatchOffset() {
-        return dispatchOffset.get();
-    }
-
     @Override
     public CompletableFuture<ByteBuffer> getMessageAsync(long queueOffset) {
-        return getConsumeQueueAsync(queueOffset).thenComposeAsync(cqBuffer -> {
+        return getConsumeQueueAsync(queueOffset).thenCompose(cqBuffer -> {
             long commitLogOffset = CQItemBufferUtil.getCommitLogOffset(cqBuffer);
             int length = CQItemBufferUtil.getSize(cqBuffer);
             return getCommitLogAsync(commitLogOffset, length);
@@ -184,7 +186,7 @@ public class CompositeFlatFile implements CompositeAccess {
                 case UPPER:
                     return maxQueueOffset;
                 default:
-                    LOGGER.warn("CompositeFlatFile#getQueueOffsetByTime: unknown boundary boundaryType");
+                    log.warn("CompositeFlatFile#getQueueOffsetByTime: unknown boundary boundaryType");
                     break;
             }
         }
@@ -199,7 +201,7 @@ public class CompositeFlatFile implements CompositeAccess {
                 case UPPER:
                     return 0L;
                 default:
-                    LOGGER.warn("CompositeFlatFile#getQueueOffsetByTime: unknown boundary boundaryType");
+                    log.warn("CompositeFlatFile#getQueueOffsetByTime: unknown boundary boundaryType");
                     break;
             }
         }
@@ -264,7 +266,7 @@ public class CompositeFlatFile implements CompositeAccess {
                     offset = previousAttempt;
                     break;
                 default:
-                    LOGGER.warn("CompositeFlatFile#getQueueOffsetByTime: unknown boundary boundaryType");
+                    log.warn("CompositeFlatFile#getQueueOffsetByTime: unknown boundary boundaryType");
                     break;
             }
         } else {
@@ -295,7 +297,7 @@ public class CompositeFlatFile implements CompositeAccess {
                     break;
                 }
                 default: {
-                    LOGGER.warn("CompositeFlatFile#getQueueOffsetByTime: unknown boundary boundaryType");
+                    log.warn("CompositeFlatFile#getQueueOffsetByTime: unknown boundary boundaryType");
                     break;
                 }
             }
@@ -304,27 +306,12 @@ public class CompositeFlatFile implements CompositeAccess {
     }
 
     @Override
-    public void initOffset(long offset) {
-        if (consumeQueue.isInitialized()) {
-            dispatchOffset.set(this.getConsumeQueueCommitOffset());
-        } else {
-            consumeQueue.setBaseOffset(offset * TieredConsumeQueue.CONSUME_QUEUE_STORE_UNIT_SIZE);
-            dispatchOffset.set(offset);
-        }
-    }
-
-    @Override
     public AppendResult appendCommitLog(ByteBuffer message) {
-        return appendCommitLog(message, false);
-    }
-
-    @Override
-    public AppendResult appendCommitLog(ByteBuffer message, boolean commit) {
         if (closed) {
             return AppendResult.FILE_CLOSED;
         }
 
-        AppendResult result = commitLog.append(message, commit);
+        AppendResult result = commitLog.append(message);
         if (result == AppendResult.SUCCESS) {
             dispatchOffset.incrementAndGet();
         }
@@ -333,21 +320,16 @@ public class CompositeFlatFile implements CompositeAccess {
 
     @Override
     public AppendResult appendConsumeQueue(DispatchRequest request) {
-        return appendConsumeQueue(request, false);
-    }
-
-    @Override
-    public AppendResult appendConsumeQueue(DispatchRequest request, boolean commit) {
         if (closed) {
             return AppendResult.FILE_CLOSED;
         }
 
-        if (request.getConsumeQueueOffset() != getConsumeQueueMaxOffset()) {
+        if (request.getConsumeQueueOffset() != this.getConsumeQueueMaxOffset()) {
             return AppendResult.OFFSET_INCORRECT;
         }
 
         return consumeQueue.append(request.getCommitLogOffset(),
-            request.getMsgSize(), request.getTagsCode(), request.getStoreTimestamp(), commit);
+            request.getMsgSize(), request.getTagsCode(), request.getStoreTimestamp());
     }
 
     @Override
@@ -388,26 +370,16 @@ public class CompositeFlatFile implements CompositeAccess {
         consumeQueue.destroyExpiredFile();
     }
 
-    @Override
-    public void commit(boolean sync) {
-        commitLog.commit(sync);
-        consumeQueue.commit(sync);
+    public int getReadAheadFactor() {
+        return readAheadFactor.get();
     }
 
     public void increaseReadAheadFactor() {
-        readAheadFactor = Math.min(readAheadFactor + 1, storeConfig.getReadAheadMaxFactor());
+        readAheadFactor.set(Math.min(readAheadFactor.get() + 1, storeConfig.getReadAheadMaxFactor()));
     }
 
     public void decreaseReadAheadFactor() {
-        readAheadFactor = Math.max(readAheadFactor - 1, storeConfig.getReadAheadMinFactor());
-    }
-
-    public void setNotReadAhead() {
-        readAheadFactor = 1;
-    }
-
-    public int getReadAheadFactor() {
-        return readAheadFactor;
+        readAheadFactor.set(Math.max(readAheadFactor.get() - 1, storeConfig.getReadAheadMinFactor()));
     }
 
     public void recordGroupAccess(String group, long offset) {
@@ -431,7 +403,8 @@ public class CompositeFlatFile implements CompositeAccess {
             .stream()
             .filter(entry -> {
                 InFlightRequestKey key = entry.getKey();
-                return Math.max(key.getOffset(), offset) <= Math.min(key.getOffset() + key.getBatchSize(), offset + batchSize);
+                return Math.max(key.getOffset(), offset) <=
+                    Math.min(key.getOffset() + key.getBatchSize(), offset + batchSize);
             })
             .max(Comparator.comparing(entry -> entry.getKey().getRequestTime()))
             .map(Map.Entry::getValue);
@@ -479,17 +452,17 @@ public class CompositeFlatFile implements CompositeAccess {
     }
 
     public void destroy() {
+        closed = true;
+        fileLock.lock();
         try {
-            closed = true;
-            compositeFlatFileLock.lock();
             commitLog.destroy();
             consumeQueue.destroy();
             metadataStore.deleteFileSegment(filePath, FileSegmentType.COMMIT_LOG);
             metadataStore.deleteFileSegment(filePath, FileSegmentType.CONSUME_QUEUE);
         } catch (Exception e) {
-            LOGGER.error("CompositeFlatFile#destroy: delete file failed", e);
+            log.error("CompositeFlatFile#destroy: delete file failed, filePath: {}", filePath, e);
         } finally {
-            compositeFlatFileLock.unlock();
+            fileLock.unlock();
         }
     }
 }

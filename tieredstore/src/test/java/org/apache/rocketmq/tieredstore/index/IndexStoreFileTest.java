@@ -28,7 +28,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import org.apache.rocketmq.common.ThreadFactoryImpl;
-import org.apache.rocketmq.tieredstore.TieredStoreTestUtil;
+import org.apache.rocketmq.tieredstore.MessageStoreTest;
 import org.apache.rocketmq.tieredstore.common.AppendResult;
 import org.apache.rocketmq.tieredstore.common.FileSegmentType;
 import org.apache.rocketmq.tieredstore.common.TieredMessageStoreConfig;
@@ -74,9 +74,9 @@ public class IndexStoreFileTest {
             this.indexStoreFile.shutdown();
             this.indexStoreFile.destroy();
         }
-        TieredStoreTestUtil.destroyMetadataStore();
-        TieredStoreTestUtil.destroyTempDir(storeConfig.getStorePathRootDir());
-        TieredStoreTestUtil.destroyTempDir(storeConfig.getTieredStoreFilePath());
+        MessageStoreTest.destroyMetadataStore();
+        MessageStoreTest.destroyTempDir(storeConfig.getStorePathRootDir());
+        MessageStoreTest.destroyTempDir(storeConfig.getTieredStoreFilePath());
         TieredStoreExecutor.shutdown();
     }
 
