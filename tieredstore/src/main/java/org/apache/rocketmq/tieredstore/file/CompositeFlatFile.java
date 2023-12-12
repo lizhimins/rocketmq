@@ -104,11 +104,16 @@ public class CompositeFlatFile implements CompositeAccess {
 
     @Override
     public long initOffset(long offset) {
-        if (consumeQueue.isInitialized()) {
-            dispatchOffset.set(this.getConsumeQueueCommitOffset());
-        } else {
-            consumeQueue.setBaseOffset(offset * TieredConsumeQueue.CONSUME_QUEUE_STORE_UNIT_SIZE);
-            dispatchOffset.set(offset);
+        fileLock.lock();
+        try {
+            if (consumeQueue.isInitialized()) {
+                dispatchOffset.set(this.getConsumeQueueCommitOffset());
+            } else {
+                consumeQueue.setBaseOffset(offset * TieredConsumeQueue.CONSUME_QUEUE_STORE_UNIT_SIZE);
+                dispatchOffset.set(offset);
+            }
+        } finally {
+            fileLock.unlock();
         }
         return dispatchOffset.get();
     }
@@ -358,18 +363,6 @@ public class CompositeFlatFile implements CompositeAccess {
         consumeQueue.commit(true);
     }
 
-    @Override
-    public void cleanExpiredFile(long expireTimestamp) {
-        commitLog.cleanExpiredFile(expireTimestamp);
-        consumeQueue.cleanExpiredFile(expireTimestamp);
-    }
-
-    @Override
-    public void destroyExpiredFile() {
-        commitLog.destroyExpiredFile();
-        consumeQueue.destroyExpiredFile();
-    }
-
     public int getReadAheadFactor() {
         return readAheadFactor.get();
     }
@@ -445,10 +438,43 @@ public class CompositeFlatFile implements CompositeAccess {
         return StringUtils.equals(filePath, ((CompositeFlatFile) obj).filePath);
     }
 
+    @Override
+    public void cleanExpiredFile(long expireTimestamp) {
+        fileLock.lock();
+        try {
+            if (closed) {
+                return;
+            }
+            commitLog.cleanExpiredFile(expireTimestamp);
+            consumeQueue.cleanExpiredFile(expireTimestamp);
+        } finally {
+            fileLock.unlock();
+        }
+    }
+
+    @Override
+    public void destroyExpiredFile() {
+        fileLock.lock();
+        try {
+            if (closed) {
+                return;
+            }
+            commitLog.destroyExpiredFile();
+            consumeQueue.destroyExpiredFile();
+        } finally {
+            fileLock.unlock();
+        }
+    }
+
     public void shutdown() {
         closed = true;
-        commitLog.commit(true);
-        consumeQueue.commit(true);
+        fileLock.lock();
+        try {
+            commitLog.commit(true);
+            consumeQueue.commit(true);
+        } finally {
+            fileLock.unlock();
+        }
     }
 
     public void destroy() {
