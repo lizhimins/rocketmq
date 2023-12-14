@@ -24,7 +24,6 @@ import org.apache.rocketmq.tieredstore.common.TieredMessageStoreConfig;
 import org.apache.rocketmq.tieredstore.common.TieredStoreExecutor;
 import org.apache.rocketmq.tieredstore.metadata.TieredMetadataManager;
 import org.apache.rocketmq.tieredstore.metadata.TieredMetadataStore;
-import org.apache.rocketmq.tieredstore.util.TieredStoreUtil;
 import org.awaitility.Awaitility;
 import org.junit.After;
 import org.junit.Assert;

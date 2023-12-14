@@ -55,8 +55,7 @@ public class TieredMetadataManagerTest {
 
     @After
     public void tearDown() throws IOException {
-        MessageStoreTest.destroyMetadataStore();
-        MessageStoreTest.destroyTempDir(storePath);
+        MessageStoreTest.deleteStoreDirectory(storePath);
     }
 
     @Test

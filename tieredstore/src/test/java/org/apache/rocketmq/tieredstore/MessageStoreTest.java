@@ -21,15 +21,25 @@ import java.io.IOException;
 import java.nio.file.Paths;
 import java.util.UUID;
 import org.apache.commons.io.FileUtils;
+import org.apache.rocketmq.logging.org.slf4j.Logger;
+import org.apache.rocketmq.logging.org.slf4j.LoggerFactory;
+import org.apache.rocketmq.tieredstore.util.TieredStoreUtil;
 
 public class MessageStoreTest {
 
+    private static final Logger log = LoggerFactory.getLogger(TieredStoreUtil.TIERED_STORE_LOGGER_NAME);
+    private static final String TIERED_STORE_PATH = "tiered_store_test";
+
     public static String getRandomStorePath() {
         return Paths.get(FileUtils.getTempDirectoryPath(),
-            "tiered_store_test" + UUID.randomUUID()).toString();
+            TIERED_STORE_PATH, UUID.randomUUID().toString()).toString();
     }
 
-    public static void deleteStoreDirectory(String storePath) throws IOException {
-        FileUtils.deleteDirectory(new File(storePath));
+    public static void deleteStoreDirectory(String storePath) {
+        try {
+            FileUtils.deleteDirectory(new File(storePath));
+        } catch (IOException e) {
+            log.error("Delete store directory failed, filePath: {}", storePath);
+        }
     }
 }

@@ -16,9 +16,7 @@
  */
 package org.apache.rocketmq.tieredstore.util;
 
-import com.google.common.annotations.VisibleForTesting;
 import java.io.File;
-import java.lang.reflect.Constructor;
 import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -31,8 +29,6 @@ import org.apache.rocketmq.common.message.MessageQueue;
 import org.apache.rocketmq.common.topic.TopicValidator;
 import org.apache.rocketmq.logging.org.slf4j.Logger;
 import org.apache.rocketmq.logging.org.slf4j.LoggerFactory;
-import org.apache.rocketmq.tieredstore.common.TieredMessageStoreConfig;
-import org.apache.rocketmq.tieredstore.metadata.TieredMetadataStore;
 
 public class TieredStoreUtil {
 

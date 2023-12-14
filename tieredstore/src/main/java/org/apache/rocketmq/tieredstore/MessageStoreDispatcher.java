@@ -17,5 +17,10 @@
 
 package org.apache.rocketmq.tieredstore;
 
+import org.apache.rocketmq.tieredstore.file.CompositeQueueFlatFile;
+
 public interface MessageStoreDispatcher {
+    void dispatchFlatFile(CompositeQueueFlatFile flatFile);
+
+    void deleteExpiredFile(CompositeQueueFlatFile flatFile);
 }

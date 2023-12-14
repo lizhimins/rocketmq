@@ -18,33 +18,21 @@ package org.apache.rocketmq.tieredstore;
 
 import io.opentelemetry.api.common.Attributes;
 import io.opentelemetry.sdk.OpenTelemetrySdk;
-import java.io.IOException;
 import java.lang.reflect.Field;
-import java.util.HashSet;
 import java.util.Properties;
-import java.util.Set;
 import java.util.concurrent.CompletableFuture;
-import org.apache.rocketmq.common.BrokerConfig;
+import org.apache.rocketmq.common.BoundaryType;
 import org.apache.rocketmq.common.message.MessageQueue;
-import org.apache.rocketmq.logging.org.slf4j.LoggerFactory;
 import org.apache.rocketmq.remoting.Configuration;
-import org.apache.rocketmq.store.CommitLog;
-import org.apache.rocketmq.store.DefaultMessageStore;
 import org.apache.rocketmq.store.GetMessageResult;
 import org.apache.rocketmq.store.GetMessageStatus;
 import org.apache.rocketmq.store.MessageStore;
 import org.apache.rocketmq.store.QueryMessageResult;
 import org.apache.rocketmq.store.SelectMappedBufferResult;
 import org.apache.rocketmq.store.config.MessageStoreConfig;
-import org.apache.rocketmq.store.plugin.MessageStorePluginContext;
-import org.apache.rocketmq.tieredstore.common.TieredStoreExecutor;
 import org.apache.rocketmq.tieredstore.file.CompositeQueueFlatFile;
 import org.apache.rocketmq.tieredstore.file.TieredFlatFileManager;
-import org.apache.rocketmq.tieredstore.util.TieredStoreUtil;
-import org.apache.rocketmq.common.BoundaryType;
-import org.junit.After;
 import org.junit.Assert;
-import org.junit.Before;
 import org.junit.Test;
 import org.mockito.Mockito;
 
@@ -53,7 +41,6 @@ import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 public class TieredMessageStoreTest {

@@ -45,9 +45,7 @@ public class MessageStoreDispatcherImplTest {
 
     @After
     public void tearDown() throws IOException {
-        MessageStoreTest.destroyCompositeFlatFileManager();
-        MessageStoreTest.destroyMetadataStore();
-        MessageStoreTest.destroyTempDir(storePath);
+        MessageStoreTest.deleteStoreDirectory(storePath);
         TieredStoreExecutor.shutdown();
     }
 

@@ -19,7 +19,6 @@ package org.apache.rocketmq.tieredstore.file;
 import com.google.common.annotations.VisibleForTesting;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
@@ -228,7 +227,7 @@ public class TieredFlatFile {
                         pre.initPosition(actualSize);
                         this.updateFileSegment(pre);
                         log.info("TieredFlatFile#correctFileSize, correct file size when construct file, " +
-                            "filePath: {}, file type: {}, base offset: {}, actual size: {}, next file offset: {}",
+                                "filePath: {}, file type: {}, base offset: {}, actual size: {}, next file offset: {}",
                             filePath, fileType, pre.getBaseOffset(), actualSize, cur.getBaseOffset());
                     } else {
                         log.error("TieredFlatFile#correctFileSize: " +

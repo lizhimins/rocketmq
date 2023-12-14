@@ -89,9 +89,7 @@ public class IndexStoreServiceTest {
             indexService.shutdown();
             indexService.destroy();
         }
-        MessageStoreTest.destroyMetadataStore();
-        MessageStoreTest.destroyTempDir(storeConfig.getStorePathRootDir());
-        MessageStoreTest.destroyTempDir(storeConfig.getTieredStoreFilePath());
+        MessageStoreTest.deleteStoreDirectory(storeConfig.getTieredStoreFilePath());
         TieredStoreExecutor.shutdown();
     }
 

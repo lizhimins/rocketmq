@@ -33,7 +33,6 @@ import org.apache.rocketmq.tieredstore.common.AppendResult;
 import org.apache.rocketmq.tieredstore.common.TieredMessageStoreConfig;
 import org.apache.rocketmq.tieredstore.common.TieredStoreExecutor;
 import org.apache.rocketmq.tieredstore.file.TieredFileAllocator;
-import org.apache.rocketmq.tieredstore.file.TieredFlatFileManager;
 import org.apache.rocketmq.tieredstore.metadata.TieredMetadataManager;
 import org.apache.rocketmq.tieredstore.metadata.TieredMetadataStore;
 import org.apache.rocketmq.tieredstore.util.TieredStoreUtil;

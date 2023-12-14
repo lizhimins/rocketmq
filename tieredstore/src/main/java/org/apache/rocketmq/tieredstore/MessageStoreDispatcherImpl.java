@@ -22,8 +22,8 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.function.Consumer;
-import org.apache.rocketmq.common.ServiceThread;
+import java.util.concurrent.Semaphore;
+import java.util.concurrent.TimeUnit;
 import org.apache.rocketmq.common.message.MessageConst;
 import org.apache.rocketmq.common.message.MessageQueue;
 import org.apache.rocketmq.logging.org.slf4j.Logger;
@@ -37,10 +37,8 @@ import org.apache.rocketmq.tieredstore.common.AppendResult;
 import org.apache.rocketmq.tieredstore.common.FileSegmentType;
 import org.apache.rocketmq.tieredstore.common.TieredMessageStoreConfig;
 import org.apache.rocketmq.tieredstore.common.TieredStoreExecutor;
-import org.apache.rocketmq.tieredstore.file.CompositeAccess;
 import org.apache.rocketmq.tieredstore.file.CompositeQueueFlatFile;
 import org.apache.rocketmq.tieredstore.file.TieredFlatFileManager;
-import org.apache.rocketmq.tieredstore.index.IndexStoreService;
 import org.apache.rocketmq.tieredstore.metrics.TieredStoreMetricsConstant;
 import org.apache.rocketmq.tieredstore.metrics.TieredStoreMetricsManager;
 import org.apache.rocketmq.tieredstore.provider.TieredStoreTopicBlackListFilter;
@@ -48,26 +46,82 @@ import org.apache.rocketmq.tieredstore.provider.TieredStoreTopicFilter;
 import org.apache.rocketmq.tieredstore.util.MessageBufferUtil;
 import org.apache.rocketmq.tieredstore.util.TieredStoreUtil;
 
-public class MessageStoreDispatcherImpl extends ServiceThread {
+public class MessageStoreDispatcherImpl implements MessageStoreDispatcher {
 
-    private static final Logger log = LoggerFactory.getLogger(TieredStoreUtil.TIERED_STORE_LOGGER_NAME);
+    protected static final Logger log = LoggerFactory.getLogger(TieredStoreUtil.TIERED_STORE_LOGGER_NAME);
 
-    private static final long OFFSET_NOT_EXIST = -1L;
-
-    private TieredStoreTopicFilter topicFilter;
-    private final String brokerName;
-    private final MessageStore defaultStore;
-    private final TieredMessageStore messageStore;
-    private final TieredMessageStoreConfig storeConfig;
-    private final TieredFlatFileManager flatFileManager;
+    protected static final long OFFSET_NOT_EXIST = -1L;
+    protected volatile boolean stopped = true;
+    protected TieredStoreTopicFilter topicFilter;
+    protected final String brokerName;
+    protected final Semaphore semaphore;
+    protected final MessageStore defaultStore;
+    protected final TieredMessageStore messageStore;
+    protected final TieredMessageStoreConfig storeConfig;
+    protected final TieredFlatFileManager flatFileManager;
 
     public MessageStoreDispatcherImpl(TieredMessageStore messageStore) {
         this.messageStore = messageStore;
         this.defaultStore = messageStore.getMessageStore();
         this.storeConfig = messageStore.getStoreConfig();
         this.brokerName = storeConfig.getBrokerName();
+        this.semaphore = new Semaphore(TieredStoreExecutor.QUEUE_CAPACITY / 4);
         this.topicFilter = new TieredStoreTopicBlackListFilter();
         this.flatFileManager = messageStore.getFlatFileManager();
+        this.initScheduledTasks();
+    }
+
+    public void start() {
+        this.stopped = false;
+        log.info("MessageStoreDispatcherImpl#start success");
+    }
+
+    public void initScheduledTasks() {
+        TieredStoreExecutor.commonScheduledExecutor.scheduleWithFixedDelay(
+            this::submitAll, 0, 30, TimeUnit.MILLISECONDS);
+
+        TieredStoreExecutor.commonScheduledExecutor.scheduleWithFixedDelay(
+            this::cleanExpiredFile, 0, 30, TimeUnit.MILLISECONDS);
+    }
+
+    public void submitAll() {
+        if (stopped) {
+            return;
+        }
+        try {
+            for (CompositeQueueFlatFile flatFile : flatFileManager.deepCopyFlatFileToList()) {
+                semaphore.acquire();
+                TieredStoreExecutor.commitExecutor.submit(() -> {
+                    try {
+                        dispatchFlatFile(flatFile);
+                    } finally {
+                        semaphore.release();
+                    }
+                });
+            }
+        } catch (Throwable e) {
+            log.error("StoreDispatcher, failed to record submit task", e);
+        }
+    }
+
+    public void cleanExpiredFile() {
+        if (stopped) {
+            return;
+        }
+        try {
+            for (CompositeQueueFlatFile flatFile : flatFileManager.deepCopyFlatFileToList()) {
+                semaphore.acquire();
+                TieredStoreExecutor.commitExecutor.submit(() -> {
+                    try {
+                        // dispatchFlatFile(flatFile);
+                    } finally {
+                        semaphore.release();
+                    }
+                });
+            }
+        } catch (Throwable e) {
+            log.error("StoreDispatcher, failed to record submit task", e);
+        }
     }
 
     public TieredStoreTopicFilter getTopicFilter() {
@@ -76,27 +130,6 @@ public class MessageStoreDispatcherImpl extends ServiceThread {
 
     public void setTopicFilter(TieredStoreTopicFilter topicFilter) {
         this.topicFilter = topicFilter;
-    }
-
-    public void doBatchDispatchFlatFileAsync(CompositeQueueFlatFile flatFile, Consumer<Long> consumer) {
-        // Avoid dispatch tasks too much
-        if (TieredStoreExecutor.dispatchThreadPoolQueue.size() >
-            TieredStoreExecutor.QUEUE_CAPACITY * 0.75) {
-            return;
-        }
-
-        TieredStoreExecutor.dispatchExecutor.execute(() -> {
-            try {
-                dispatchFlatFile(flatFile);
-            } catch (Throwable throwable) {
-                log.error("[Bug] MessageStoreDispatcherImpl#dispatchFlatFileAsync failed, topic: {}, queueId: {}",
-                    flatFile.getMessageQueue().getTopic(), flatFile.getMessageQueue().getQueueId(), throwable);
-            }
-
-            if (consumer != null) {
-                consumer.accept(flatFile.getDispatchOffset());
-            }
-        });
     }
 
     protected void detectDispatchBehindBytes(String topic, int queueId, long currentOffset) {
@@ -113,7 +146,8 @@ public class MessageStoreDispatcherImpl extends ServiceThread {
         }
     }
 
-    protected void dispatchFlatFile(CompositeQueueFlatFile flatFile) {
+    @Override
+    public void dispatchFlatFile(CompositeQueueFlatFile flatFile) {
         if (stopped) {
             return;
         }
@@ -144,12 +178,8 @@ public class MessageStoreDispatcherImpl extends ServiceThread {
             // when dispatch offset is smaller than min offset in local cq
             // some earliest messages may be lost at this time
             flatFileManager.destroyFile(flatFile.getMessageQueue());
-
-            CompositeQueueFlatFile newFlatFile =
-                flatFileManager.getOrCreateFlatFileIfAbsent(new MessageQueue(topic, brokerName, queueId));
-            if (newFlatFile != null) {
-                newFlatFile.initOffset(maxOffsetInQueue);
-            }
+            flatFileManager.getOrCreateFlatFileIfAbsent(new MessageQueue(topic, brokerName, queueId))
+                .initOffset(maxOffsetInQueue);
             return;
         }
 
@@ -219,21 +249,14 @@ public class MessageStoreDispatcherImpl extends ServiceThread {
             .put(TieredStoreMetricsConstant.LABEL_FILE_TYPE, FileSegmentType.COMMIT_LOG.name().toLowerCase())
             .build();
         TieredStoreMetricsManager.messagesDispatchTotal.add(dispatchOffset - currentOffset, attributes);
-
-        if (storeConfig.isMessageIndexEnable()) {
-
-        }
     }
 
     @Override
-    public String getServiceName() {
-        return "TieredStoreDispatcherService";
+    public void deleteExpiredFile(CompositeQueueFlatFile flatFile) {
+
     }
 
-    @Override
-    public void run() {
-        while (!stopped) {
-            waitForRunning(1000);
-        }
+    public void shutdown() {
+        stopped = true;
     }
 }
