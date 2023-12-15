@@ -17,10 +17,12 @@
 
 package org.apache.rocketmq.tieredstore;
 
+import org.apache.rocketmq.store.CommitLogDispatcher;
 import org.apache.rocketmq.tieredstore.file.CompositeQueueFlatFile;
 
-public interface MessageStoreDispatcher {
-    void dispatchFlatFile(CompositeQueueFlatFile flatFile);
+public interface MessageStoreDispatcher extends CommitLogDispatcher {
+
+    boolean dispatchFlatFile(CompositeQueueFlatFile flatFile) throws InterruptedException, Exception;
 
     void deleteExpiredFile(CompositeQueueFlatFile flatFile);
 }

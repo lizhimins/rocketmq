@@ -37,10 +37,9 @@ public class CompositeQueueFlatFile extends CompositeFlatFile {
     }
 
     @Override
-    public long initOffset(long offset) {
-        long dispatchOffset = super.initOffset(offset);
+    public void initOffset(long offset) {
+        super.initOffset(offset);
         this.flushMetadata();
-        return dispatchOffset;
     }
 
     public TopicMetadata recoverTopicMetadata() {

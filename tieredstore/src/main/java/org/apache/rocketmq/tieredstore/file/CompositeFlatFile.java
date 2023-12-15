@@ -102,8 +102,12 @@ public class CompositeFlatFile implements CompositeAccess {
         return closed;
     }
 
+    public ReentrantLock getFileLock() {
+        return fileLock;
+    }
+
     @Override
-    public long initOffset(long offset) {
+    public void initOffset(long offset) {
         fileLock.lock();
         try {
             if (consumeQueue.isInitialized()) {
@@ -115,7 +119,10 @@ public class CompositeFlatFile implements CompositeAccess {
         } finally {
             fileLock.unlock();
         }
-        return dispatchOffset.get();
+    }
+
+    public long getCommitLogBeginTimestamp() {
+        return commitLog.getBeginTimestamp();
     }
 
     public long getCommitLogMinOffset() {
@@ -126,8 +133,8 @@ public class CompositeFlatFile implements CompositeAccess {
         return commitLog.getMaxOffset();
     }
 
-    public long getCommitLogBeginTimestamp() {
-        return commitLog.getBeginTimestamp();
+    public long getCommitLogCommitOffset() {
+        return commitLog.getCommitOffset();
     }
 
     @Override

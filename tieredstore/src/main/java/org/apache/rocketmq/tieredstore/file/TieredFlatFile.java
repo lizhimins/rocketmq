@@ -507,14 +507,7 @@ public class TieredFlatFile {
                 futureList.add(segment
                     .commitAsync()
                     .thenAccept(success -> {
-                        try {
-                            this.updateFileSegment(segment);
-                        } catch (Exception e) {
-                            // TODO handle update segment metadata failed exception
-                            log.error("Update file segment metadata failed: " +
-                                    "file path: {}, file type: {}, base offset: {}",
-                                filePath, fileType, segment.getBaseOffset(), e);
-                        }
+                        this.updateFileSegment(segment);
                         if (segment.isFull() && !segment.needCommit()) {
                             needCommitFileSegmentList.remove(segment);
                         }

@@ -30,7 +30,7 @@ public interface CompositeAccess {
      *
      * @param offset init offset for consume queue
      */
-    long initOffset(long offset);
+    void initOffset(long offset);
 
     /**
      * Appends a message to the commit log file
