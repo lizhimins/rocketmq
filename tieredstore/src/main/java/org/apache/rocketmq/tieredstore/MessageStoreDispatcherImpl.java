@@ -45,7 +45,7 @@ import org.apache.rocketmq.tieredstore.common.AppendResult;
 import org.apache.rocketmq.tieredstore.common.FileSegmentType;
 import org.apache.rocketmq.tieredstore.common.TieredMessageStoreConfig;
 import org.apache.rocketmq.tieredstore.common.TieredStoreExecutor;
-import org.apache.rocketmq.tieredstore.file.CompositeQueueFlatFile;
+import org.apache.rocketmq.tieredstore.file.CompositeFlatFileExt;
 import org.apache.rocketmq.tieredstore.file.TieredFlatFileManager;
 import org.apache.rocketmq.tieredstore.metrics.TieredStoreMetricsConstant;
 import org.apache.rocketmq.tieredstore.metrics.TieredStoreMetricsManager;
@@ -69,8 +69,8 @@ public class MessageStoreDispatcherImpl extends ServiceThread implements Message
     protected final TieredFlatFileManager flatFileManager;
 
     protected final ReentrantLock dispatchLock;
-    protected ConcurrentMap<CompositeQueueFlatFile, List<DispatchRequest>> dispatchRequestReadMap;
-    protected ConcurrentMap<CompositeQueueFlatFile, List<DispatchRequest>> dispatchRequestWriteMap;
+    protected ConcurrentMap<CompositeFlatFileExt, List<DispatchRequest>> dispatchRequestReadMap;
+    protected ConcurrentMap<CompositeFlatFileExt, List<DispatchRequest>> dispatchRequestWriteMap;
 
     public MessageStoreDispatcherImpl(TieredMessageStore messageStore) {
         this.messageStore = messageStore;
@@ -109,7 +109,7 @@ public class MessageStoreDispatcherImpl extends ServiceThread implements Message
             return;
         }
         try {
-            for (CompositeQueueFlatFile flatFile : flatFileManager.deepCopyFlatFileToList()) {
+            for (CompositeFlatFileExt flatFile : flatFileManager.deepCopyFlatFileToList()) {
                 semaphore.acquire();
                 TieredStoreExecutor.commitExecutor.submit(() -> {
                     try {
@@ -136,7 +136,7 @@ public class MessageStoreDispatcherImpl extends ServiceThread implements Message
             return;
         }
         try {
-            for (CompositeQueueFlatFile flatFile : flatFileManager.deepCopyFlatFileToList()) {
+            for (CompositeFlatFileExt flatFile : flatFileManager.deepCopyFlatFileToList()) {
                 semaphore.acquire();
                 TieredStoreExecutor.commitExecutor.submit(() -> {
                     try {
@@ -169,7 +169,7 @@ public class MessageStoreDispatcherImpl extends ServiceThread implements Message
     }
 
     @Override
-    public boolean dispatchFlatFile(CompositeQueueFlatFile flatFile) {
+    public boolean dispatchFlatFile(CompositeFlatFileExt flatFile) {
         if (stopped) {
             return false;
         }
@@ -192,7 +192,7 @@ public class MessageStoreDispatcherImpl extends ServiceThread implements Message
         }
     }
 
-    public boolean dispatch(CompositeQueueFlatFile flatFile, String topic, int queueId) {
+    public boolean dispatch(CompositeFlatFileExt flatFile, String topic, int queueId) {
 
         long currentOffset = flatFile.getDispatchOffset();
         long minOffsetInQueue = defaultStore.getMinOffsetInQueue(topic, queueId);
@@ -304,7 +304,7 @@ public class MessageStoreDispatcherImpl extends ServiceThread implements Message
         return false;
     }
 
-    public void buildIndex(CompositeQueueFlatFile flatFile, List<DispatchRequest> requestList) {
+    public void buildIndex(CompositeFlatFileExt flatFile, List<DispatchRequest> requestList) {
         dispatchLock.lock();
         try {
             dispatchRequestWriteMap.computeIfAbsent(flatFile, k -> new ArrayList<>()).addAll(requestList);
@@ -324,11 +324,11 @@ public class MessageStoreDispatcherImpl extends ServiceThread implements Message
     }
 
     @Override
-    public void deleteExpiredFile(CompositeQueueFlatFile flatFile) {
+    public void deleteExpiredFile(CompositeFlatFileExt flatFile) {
 
     }
 
-    public AppendResult appendIndexFile(CompositeQueueFlatFile flatFile, DispatchRequest request) {
+    public AppendResult appendIndexFile(CompositeFlatFileExt flatFile, DispatchRequest request) {
         if (stopped) {
             return AppendResult.FILE_CLOSED;
         }
@@ -352,8 +352,8 @@ public class MessageStoreDispatcherImpl extends ServiceThread implements Message
             return;
         }
 
-        for (Map.Entry<CompositeQueueFlatFile, List<DispatchRequest>> entry : dispatchRequestReadMap.entrySet()) {
-            CompositeQueueFlatFile flatFile = entry.getKey();
+        for (Map.Entry<CompositeFlatFileExt, List<DispatchRequest>> entry : dispatchRequestReadMap.entrySet()) {
+            CompositeFlatFileExt flatFile = entry.getKey();
             List<DispatchRequest> requestList = entry.getValue();
             if (flatFile.isClosed()) {
                 requestList.clear();

@@ -48,7 +48,7 @@ import org.apache.rocketmq.tieredstore.common.FileSegmentType;
 import org.apache.rocketmq.tieredstore.common.MessageCacheKey;
 import org.apache.rocketmq.tieredstore.common.SelectBufferResultWrapper;
 import org.apache.rocketmq.tieredstore.common.TieredMessageStoreConfig;
-import org.apache.rocketmq.tieredstore.file.CompositeQueueFlatFile;
+import org.apache.rocketmq.tieredstore.file.CompositeFlatFileExt;
 import org.apache.rocketmq.tieredstore.file.TieredFlatFileManager;
 import org.apache.rocketmq.tieredstore.metadata.TieredMetadataStore;
 import org.apache.rocketmq.tieredstore.util.TieredStoreUtil;
@@ -178,7 +178,7 @@ public class TieredStoreMetricsManager {
             .setDescription("Tiered store dispatch behind message count")
             .ofLongs()
             .buildWithCallback(measurement -> {
-                for (CompositeQueueFlatFile flatFile : flatFileManager.deepCopyFlatFileToList()) {
+                for (CompositeFlatFileExt flatFile : flatFileManager.deepCopyFlatFileToList()) {
 
                     MessageQueue mq = flatFile.getMessageQueue();
                     long maxOffset = next.getMaxOffsetInQueue(mq.getTopic(), mq.getQueueId());
@@ -207,7 +207,7 @@ public class TieredStoreMetricsManager {
             .setUnit("seconds")
             .ofLongs()
             .buildWithCallback(measurement -> {
-                for (CompositeQueueFlatFile flatFile : flatFileManager.deepCopyFlatFileToList()) {
+                for (CompositeFlatFileExt flatFile : flatFileManager.deepCopyFlatFileToList()) {
 
                     MessageQueue mq = flatFile.getMessageQueue();
                     long maxOffset = next.getMaxOffsetInQueue(mq.getTopic(), mq.getQueueId());
@@ -312,7 +312,7 @@ public class TieredStoreMetricsManager {
             .setUnit("milliseconds")
             .ofLongs()
             .buildWithCallback(measurement -> {
-                for (CompositeQueueFlatFile flatFile : flatFileManager.deepCopyFlatFileToList()) {
+                for (CompositeFlatFileExt flatFile : flatFileManager.deepCopyFlatFileToList()) {
                     long timestamp = flatFile.getCommitLogBeginTimestamp();
                     if (timestamp > 0) {
                         MessageQueue mq = flatFile.getMessageQueue();

@@ -38,7 +38,7 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
-public class CompositeQueueFlatFileTest {
+public class CompositeFlatFileExtTest {
 
     private final String storePath = MessageStoreTest.getRandomStorePath();
     private TieredMessageStoreConfig storeConfig;
@@ -68,14 +68,14 @@ public class CompositeQueueFlatFileTest {
 
     @Test
     public void testAppendCommitLog() {
-        CompositeQueueFlatFile flatFile = new CompositeQueueFlatFile(tieredFileAllocator, mq);
+        CompositeFlatFileExt flatFile = new CompositeFlatFileExt(tieredFileAllocator, mq);
         ByteBuffer message = MessageBufferUtilTest.buildMockedMessageBuffer();
         AppendResult result = flatFile.appendCommitLog(message);
         Assert.assertEquals(AppendResult.SUCCESS, result);
         Assert.assertEquals(123L, flatFile.commitLog.getFlatFile().getFileToWrite().getAppendPosition());
         Assert.assertEquals(0L, flatFile.commitLog.getFlatFile().getFileToWrite().getCommitPosition());
 
-        flatFile = new CompositeQueueFlatFile(tieredFileAllocator, mq);
+        flatFile = new CompositeFlatFileExt(tieredFileAllocator, mq);
         flatFile.initOffset(6);
         result = flatFile.appendCommitLog(message);
         Assert.assertEquals(AppendResult.SUCCESS, result);
@@ -94,7 +94,7 @@ public class CompositeQueueFlatFileTest {
 
     @Test
     public void testAppendConsumeQueue() {
-        CompositeQueueFlatFile file = new CompositeQueueFlatFile(tieredFileAllocator, mq);
+        CompositeFlatFileExt file = new CompositeFlatFileExt(tieredFileAllocator, mq);
         DispatchRequest request = new DispatchRequest(
             mq.getTopic(), mq.getQueueId(), 51, 2, 3, 4);
         AppendResult result = file.appendConsumeQueue(request);
@@ -107,7 +107,7 @@ public class CompositeQueueFlatFileTest {
         file.consumeQueue.getFlatFile().getFileToWrite();
 
         // Recreate will load metadata and build consume queue
-        file = new CompositeQueueFlatFile(tieredFileAllocator, mq);
+        file = new CompositeFlatFileExt(tieredFileAllocator, mq);
         segment.initPosition(ConsumeQueue.CQ_STORE_UNIT_SIZE);
         result = file.appendConsumeQueue(request);
         Assert.assertEquals(AppendResult.SUCCESS, result);
@@ -133,7 +133,7 @@ public class CompositeQueueFlatFileTest {
         tieredFileAllocator = new TieredFileAllocator(metadataStore, storeConfig);
 
         // inject store time: 0, +100, +100, +100, +200
-        CompositeQueueFlatFile flatFile = new CompositeQueueFlatFile(tieredFileAllocator, mq);
+        CompositeFlatFileExt flatFile = new CompositeFlatFileExt(tieredFileAllocator, mq);
         flatFile.initOffset(50);
         long timestamp1 = System.currentTimeMillis();
         ByteBuffer buffer = MessageBufferUtilTest.buildMockedMessageBuffer();

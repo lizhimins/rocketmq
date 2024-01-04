@@ -30,7 +30,7 @@ import org.apache.rocketmq.store.MessageStore;
 import org.apache.rocketmq.store.QueryMessageResult;
 import org.apache.rocketmq.store.SelectMappedBufferResult;
 import org.apache.rocketmq.store.config.MessageStoreConfig;
-import org.apache.rocketmq.tieredstore.file.CompositeQueueFlatFile;
+import org.apache.rocketmq.tieredstore.file.CompositeFlatFileExt;
 import org.apache.rocketmq.tieredstore.file.TieredFlatFileManager;
 import org.junit.Assert;
 import org.junit.Test;
@@ -98,7 +98,7 @@ public class TieredMessageStoreTest {
 
     private void mockCompositeFlatFile() {
         flatFileManager = Mockito.mock(TieredFlatFileManager.class);
-        CompositeQueueFlatFile flatFile = Mockito.mock(CompositeQueueFlatFile.class);
+        CompositeFlatFileExt flatFile = Mockito.mock(CompositeFlatFileExt.class);
         when(flatFile.getConsumeQueueCommitOffset()).thenReturn(Long.MAX_VALUE);
         when(flatFileManager.getFlatFile(mq)).thenReturn(flatFile);
         try {
@@ -240,7 +240,7 @@ public class TieredMessageStoreTest {
     @Test
     public void testGetMinOffsetInQueue() {
         mockCompositeFlatFile();
-        CompositeQueueFlatFile flatFile = flatFileManager.getFlatFile(mq);
+        CompositeFlatFileExt flatFile = flatFileManager.getFlatFile(mq);
         when(nextStore.getMinOffsetInQueue(anyString(), anyInt())).thenReturn(100L);
         when(flatFileManager.getFlatFile(mq)).thenReturn(null);
         Assert.assertEquals(100L, store.getMinOffsetInQueue(mq.getTopic(), mq.getQueueId()));

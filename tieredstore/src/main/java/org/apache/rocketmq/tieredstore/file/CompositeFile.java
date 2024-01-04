@@ -22,7 +22,7 @@ import org.apache.rocketmq.common.BoundaryType;
 import org.apache.rocketmq.store.DispatchRequest;
 import org.apache.rocketmq.tieredstore.common.AppendResult;
 
-public interface CompositeAccess {
+public interface CompositeFile {
 
     /**
      * Initializes the offset for the flat file.
@@ -49,6 +49,20 @@ public interface CompositeAccess {
     AppendResult appendConsumeQueue(DispatchRequest request);
 
     /**
+     * Return the consensus queue site corresponding to the confirmed site in the commitLog
+     *
+     * @return the maximum offset
+     */
+    long getDispatchOffset();
+
+    /**
+     * Return the consensus queue site corresponding to the confirmed site in the commitLog
+     *
+     * @return the maximum offset
+     */
+    long getDispatchCommitOffset();
+
+    /**
      * Persist commit log file
      */
     void commitCommitLog();
@@ -57,6 +71,18 @@ public interface CompositeAccess {
      * Persist the consume queue file
      */
     void commitConsumeQueue();
+
+    long getCommitLogMinOffset();
+
+    long getCommitLogMaxOffset();
+
+    long getCommitLogCommitOffset();
+
+    long getConsumeQueueMinOffset();
+
+    long getConsumeQueueMaxOffset();
+
+    long getConsumeQueueCommitOffset();
 
     /**
      * Asynchronously retrieves the message at the specified consume queue offset
@@ -67,7 +93,7 @@ public interface CompositeAccess {
     CompletableFuture<ByteBuffer> getMessageAsync(long consumeQueueOffset);
 
     /**
-     * Get message from commitlog file at specified offset and length
+     * Get message from commitLog file at specified offset and length
      *
      * @param offset the offset
      * @param length the length
@@ -91,13 +117,6 @@ public interface CompositeAccess {
      * @return the consumer queue unit serialized content
      */
     CompletableFuture<ByteBuffer> getConsumeQueueAsync(long consumeQueueOffset, int count);
-
-    /**
-     * Return the consensus queue site corresponding to the confirmed site in the commitlog
-     *
-     * @return the maximum offset
-     */
-    long getCommitLogDispatchCommitOffset();
 
     /**
      * Gets the offset in the consume queue by timestamp and boundary type

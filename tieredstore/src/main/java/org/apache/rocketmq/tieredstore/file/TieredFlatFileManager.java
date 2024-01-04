@@ -45,7 +45,7 @@ public class TieredFlatFileManager {
     private final TieredMessageStoreConfig storeConfig;
     private final IndexStoreService indexStoreService;
     private final TieredFileAllocator fileAllocator;
-    private final ConcurrentMap<MessageQueue, CompositeQueueFlatFile> flatFileConcurrentMap;
+    private final ConcurrentMap<MessageQueue, CompositeFlatFileExt> flatFileConcurrentMap;
 
     public TieredFlatFileManager(TieredMetadataStore metadataStore, TieredMessageStoreConfig storeConfig)
         throws ClassNotFoundException, NoSuchMethodException {
@@ -132,16 +132,16 @@ public class TieredFlatFileManager {
         return storeConfig;
     }
 
-    public CompositeQueueFlatFile getOrCreateFlatFileIfAbsent(MessageQueue messageQueue) {
+    public CompositeFlatFileExt getOrCreateFlatFileIfAbsent(MessageQueue messageQueue) {
         return flatFileConcurrentMap.computeIfAbsent(messageQueue,
-            mq -> new CompositeQueueFlatFile(fileAllocator, mq));
+            mq -> new CompositeFlatFileExt(fileAllocator, mq));
     }
 
-    public CompositeQueueFlatFile getFlatFile(MessageQueue messageQueue) {
+    public CompositeFlatFileExt getFlatFile(MessageQueue messageQueue) {
         return flatFileConcurrentMap.get(messageQueue);
     }
 
-    public ImmutableList<CompositeQueueFlatFile> deepCopyFlatFileToList() {
+    public ImmutableList<CompositeFlatFileExt> deepCopyFlatFileToList() {
         return ImmutableList.copyOf(flatFileConcurrentMap.values());
     }
 
@@ -182,7 +182,7 @@ public class TieredFlatFileManager {
         long expiredTimeStamp = System.currentTimeMillis() -
             TimeUnit.HOURS.toMillis(storeConfig.getTieredStoreFileReservedTime());
 
-        for (CompositeQueueFlatFile flatFile : deepCopyFlatFileToList()) {
+        for (CompositeFlatFileExt flatFile : deepCopyFlatFileToList()) {
             TieredStoreExecutor.cleanExpiredFileExecutor.submit(() -> {
                 flatFile.cleanExpiredFile(expiredTimeStamp);
                 flatFile.destroyExpiredFile();
@@ -202,7 +202,7 @@ public class TieredFlatFileManager {
             return;
         }
 
-        CompositeQueueFlatFile flatFile = flatFileConcurrentMap.remove(mq);
+        CompositeFlatFileExt flatFile = flatFileConcurrentMap.remove(mq);
         if (flatFile != null) {
             flatFile.shutdown();
             flatFile.destroy();

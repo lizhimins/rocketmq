@@ -46,7 +46,7 @@ import org.apache.rocketmq.tieredstore.common.TieredMessageStoreConfig;
 import org.apache.rocketmq.tieredstore.common.TieredStoreExecutor;
 import org.apache.rocketmq.tieredstore.exception.TieredStoreException;
 import org.apache.rocketmq.tieredstore.file.CompositeFlatFile;
-import org.apache.rocketmq.tieredstore.file.CompositeQueueFlatFile;
+import org.apache.rocketmq.tieredstore.file.CompositeFlatFileExt;
 import org.apache.rocketmq.tieredstore.file.TieredConsumeQueue;
 import org.apache.rocketmq.tieredstore.file.TieredFlatFileManager;
 import org.apache.rocketmq.tieredstore.index.IndexItem;
@@ -116,7 +116,7 @@ public class MessageStoreFetcherImpl implements MessageStoreFetcher {
         });
     }
 
-    private void prefetchMessage(CompositeQueueFlatFile flatFile, String group, int maxCount, long nextBeginOffset) {
+    private void prefetchMessage(CompositeFlatFileExt flatFile, String group, int maxCount, long nextBeginOffset) {
         if (maxCount == 1 || flatFile.getReadAheadFactor() == 1) {
             return;
         }
@@ -178,7 +178,7 @@ public class MessageStoreFetcherImpl implements MessageStoreFetcher {
     }
 
     private CompletableFuture<Long> prefetchMessageThenPutToCache(
-        CompositeQueueFlatFile flatFile, long queueOffset, int batchSize) {
+            CompositeFlatFileExt flatFile, long queueOffset, int batchSize) {
 
         MessageQueue mq = flatFile.getMessageQueue();
         return getMessageFromTieredStoreAsync(flatFile, queueOffset, batchSize)
@@ -213,8 +213,8 @@ public class MessageStoreFetcherImpl implements MessageStoreFetcher {
             });
     }
 
-    public CompletableFuture<GetMessageResultExt> getMessageFromCacheAsync(CompositeQueueFlatFile flatFile,
-        String group, long queueOffset, int maxCount, boolean waitInflightRequest) {
+    public CompletableFuture<GetMessageResultExt> getMessageFromCacheAsync(CompositeFlatFileExt flatFile,
+                                                                           String group, long queueOffset, int maxCount, boolean waitInflightRequest) {
 
         MessageQueue mq = flatFile.getMessageQueue();
 
@@ -334,7 +334,7 @@ public class MessageStoreFetcherImpl implements MessageStoreFetcher {
     }
 
     public CompletableFuture<GetMessageResultExt> getMessageFromTieredStoreAsync(
-        CompositeQueueFlatFile flatFile, long queueOffset, int batchSize) {
+            CompositeFlatFileExt flatFile, long queueOffset, int batchSize) {
 
         GetMessageResultExt result = new GetMessageResultExt();
         result.setMinOffset(flatFile.getConsumeQueueMinOffset());
@@ -436,7 +436,7 @@ public class MessageStoreFetcherImpl implements MessageStoreFetcher {
         String group, String topic, int queueId, long queueOffset, int maxCount, final MessageFilter messageFilter) {
 
         GetMessageResult result = new GetMessageResult();
-        CompositeQueueFlatFile flatFile = flatFileManager.getFlatFile(new MessageQueue(topic, brokerName, queueId));
+        CompositeFlatFileExt flatFile = flatFileManager.getFlatFile(new MessageQueue(topic, brokerName, queueId));
 
         if (flatFile == null) {
             result.setNextBeginOffset(queueOffset);

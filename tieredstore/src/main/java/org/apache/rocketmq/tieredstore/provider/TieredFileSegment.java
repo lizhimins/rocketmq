@@ -52,16 +52,13 @@ public abstract class TieredFileSegment implements Comparable<TieredFileSegment>
     private final ReentrantLock bufferLock = new ReentrantLock();
     private final Semaphore commitLock = new Semaphore(1);
 
-    private volatile boolean full = false;
-    private volatile boolean closed = false;
+    private volatile boolean sealed = false;
+    private volatile boolean delete = false;
 
     private volatile long minTimestamp = Long.MAX_VALUE;
     private volatile long maxTimestamp = Long.MAX_VALUE;
     private volatile long commitPosition = 0L;
     private volatile long appendPosition = 0L;
-
-    // only used in commitLog
-    private volatile long dispatchCommitOffset = 0L;
 
     private ByteBuffer codaBuffer;
     private List<ByteBuffer> bufferList = new ArrayList<>();
@@ -111,10 +108,6 @@ public abstract class TieredFileSegment implements Comparable<TieredFileSegment>
         return commitPosition;
     }
 
-    public long getDispatchCommitOffset() {
-        return dispatchCommitOffset;
-    }
-
     public long getMaxOffset() {
         return baseOffset + appendPosition;
     }
@@ -139,18 +132,18 @@ public abstract class TieredFileSegment implements Comparable<TieredFileSegment>
         this.maxTimestamp = maxTimestamp;
     }
 
-    public boolean isFull() {
-        return full;
+    public boolean isSealed() {
+        return sealed;
     }
 
-    public void setFull() {
-        this.setFull(true);
+    public void markSealed() {
+        this.markSealed(true);
     }
 
-    public void setFull(boolean appendCoda) {
+    public void markSealed(boolean appendCoda) {
         bufferLock.lock();
         try {
-            full = true;
+            sealed = true;
             if (fileType == FileSegmentType.COMMIT_LOG && appendCoda) {
                 appendCoda();
             }
@@ -159,12 +152,12 @@ public abstract class TieredFileSegment implements Comparable<TieredFileSegment>
         }
     }
 
-    public boolean isClosed() {
-        return closed;
+    public boolean isDelete() {
+        return delete;
     }
 
-    public void close() {
-        closed = true;
+    public void setDelete(boolean delete) {
+        this.delete = delete;
     }
 
     public FileSegmentType getFileType() {
@@ -339,13 +332,6 @@ public abstract class TieredFileSegment implements Comparable<TieredFileSegment>
         }
     }
 
-    private void updateDispatchCommitOffset(List<ByteBuffer> bufferList) {
-        if (fileType == FileSegmentType.COMMIT_LOG && bufferList.size() > 0) {
-            dispatchCommitOffset =
-                MessageBufferUtil.getQueueOffset(bufferList.get(bufferList.size() - 1));
-        }
-    }
-
     /**
      * @return false: commit, true: no commit operation
      */
@@ -373,7 +359,6 @@ public abstract class TieredFileSegment implements Comparable<TieredFileSegment>
                     return CompletableFuture.completedFuture(false);
                 } else {
                     if (correctPosition(fileSize, null)) {
-                        updateDispatchCommitOffset(fileSegmentInputStream.getBufferList());
                         fileSegmentInputStream = null;
                     }
                 }
@@ -398,7 +383,6 @@ public abstract class TieredFileSegment implements Comparable<TieredFileSegment>
                 .commit0(fileSegmentInputStream, commitPosition, bufferSize, fileType != FileSegmentType.INDEX)
                 .thenApply(result -> {
                     if (result) {
-                        updateDispatchCommitOffset(fileSegmentInputStream.getBufferList());
                         commitPosition += bufferSize;
                         fileSegmentInputStream = null;
                         return true;

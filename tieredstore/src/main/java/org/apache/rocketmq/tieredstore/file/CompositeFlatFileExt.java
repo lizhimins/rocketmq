@@ -22,13 +22,13 @@ import org.apache.rocketmq.tieredstore.metadata.QueueMetadata;
 import org.apache.rocketmq.tieredstore.metadata.TopicMetadata;
 import org.apache.rocketmq.tieredstore.util.TieredStoreUtil;
 
-public class CompositeQueueFlatFile extends CompositeFlatFile {
+public class CompositeFlatFileExt extends CompositeFlatFile {
 
     private final MessageQueue messageQueue;
     private final TopicMetadata topicMetadata;
     private final QueueMetadata queueMetadata;
 
-    public CompositeQueueFlatFile(TieredFileAllocator fileQueueFactory, MessageQueue messageQueue) {
+    public CompositeFlatFileExt(TieredFileAllocator fileQueueFactory, MessageQueue messageQueue) {
 
         super(fileQueueFactory, TieredStoreUtil.toPath(messageQueue));
         this.messageQueue = messageQueue;

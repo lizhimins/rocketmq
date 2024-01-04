@@ -16,19 +16,8 @@
  */
 package org.apache.rocketmq.tieredstore.file;
 
-import com.google.common.annotations.VisibleForTesting;
-import java.nio.ByteBuffer;
-import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.concurrent.locks.ReentrantReadWriteLock;
-import java.util.stream.Collectors;
-import javax.annotation.Nullable;
 import org.apache.rocketmq.common.BoundaryType;
+import org.apache.rocketmq.logging.ch.qos.logback.core.util.TimeUtil;
 import org.apache.rocketmq.logging.org.slf4j.Logger;
 import org.apache.rocketmq.logging.org.slf4j.LoggerFactory;
 import org.apache.rocketmq.tieredstore.common.AppendResult;
@@ -41,96 +30,37 @@ import org.apache.rocketmq.tieredstore.provider.FileSegmentAllocator;
 import org.apache.rocketmq.tieredstore.provider.TieredFileSegment;
 import org.apache.rocketmq.tieredstore.util.TieredStoreUtil;
 
+import javax.annotation.Nullable;
+import java.nio.ByteBuffer;
+import java.util.*;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentNavigableMap;
+import java.util.concurrent.ConcurrentSkipListMap;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
+import java.util.function.Consumer;
+import java.util.stream.Collectors;
+
 public class TieredFlatFile {
 
     private static final Logger log = LoggerFactory.getLogger(TieredStoreUtil.TIERED_STORE_LOGGER_NAME);
+    private static final long OFFSET_NOT_EXIST = -1L;
 
     private final String filePath;
     private final FileSegmentType fileType;
     private final TieredMetadataStore metadataStore;
-
-    private volatile long baseOffset = -1L;
     private final FileSegmentAllocator fileSegmentAllocator;
-    private final List<TieredFileSegment> fileSegmentList;
-    private final List<TieredFileSegment> needCommitFileSegmentList;
     private final ReentrantReadWriteLock fileSegmentLock;
+    private final ConcurrentNavigableMap<Long, TieredFileSegment> fileSegmentTable;
 
-    public TieredFlatFile(TieredMetadataStore metadataStore,
-        FileSegmentAllocator fileSegmentAllocator, FileSegmentType fileType, String filePath) {
-
+    public TieredFlatFile(FileSegmentAllocator fileSegmentAllocator, FileSegmentType fileType, String filePath) {
         this.fileType = fileType;
         this.filePath = filePath;
-
-        this.metadataStore = metadataStore;
+        this.metadataStore = fileSegmentAllocator.getMetadataStore();
         this.fileSegmentAllocator = fileSegmentAllocator;
         this.fileSegmentLock = new ReentrantReadWriteLock();
-        this.fileSegmentList = new ArrayList<>();
-        this.needCommitFileSegmentList = new CopyOnWriteArrayList<>();
+        this.fileSegmentTable = new ConcurrentSkipListMap<>();
         this.recoverMetadata();
-    }
-
-    public long getBaseOffset() {
-        return baseOffset;
-    }
-
-    public void setBaseOffset(long baseOffset) {
-        fileSegmentLock.writeLock().lock();
-        try {
-            if (!fileSegmentList.isEmpty()) {
-                throw new IllegalStateException("Can not set base offset after file segment has been created");
-            }
-            this.baseOffset = baseOffset;
-        } finally {
-            fileSegmentLock.writeLock().unlock();
-        }
-    }
-
-    public long getMinOffset() {
-        fileSegmentLock.readLock().lock();
-        try {
-            if (fileSegmentList.isEmpty()) {
-                return baseOffset;
-            }
-            return fileSegmentList.get(0).getBaseOffset();
-        } finally {
-            fileSegmentLock.readLock().unlock();
-        }
-    }
-
-    public long getCommitOffset() {
-        fileSegmentLock.readLock().lock();
-        try {
-            if (fileSegmentList.isEmpty()) {
-                return baseOffset;
-            }
-            return fileSegmentList.get(fileSegmentList.size() - 1).getCommitOffset();
-        } finally {
-            fileSegmentLock.readLock().unlock();
-        }
-    }
-
-    public long getMaxOffset() {
-        fileSegmentLock.readLock().lock();
-        try {
-            if (fileSegmentList.isEmpty()) {
-                return baseOffset;
-            }
-            return fileSegmentList.get(fileSegmentList.size() - 1).getMaxOffset();
-        } finally {
-            fileSegmentLock.readLock().unlock();
-        }
-    }
-
-    public long getDispatchCommitOffset() {
-        fileSegmentLock.readLock().lock();
-        try {
-            if (fileSegmentList.isEmpty()) {
-                return 0;
-            }
-            return fileSegmentList.get(fileSegmentList.size() - 1).getDispatchCommitOffset();
-        } finally {
-            fileSegmentLock.readLock().unlock();
-        }
     }
 
     public String getFilePath() {
@@ -141,41 +71,51 @@ public class TieredFlatFile {
         return fileType;
     }
 
-    public List<TieredFileSegment> getFileSegmentList() {
-        return fileSegmentList;
+    public long getMinOffset() {
+        fileSegmentLock.readLock().lock();
+        try {
+            if (fileSegmentTable.isEmpty()) {
+                return OFFSET_NOT_EXIST;
+            }
+            return fileSegmentTable.firstKey();
+        } finally {
+            fileSegmentLock.readLock().unlock();
+        }
     }
 
-    public int getFileSegmentCount() {
-        return fileSegmentList.size();
+    public long getCommitOffset() {
+        fileSegmentLock.readLock().lock();
+        try {
+            if (fileSegmentTable.isEmpty()) {
+                return OFFSET_NOT_EXIST;
+            }
+            return fileSegmentTable.lastEntry().getValue().getCommitOffset();
+        } finally {
+            fileSegmentLock.readLock().unlock();
+        }
+    }
+
+    public long getMaxOffset() {
+        fileSegmentLock.readLock().lock();
+        try {
+            if (fileSegmentTable.isEmpty()) {
+                return OFFSET_NOT_EXIST;
+            }
+            return fileSegmentTable.lastEntry().getValue().getMaxOffset();
+        } finally {
+            fileSegmentLock.readLock().unlock();
+        }
     }
 
     protected void recoverMetadata() {
-        fileSegmentList.clear();
-        needCommitFileSegmentList.clear();
-
         metadataStore.iterateFileSegment(filePath, fileType, metadata -> {
-            if (metadata.getStatus() == FileSegmentMetadata.STATUS_DELETED) {
-                return;
-            }
-
             TieredFileSegment segment =
-                this.newSegment(fileType, metadata.getBaseOffset(), false);
+                    this.newSegment(fileType, metadata.getBaseOffset(), false);
             segment.initPosition(metadata.getSize());
             segment.setMinTimestamp(metadata.getBeginTimestamp());
             segment.setMaxTimestamp(metadata.getEndTimestamp());
-
-            if (metadata.getStatus() == FileSegmentMetadata.STATUS_SEALED) {
-                segment.setFull(false);
-            }
-            fileSegmentList.add(segment);
+            fileSegmentTable.put(metadata.getBaseOffset(), segment);
         });
-
-        if (!fileSegmentList.isEmpty()) {
-            fileSegmentList.sort(Comparator.comparingLong(TieredFileSegment::getBaseOffset));
-            baseOffset = fileSegmentList.get(0).getBaseOffset();
-            needCommitFileSegmentList.addAll(
-                fileSegmentList.stream().filter(segment -> !segment.isFull()).collect(Collectors.toList()));
-        }
 
         if (fileType != FileSegmentType.INDEX) {
             correctFileSize();
@@ -186,31 +126,16 @@ public class TieredFlatFile {
      * FileQueue Status: Sealed | Sealed | Sealed | Not sealed, Allow appended && Not Full
      */
     public void updateFileSegment(TieredFileSegment fileSegment) {
-
         FileSegmentMetadata metadata = metadataStore.getFileSegment(
-            this.filePath, fileSegment.getFileType(), fileSegment.getBaseOffset());
-
-        // Note: file segment path may not the same as file base path, use base path here.
+                this.filePath, fileSegment.getFileType(), fileSegment.getBaseOffset());
         if (metadata == null) {
             metadata = new FileSegmentMetadata(
-                this.filePath, fileSegment.getBaseOffset(), fileSegment.getFileType().getType());
+                    this.filePath, fileSegment.getBaseOffset(), fileSegment.getFileType().getType());
             metadata.setCreateTimestamp(System.currentTimeMillis());
         }
-
         metadata.setSize(fileSegment.getCommitPosition());
         metadata.setBeginTimestamp(fileSegment.getMinTimestamp());
         metadata.setEndTimestamp(fileSegment.getMaxTimestamp());
-
-        if (fileSegment.isFull() && !fileSegment.needCommit()) {
-            if (metadata.getStatus() == FileSegmentMetadata.STATUS_NEW) {
-                metadata.markSealed();
-            }
-        }
-
-        if (fileSegment.isClosed()) {
-            metadata.setStatus(FileSegmentMetadata.STATUS_DELETED);
-        }
-
         this.metadataStore.updateFileSegment(metadata);
     }
 
@@ -227,22 +152,23 @@ public class TieredFlatFile {
                         pre.initPosition(actualSize);
                         this.updateFileSegment(pre);
                         log.info("TieredFlatFile#correctFileSize, correct file size when construct file, " +
-                                "filePath: {}, file type: {}, base offset: {}, actual size: {}, next file offset: {}",
-                            filePath, fileType, pre.getBaseOffset(), actualSize, cur.getBaseOffset());
+                                        "filePath: {}, file type: {}, base offset: {}, actual size: {}, next file offset: {}",
+                                filePath, fileType, pre.getBaseOffset(), actualSize, cur.getBaseOffset());
                     } else {
                         log.error("TieredFlatFile#correctFileSize: " +
-                                "file segment has incorrect size and can not fix: " +
-                                "filePath:{}, file type: {}, base offset: {}, actual size: {}, next file offset: {}",
-                            filePath, fileType, pre.getBaseOffset(), actualSize, cur.getBaseOffset());
+                                        "file segment has incorrect size and can not fix: " +
+                                        "filePath:{}, file type: {}, base offset: {}, actual size: {}, next file offset: {}",
+                                filePath, fileType, pre.getBaseOffset(), actualSize, cur.getBaseOffset());
                     }
                 } catch (Exception e) {
                     log.error("TieredFlatFile#correctFileSize: " +
-                            "fix file segment size failed: filePath: {}, file type: {}, base offset: {}",
-                        filePath, fileType, pre.getBaseOffset());
+                                    "fix file segment size failed: filePath: {}, file type: {}, base offset: {}",
+                            filePath, fileType, pre.getBaseOffset());
                 }
             }
         }
 
+        // correct last
         if (!fileSegmentList.isEmpty()) {
             TieredFileSegment fileSegment = fileSegmentList.get(fileSegmentList.size() - 1);
             long fileSize = fileSegment.getSize();
@@ -256,7 +182,7 @@ public class TieredFlatFile {
 
     private TieredFileSegment newSegment(FileSegmentType fileType, long baseOffset, boolean createMetadata) {
         TieredFileSegment segment =
-            fileSegmentAllocator.createSegment(fileType, filePath, baseOffset);
+                fileSegmentAllocator.createSegment(fileType, filePath, baseOffset);
         if (fileType != FileSegmentType.INDEX) {
             segment.createFile();
         }
@@ -267,21 +193,16 @@ public class TieredFlatFile {
     }
 
     public void rollingNewFile() {
-        this.getFileToWrite().setFull();
+        this.getFileToWrite().markSealed();
         this.getFileToWrite();
     }
 
-    @Nullable
-    public TieredFileSegment getFileByIndex(int index) {
-        fileSegmentLock.readLock().lock();
-        try {
-            if (index < fileSegmentList.size()) {
-                return fileSegmentList.get(index);
-            }
-            return null;
-        } finally {
-            fileSegmentLock.readLock().unlock();
-        }
+    protected long getMinTimestamp() {
+        return 0;
+    }
+
+    protected long getMaxTimestamp() {
+        return 0;
     }
 
     protected TieredFileSegment getFileToWrite() {
@@ -330,12 +251,12 @@ public class TieredFlatFile {
         fileSegmentLock.readLock().lock();
         try {
             List<TieredFileSegment> segmentList = fileSegmentList.stream()
-                .sorted(boundaryType == BoundaryType.UPPER ?
-                    Comparator.comparingLong(TieredFileSegment::getMaxTimestamp) :
-                    Comparator.comparingLong(TieredFileSegment::getMinTimestamp))
-                .filter(segment -> boundaryType == BoundaryType.UPPER ?
-                    segment.getMaxTimestamp() >= timestamp : segment.getMinTimestamp() <= timestamp)
-                .collect(Collectors.toList());
+                    .sorted(boundaryType == BoundaryType.UPPER ?
+                            Comparator.comparingLong(TieredFileSegment::getMaxTimestamp) :
+                            Comparator.comparingLong(TieredFileSegment::getMinTimestamp))
+                    .filter(segment -> boundaryType == BoundaryType.UPPER ?
+                            segment.getMaxTimestamp() >= timestamp : segment.getMinTimestamp() <= timestamp)
+                    .collect(Collectors.toList());
 
             if (!segmentList.isEmpty()) {
                 return boundaryType == BoundaryType.UPPER ? segmentList.get(0) : segmentList.get(segmentList.size() - 1);
@@ -345,55 +266,7 @@ public class TieredFlatFile {
                 return null;
             }
             return boundaryType == BoundaryType.UPPER ?
-                fileSegmentList.get(fileSegmentList.size() - 1) : fileSegmentList.get(0);
-        } finally {
-            fileSegmentLock.readLock().unlock();
-        }
-    }
-
-    public List<TieredFileSegment> getFileListByTime(long beginTime, long endTime) {
-        fileSegmentLock.readLock().lock();
-        try {
-            return fileSegmentList.stream()
-                .filter(segment -> Math.max(beginTime, segment.getMinTimestamp()) <= Math.min(endTime, segment.getMaxTimestamp()))
-                .collect(Collectors.toList());
-        } finally {
-            fileSegmentLock.readLock().unlock();
-        }
-    }
-
-    protected int getSegmentIndexByOffset(long offset) {
-        fileSegmentLock.readLock().lock();
-        try {
-            if (fileSegmentList.isEmpty()) {
-                return -1;
-            }
-
-            int left = 0;
-            int right = fileSegmentList.size() - 1;
-            int mid = (left + right) / 2;
-
-            long firstSegmentOffset = fileSegmentList.get(left).getBaseOffset();
-            long lastSegmentOffset = fileSegmentList.get(right).getCommitOffset();
-            long midSegmentOffset = fileSegmentList.get(mid).getBaseOffset();
-
-            if (offset < firstSegmentOffset || offset > lastSegmentOffset) {
-                return -1;
-            }
-
-            while (left < right - 1) {
-                if (offset == midSegmentOffset) {
-                    return mid;
-                }
-                if (offset < midSegmentOffset) {
-                    right = mid;
-                } else {
-                    left = mid;
-                }
-                mid = (left + right) / 2;
-                midSegmentOffset = fileSegmentList.get(mid).getBaseOffset();
-            }
-            return offset < fileSegmentList.get(right).getBaseOffset() ? mid : right;
+                    fileSegmentList.get(fileSegmentList.size() - 1) : fileSegmentList.get(0);
         } finally {
             fileSegmentLock.readLock().unlock();
         }
@@ -430,7 +303,7 @@ public class TieredFlatFile {
             });
         } catch (Exception e) {
             log.error("Clean expired file, filePath: {}, file type: {}, expire timestamp: {}",
-                filePath, fileType, expireTimestamp);
+                    filePath, fileType, expireTimestamp);
         }
 
         if (needToDeleteSet.isEmpty()) {
@@ -454,7 +327,7 @@ public class TieredFlatFile {
                     }
                 } catch (Exception e) {
                     log.error("Clean expired file failed: filePath: {}, file type: {}, expire timestamp: {}",
-                        fileSegment.getPath(), fileSegment.getFileType(), expireTimestamp, e);
+                            fileSegment.getPath(), fileSegment.getFileType(), expireTimestamp, e);
                 }
             }
             if (!fileSegmentList.isEmpty()) {
@@ -470,25 +343,20 @@ public class TieredFlatFile {
         return needToDeleteSet.size();
     }
 
-    @VisibleForTesting
-    protected List<TieredFileSegment> getNeedCommitFileSegmentList() {
-        return needCommitFileSegmentList;
-    }
-
     public void destroyExpiredFile() {
         try {
             metadataStore.iterateFileSegment(filePath, fileType, metadata -> {
                 if (metadata.getStatus() == FileSegmentMetadata.STATUS_DELETED) {
                     try {
                         TieredFileSegment fileSegment =
-                            this.newSegment(fileType, metadata.getBaseOffset(), false);
+                                this.newSegment(fileType, metadata.getBaseOffset(), false);
                         fileSegment.destroyFile();
                         if (!fileSegment.exists()) {
                             metadataStore.deleteFileSegment(filePath, fileType, metadata.getBaseOffset());
                         }
                     } catch (Exception e) {
                         log.error("Destroyed expired file failed, file path: {}, file type: {}",
-                            filePath, fileType, e);
+                                filePath, fileType, e);
                     }
                 }
             });
@@ -505,13 +373,13 @@ public class TieredFlatFile {
                     continue;
                 }
                 futureList.add(segment
-                    .commitAsync()
-                    .thenAccept(success -> {
-                        this.updateFileSegment(segment);
-                        if (segment.isFull() && !segment.needCommit()) {
-                            needCommitFileSegmentList.remove(segment);
-                        }
-                    })
+                        .commitAsync()
+                        .thenAccept(success -> {
+                            this.updateFileSegment(segment);
+                            if (segment.isFull() && !segment.needCommit()) {
+                                needCommitFileSegmentList.remove(segment);
+                            }
+                        })
                 );
             }
         } catch (Exception e) {
@@ -523,57 +391,57 @@ public class TieredFlatFile {
     }
 
     public CompletableFuture<ByteBuffer> readAsync(long offset, int length) {
-        int index = getSegmentIndexByOffset(offset);
-        if (index == -1) {
-            String errorMsg = String.format("TieredFlatFile#readAsync: offset is illegal, " +
-                    "file path: %s, file type: %s, start: %d, length: %d, file num: %d",
-                filePath, fileType, offset, length, fileSegmentList.size());
-            log.error(errorMsg);
-            throw new TieredStoreException(TieredStoreErrorCode.ILLEGAL_OFFSET, errorMsg);
-        }
-        TieredFileSegment fileSegment1;
-        TieredFileSegment fileSegment2 = null;
-        fileSegmentLock.readLock().lock();
-        try {
-            fileSegment1 = fileSegmentList.get(index);
-            if (offset + length > fileSegment1.getCommitOffset()) {
-                if (fileSegmentList.size() > index + 1) {
-                    fileSegment2 = fileSegmentList.get(index + 1);
-                }
-            }
-        } finally {
-            fileSegmentLock.readLock().unlock();
-        }
-        if (fileSegment2 == null) {
-            return fileSegment1.readAsync(offset - fileSegment1.getBaseOffset(), length);
-        }
-        int segment1Length = (int) (fileSegment1.getCommitOffset() - offset);
-        return fileSegment1.readAsync(offset - fileSegment1.getBaseOffset(), segment1Length)
-            .thenCombine(fileSegment2.readAsync(0, length - segment1Length), (buffer1, buffer2) -> {
-                ByteBuffer compositeBuffer = ByteBuffer.allocate(buffer1.remaining() + buffer2.remaining());
-                compositeBuffer.put(buffer1).put(buffer2);
-                compositeBuffer.flip();
-                return compositeBuffer;
-            });
+//        int index = getSegmentIndexByOffset(offset);
+//        if (index == -1) {
+//            String errorMsg = String.format("TieredFlatFile#readAsync: offset is illegal, " +
+//                            "file path: %s, file type: %s, start: %d, length: %d, file num: %d",
+//                    filePath, fileType, offset, length, fileSegmentList.size());
+//            log.error(errorMsg);
+//            throw new TieredStoreException(TieredStoreErrorCode.ILLEGAL_OFFSET, errorMsg);
+//        }
+//        TieredFileSegment fileSegment1;
+//        TieredFileSegment fileSegment2 = null;
+//        fileSegmentLock.readLock().lock();
+//        try {
+//            fileSegment1 = fileSegmentList.get(index);
+//            if (offset + length > fileSegment1.getCommitOffset()) {
+//                if (fileSegmentList.size() > index + 1) {
+//                    fileSegment2 = fileSegmentList.get(index + 1);
+//                }
+//            }
+//        } finally {
+//            fileSegmentLock.readLock().unlock();
+//        }
+//        if (fileSegment2 == null) {
+//            return fileSegment1.readAsync(offset - fileSegment1.getBaseOffset(), length);
+//        }
+//        int segment1Length = (int) (fileSegment1.getCommitOffset() - offset);
+//        return fileSegment1.readAsync(offset - fileSegment1.getBaseOffset(), segment1Length)
+//                .thenCombine(fileSegment2.readAsync(0, length - segment1Length), (buffer1, buffer2) -> {
+//                    ByteBuffer compositeBuffer = ByteBuffer.allocate(buffer1.remaining() + buffer2.remaining());
+//                    compositeBuffer.put(buffer1).put(buffer2);
+//                    compositeBuffer.flip();
+//                    return compositeBuffer;
+//                });
+        return CompletableFuture.completedFuture(null);
     }
 
     public void destroy() {
         fileSegmentLock.writeLock().lock();
         try {
-            for (TieredFileSegment fileSegment : fileSegmentList) {
-                fileSegment.close();
+            while (!fileSegmentTable.isEmpty()) {
+                TieredFileSegment fileSegment = fileSegmentTable.firstEntry().getValue();
                 try {
-                    this.updateFileSegment(fileSegment);
+                    fileSegment.setDelete(true);
+                    fileSegment.destroyFile();
+                    if (!fileSegment.exists()) {
+                        fileSegmentTable.remove(fileSegment.getBaseOffset());
+                        metadataStore.deleteFileSegment(filePath, fileType, fileSegment.getBaseOffset());
+                    }
                 } catch (Exception e) {
-                    log.error("TieredFlatFile#destroy: mark file segment: {} is deleted failed", fileSegment.getPath(), e);
-                }
-                fileSegment.destroyFile();
-                if (!fileSegment.exists()) {
-                    metadataStore.deleteFileSegment(filePath, fileType, fileSegment.getBaseOffset());
+                    log.error("Destroy segment file error, filePath: {}", fileSegment.getPath(), e);
                 }
             }
-            fileSegmentList.clear();
-            needCommitFileSegmentList.clear();
         } finally {
             fileSegmentLock.writeLock().unlock();
         }

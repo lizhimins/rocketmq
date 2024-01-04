@@ -19,6 +19,7 @@ package org.apache.rocketmq.tieredstore.file;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.github.benmanes.caffeine.cache.RemovalCause;
+
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -30,8 +31,8 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.ReentrantLock;
+
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.tuple.Pair;
 import org.apache.rocketmq.common.BoundaryType;
@@ -48,10 +49,9 @@ import org.apache.rocketmq.tieredstore.util.CQItemBufferUtil;
 import org.apache.rocketmq.tieredstore.util.MessageBufferUtil;
 import org.apache.rocketmq.tieredstore.util.TieredStoreUtil;
 
-public class CompositeFlatFile implements CompositeAccess {
+public class CompositeFlatFile implements CompositeFile {
 
     protected static final Logger log = LoggerFactory.getLogger(TieredStoreUtil.TIERED_STORE_LOGGER_NAME);
-
     protected static final long OFFSET_NOT_EXIST = -1L;
     protected volatile boolean closed = false;
 
@@ -59,13 +59,6 @@ public class CompositeFlatFile implements CompositeAccess {
     protected final ReentrantLock fileLock;
     protected final TieredMessageStoreConfig storeConfig;
     protected final TieredMetadataStore metadataStore;
-
-    /**
-     * Dispatch offset represents the offset of the messages that have been
-     * dispatched to the current chunk, indicating the progress of the message distribution.
-     * It's consume queue current offset.
-     */
-    protected final AtomicLong dispatchOffset;
     protected final TieredCommitLog commitLog;
     protected final TieredConsumeQueue consumeQueue;
     protected final AtomicInteger readAheadFactor;
@@ -79,23 +72,21 @@ public class CompositeFlatFile implements CompositeAccess {
         this.storeConfig = fileAllocator.getStoreConfig();
         this.metadataStore = fileAllocator.getMetadataStore();
 
-        this.inFlightRequestMap = new ConcurrentHashMap<>();
         this.commitLog = new TieredCommitLog(fileAllocator, filePath);
         this.consumeQueue = new TieredConsumeQueue(fileAllocator, filePath);
-        this.dispatchOffset = new AtomicLong(
-            this.consumeQueue.isInitialized() ? this.getConsumeQueueCommitOffset() : OFFSET_NOT_EXIST);
         this.groupOffsetCache = this.initOffsetCache();
         this.readAheadFactor = new AtomicInteger(this.storeConfig.getReadAheadMinFactor());
+        this.inFlightRequestMap = new ConcurrentHashMap<>();
     }
 
     private Cache<String, Long> initOffsetCache() {
         return Caffeine.newBuilder()
-            .expireAfterWrite(2, TimeUnit.MINUTES)
-            .removalListener((key, value, cause) -> {
-                if (cause.equals(RemovalCause.EXPIRED)) {
-                    inFlightRequestMap.remove(new InFlightRequestKey((String) key));
-                }
-            }).build();
+                .expireAfterWrite(2, TimeUnit.MINUTES)
+                .removalListener((key, value, cause) -> {
+                    if (cause.equals(RemovalCause.EXPIRED)) {
+                        inFlightRequestMap.remove(new InFlightRequestKey((String) key));
+                    }
+                }).build();
     }
 
     public boolean isClosed() {
@@ -121,43 +112,36 @@ public class CompositeFlatFile implements CompositeAccess {
         }
     }
 
-    public long getCommitLogBeginTimestamp() {
-        return commitLog.getBeginTimestamp();
-    }
-
+    @Override
     public long getCommitLogMinOffset() {
         return commitLog.getMinOffset();
     }
 
+    @Override
     public long getCommitLogMaxOffset() {
         return commitLog.getMaxOffset();
     }
 
+    @Override
     public long getCommitLogCommitOffset() {
         return commitLog.getCommitOffset();
     }
 
     @Override
-    public long getCommitLogDispatchCommitOffset() {
-        return commitLog.getCommitConsumeQueueOffset();
-    }
-
-    public long getDispatchOffset() {
-        return dispatchOffset.get();
-    }
-
     public long getConsumeQueueMinOffset() {
         long cqOffset = consumeQueue.getMinOffset() / TieredConsumeQueue.CONSUME_QUEUE_STORE_UNIT_SIZE;
         long effectiveOffset = this.commitLog.getMinConsumeQueueOffset();
         return Math.max(cqOffset, effectiveOffset);
     }
 
-    public long getConsumeQueueCommitOffset() {
-        return consumeQueue.getCommitOffset() / TieredConsumeQueue.CONSUME_QUEUE_STORE_UNIT_SIZE;
-    }
-
+    @Override
     public long getConsumeQueueMaxOffset() {
         return consumeQueue.getMaxOffset() / TieredConsumeQueue.CONSUME_QUEUE_STORE_UNIT_SIZE;
+    }
+
+    @Override
+    public long getConsumeQueueCommitOffset() {
+        return consumeQueue.getCommitOffset() / TieredConsumeQueue.CONSUME_QUEUE_STORE_UNIT_SIZE;
     }
 
     @Override
@@ -341,7 +325,7 @@ public class CompositeFlatFile implements CompositeAccess {
         }
 
         return consumeQueue.append(request.getCommitLogOffset(),
-            request.getMsgSize(), request.getTagsCode(), request.getStoreTimestamp());
+                request.getMsgSize(), request.getTagsCode(), request.getStoreTimestamp());
     }
 
     @Override
@@ -357,7 +341,7 @@ public class CompositeFlatFile implements CompositeAccess {
     @Override
     public CompletableFuture<ByteBuffer> getConsumeQueueAsync(long queueOffset, int count) {
         return consumeQueue.readAsync(queueOffset * TieredConsumeQueue.CONSUME_QUEUE_STORE_UNIT_SIZE,
-            count * TieredConsumeQueue.CONSUME_QUEUE_STORE_UNIT_SIZE);
+                count * TieredConsumeQueue.CONSUME_QUEUE_STORE_UNIT_SIZE);
     }
 
     @Override
@@ -388,10 +372,10 @@ public class CompositeFlatFile implements CompositeAccess {
 
     public long getActiveGroupCount(long minOffset, long maxOffset) {
         return groupOffsetCache.asMap()
-            .values()
-            .stream()
-            .filter(offset -> offset >= minOffset && offset <= maxOffset)
-            .count();
+                .values()
+                .stream()
+                .filter(offset -> offset >= minOffset && offset <= maxOffset)
+                .count();
     }
 
     public long getActiveGroupCount() {
@@ -400,14 +384,14 @@ public class CompositeFlatFile implements CompositeAccess {
 
     public InFlightRequestFuture getInflightRequest(long offset, int batchSize) {
         Optional<InFlightRequestFuture> optional = inFlightRequestMap.entrySet()
-            .stream()
-            .filter(entry -> {
-                InFlightRequestKey key = entry.getKey();
-                return Math.max(key.getOffset(), offset) <=
-                    Math.min(key.getOffset() + key.getBatchSize(), offset + batchSize);
-            })
-            .max(Comparator.comparing(entry -> entry.getKey().getRequestTime()))
-            .map(Map.Entry::getValue);
+                .stream()
+                .filter(entry -> {
+                    InFlightRequestKey key = entry.getKey();
+                    return Math.max(key.getOffset(), offset) <=
+                            Math.min(key.getOffset() + key.getBatchSize(), offset + batchSize);
+                })
+                .max(Comparator.comparing(entry -> entry.getKey().getRequestTime()))
+                .map(Map.Entry::getValue);
         return optional.orElseGet(() -> new InFlightRequestFuture(Long.MAX_VALUE, new ArrayList<>()));
     }
 
@@ -420,7 +404,7 @@ public class CompositeFlatFile implements CompositeAccess {
     }
 
     public void putInflightRequest(String group, long offset, int requestMsgCount,
-        List<Pair<Integer, CompletableFuture<Long>>> futureList) {
+                                   List<Pair<Integer, CompletableFuture<Long>>> futureList) {
         InFlightRequestKey key = new InFlightRequestKey(group, offset, requestMsgCount);
         inFlightRequestMap.remove(key);
         inFlightRequestMap.putIfAbsent(key, new InFlightRequestFuture(offset, futureList));
