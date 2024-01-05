@@ -30,8 +30,8 @@ import org.apache.rocketmq.tieredstore.file.TieredCommitLog;
 import org.apache.rocketmq.tieredstore.file.TieredConsumeQueue;
 import org.apache.rocketmq.tieredstore.provider.stream.FileSegmentInputStream;
 import org.apache.rocketmq.tieredstore.provider.stream.FileSegmentInputStreamFactory;
-import org.apache.rocketmq.tieredstore.util.MessageBufferUtil;
-import org.apache.rocketmq.tieredstore.util.MessageBufferUtilTest;
+import org.apache.rocketmq.tieredstore.util.MessageFormatUtil;
+import org.apache.rocketmq.tieredstore.util.MessageFormatUtilTest;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -39,7 +39,7 @@ public class TieredFileSegmentInputStreamTest {
 
     private final static long COMMIT_LOG_START_OFFSET = 13131313;
 
-    private final static int MSG_LEN = MessageBufferUtilTest.MSG_LEN;
+    private final static int MSG_LEN = MessageFormatUtilTest.MSG_LEN;
 
     private final static int MSG_NUM = 10;
 
@@ -52,7 +52,7 @@ public class TieredFileSegmentInputStreamTest {
         List<ByteBuffer> uploadBufferList = new ArrayList<>();
         int bufferSize = 0;
         for (int i = 0; i < MSG_NUM; i++) {
-            ByteBuffer byteBuffer = MessageBufferUtilTest.buildMockedMessageBuffer();
+            ByteBuffer byteBuffer = MessageFormatUtilTest.buildMockedMessageBuffer();
             uploadBufferList.add(byteBuffer);
             bufferSize += byteBuffer.remaining();
         }
@@ -66,13 +66,13 @@ public class TieredFileSegmentInputStreamTest {
         // set real physical offset
         for (int i = 0; i < MSG_NUM; i++) {
             long physicalOffset = COMMIT_LOG_START_OFFSET + i * MSG_LEN;
-            int position = i * MSG_LEN + MessageBufferUtil.PHYSICAL_OFFSET_POSITION;
+            int position = i * MSG_LEN + MessageFormatUtil.PHYSICAL_OFFSET_POSITION;
             expectedByteBuffer.putLong(position, physicalOffset);
         }
 
         int finalBufferSize = bufferSize;
         int[] batchReadSizeTestSet = {
-            MessageBufferUtil.PHYSICAL_OFFSET_POSITION - 1, MessageBufferUtil.PHYSICAL_OFFSET_POSITION, MessageBufferUtil.PHYSICAL_OFFSET_POSITION + 1, MSG_LEN - 1, MSG_LEN, MSG_LEN + 1
+            MessageFormatUtil.PHYSICAL_OFFSET_POSITION - 1, MessageFormatUtil.PHYSICAL_OFFSET_POSITION, MessageFormatUtil.PHYSICAL_OFFSET_POSITION + 1, MSG_LEN - 1, MSG_LEN, MSG_LEN + 1
         };
         verifyReadAndReset(expectedByteBuffer, () -> FileSegmentInputStreamFactory.build(
             FileSegmentType.COMMIT_LOG, COMMIT_LOG_START_OFFSET, uploadBufferList, null, finalBufferSize), finalBufferSize, batchReadSizeTestSet);
@@ -84,7 +84,7 @@ public class TieredFileSegmentInputStreamTest {
         List<ByteBuffer> uploadBufferList = new ArrayList<>();
         int bufferSize = 0;
         for (int i = 0; i < MSG_NUM; i++) {
-            ByteBuffer byteBuffer = MessageBufferUtilTest.buildMockedMessageBuffer();
+            ByteBuffer byteBuffer = MessageFormatUtilTest.buildMockedMessageBuffer();
             uploadBufferList.add(byteBuffer);
             bufferSize += byteBuffer.remaining();
         }
@@ -109,13 +109,13 @@ public class TieredFileSegmentInputStreamTest {
         // set real physical offset
         for (int i = 0; i < MSG_NUM; i++) {
             long physicalOffset = COMMIT_LOG_START_OFFSET + i * MSG_LEN;
-            int position = i * MSG_LEN + MessageBufferUtil.PHYSICAL_OFFSET_POSITION;
+            int position = i * MSG_LEN + MessageFormatUtil.PHYSICAL_OFFSET_POSITION;
             expectedByteBuffer.putLong(position, physicalOffset);
         }
 
         int finalBufferSize = bufferSize;
         int[] batchReadSizeTestSet = {
-            MessageBufferUtil.PHYSICAL_OFFSET_POSITION - 1, MessageBufferUtil.PHYSICAL_OFFSET_POSITION, MessageBufferUtil.PHYSICAL_OFFSET_POSITION + 1,
+            MessageFormatUtil.PHYSICAL_OFFSET_POSITION - 1, MessageFormatUtil.PHYSICAL_OFFSET_POSITION, MessageFormatUtil.PHYSICAL_OFFSET_POSITION + 1,
             MSG_LEN - 1, MSG_LEN, MSG_LEN + 1,
             bufferSize - 1, bufferSize, bufferSize + 1
         };
@@ -129,7 +129,7 @@ public class TieredFileSegmentInputStreamTest {
         List<ByteBuffer> uploadBufferList = new ArrayList<>();
         int bufferSize = 0;
         for (int i = 0; i < MSG_NUM; i++) {
-            ByteBuffer byteBuffer = MessageBufferUtilTest.buildMockedConsumeQueueBuffer();
+            ByteBuffer byteBuffer = MessageFormatUtilTest.buildMockedConsumeQueueBuffer();
             uploadBufferList.add(byteBuffer);
             bufferSize += byteBuffer.remaining();
         }

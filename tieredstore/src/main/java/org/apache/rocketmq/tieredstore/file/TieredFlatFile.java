@@ -17,13 +17,9 @@
 package org.apache.rocketmq.tieredstore.file;
 
 import org.apache.rocketmq.common.BoundaryType;
-import org.apache.rocketmq.logging.ch.qos.logback.core.util.TimeUtil;
 import org.apache.rocketmq.logging.org.slf4j.Logger;
 import org.apache.rocketmq.logging.org.slf4j.LoggerFactory;
-import org.apache.rocketmq.tieredstore.common.AppendResult;
 import org.apache.rocketmq.tieredstore.common.FileSegmentType;
-import org.apache.rocketmq.tieredstore.exception.TieredStoreErrorCode;
-import org.apache.rocketmq.tieredstore.exception.TieredStoreException;
 import org.apache.rocketmq.tieredstore.metadata.FileSegmentMetadata;
 import org.apache.rocketmq.tieredstore.metadata.TieredMetadataStore;
 import org.apache.rocketmq.tieredstore.provider.FileSegmentAllocator;
@@ -36,9 +32,7 @@ import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentNavigableMap;
 import java.util.concurrent.ConcurrentSkipListMap;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
-import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
 public class TieredFlatFile {
@@ -140,44 +134,43 @@ public class TieredFlatFile {
     }
 
     private void correctFileSize() {
-
-        for (int i = 1; i < fileSegmentList.size(); i++) {
-            TieredFileSegment pre = fileSegmentList.get(i - 1);
-            TieredFileSegment cur = fileSegmentList.get(i);
-
-            if (pre.getCommitOffset() != cur.getBaseOffset()) {
-                try {
-                    long actualSize = pre.getSize();
-                    if (pre.getBaseOffset() + actualSize == cur.getBaseOffset()) {
-                        pre.initPosition(actualSize);
-                        this.updateFileSegment(pre);
-                        log.info("TieredFlatFile#correctFileSize, correct file size when construct file, " +
-                                        "filePath: {}, file type: {}, base offset: {}, actual size: {}, next file offset: {}",
-                                filePath, fileType, pre.getBaseOffset(), actualSize, cur.getBaseOffset());
-                    } else {
-                        log.error("TieredFlatFile#correctFileSize: " +
-                                        "file segment has incorrect size and can not fix: " +
-                                        "filePath:{}, file type: {}, base offset: {}, actual size: {}, next file offset: {}",
-                                filePath, fileType, pre.getBaseOffset(), actualSize, cur.getBaseOffset());
-                    }
-                } catch (Exception e) {
-                    log.error("TieredFlatFile#correctFileSize: " +
-                                    "fix file segment size failed: filePath: {}, file type: {}, base offset: {}",
-                            filePath, fileType, pre.getBaseOffset());
-                }
-            }
-        }
-
-        // correct last
-        if (!fileSegmentList.isEmpty()) {
-            TieredFileSegment fileSegment = fileSegmentList.get(fileSegmentList.size() - 1);
-            long fileSize = fileSegment.getSize();
-            if (fileSize != -1L && fileSize != fileSegment.getCommitPosition()) {
-                fileSegment.initPosition(fileSize);
-                this.updateFileSegment(fileSegment);
-                log.warn("Correct file size");
-            }
-        }
+        //for (int i = 1; i < fileSegmentList.size(); i++) {
+        //    TieredFileSegment pre = fileSegmentList.get(i - 1);
+        //    TieredFileSegment cur = fileSegmentList.get(i);
+        //
+        //    if (pre.getCommitOffset() != cur.getBaseOffset()) {
+        //        try {
+        //            long actualSize = pre.getSize();
+        //            if (pre.getBaseOffset() + actualSize == cur.getBaseOffset()) {
+        //                pre.initPosition(actualSize);
+        //                this.updateFileSegment(pre);
+        //                log.info("TieredFlatFile#correctFileSize, correct file size when construct file, " +
+        //                                "filePath: {}, file type: {}, base offset: {}, actual size: {}, next file offset: {}",
+        //                        filePath, fileType, pre.getBaseOffset(), actualSize, cur.getBaseOffset());
+        //            } else {
+        //                log.error("TieredFlatFile#correctFileSize: " +
+        //                                "file segment has incorrect size and can not fix: " +
+        //                                "filePath:{}, file type: {}, base offset: {}, actual size: {}, next file offset: {}",
+        //                        filePath, fileType, pre.getBaseOffset(), actualSize, cur.getBaseOffset());
+        //            }
+        //        } catch (Exception e) {
+        //            log.error("TieredFlatFile#correctFileSize: " +
+        //                            "fix file segment size failed: filePath: {}, file type: {}, base offset: {}",
+        //                    filePath, fileType, pre.getBaseOffset());
+        //        }
+        //    }
+        //}
+        //
+        //// correct last
+        //if (!fileSegmentList.isEmpty()) {
+        //    TieredFileSegment fileSegment = fileSegmentList.get(fileSegmentList.size() - 1);
+        //    long fileSize = fileSegment.getSize();
+        //    if (fileSize != -1L && fileSize != fileSegment.getCommitPosition()) {
+        //        fileSegment.initPosition(fileSize);
+        //        this.updateFileSegment(fileSegment);
+        //        log.warn("Correct file size");
+        //    }
+        //}
     }
 
     private TieredFileSegment newSegment(FileSegmentType fileType, long baseOffset, boolean createMetadata) {

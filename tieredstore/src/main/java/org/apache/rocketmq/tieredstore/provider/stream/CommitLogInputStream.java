@@ -21,7 +21,7 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.List;
 import org.apache.rocketmq.tieredstore.common.FileSegmentType;
-import org.apache.rocketmq.tieredstore.util.MessageBufferUtil;
+import org.apache.rocketmq.tieredstore.util.MessageFormatUtil;
 
 public class CommitLogInputStream extends FileSegmentInputStream {
 
@@ -90,9 +90,9 @@ public class CommitLogInputStream extends FileSegmentInputStream {
             commitLogOffset += readPosInCurBuffer;
             readPosInCurBuffer = 0;
         }
-        if (readPosInCurBuffer >= MessageBufferUtil.PHYSICAL_OFFSET_POSITION
-            && readPosInCurBuffer < MessageBufferUtil.SYS_FLAG_OFFSET_POSITION) {
-            res = (int) ((commitLogOffset >> (8 * (MessageBufferUtil.SYS_FLAG_OFFSET_POSITION - readPosInCurBuffer - 1))) & 0xff);
+        if (readPosInCurBuffer >= MessageFormatUtil.PHYSICAL_OFFSET_POSITION
+            && readPosInCurBuffer < MessageFormatUtil.SYS_FLAG_OFFSET_POSITION) {
+            res = (int) ((commitLogOffset >> (8 * (MessageFormatUtil.SYS_FLAG_OFFSET_POSITION - readPosInCurBuffer - 1))) & 0xff);
             readPosInCurBuffer++;
         } else {
             res = curBuffer.get(readPosInCurBuffer++) & 0xff;
@@ -150,18 +150,18 @@ public class CommitLogInputStream extends FileSegmentInputStream {
             remaining = curBuf.remaining() - posInCurBuffer;
             readLen = Math.min(remaining, needRead);
             curBuf = bufferList.get(bufIndex);
-            if (posInCurBuffer < MessageBufferUtil.PHYSICAL_OFFSET_POSITION) {
-                realReadLen = Math.min(MessageBufferUtil.PHYSICAL_OFFSET_POSITION - posInCurBuffer, readLen);
+            if (posInCurBuffer < MessageFormatUtil.PHYSICAL_OFFSET_POSITION) {
+                realReadLen = Math.min(MessageFormatUtil.PHYSICAL_OFFSET_POSITION - posInCurBuffer, readLen);
                 // read from commitLog buffer
                 curBuf.position(posInCurBuffer);
                 curBuf.get(b, off, realReadLen);
                 curBuf.position(0);
-            } else if (posInCurBuffer < MessageBufferUtil.SYS_FLAG_OFFSET_POSITION) {
-                realReadLen = Math.min(MessageBufferUtil.SYS_FLAG_OFFSET_POSITION - posInCurBuffer, readLen);
+            } else if (posInCurBuffer < MessageFormatUtil.SYS_FLAG_OFFSET_POSITION) {
+                realReadLen = Math.min(MessageFormatUtil.SYS_FLAG_OFFSET_POSITION - posInCurBuffer, readLen);
                 // read from converted PHYSICAL_OFFSET_POSITION
                 byte[] physicalOffsetBytes = new byte[realReadLen];
                 for (int i = 0; i < realReadLen; i++) {
-                    physicalOffsetBytes[i] = (byte) ((curCommitLogOffset >> (8 * (MessageBufferUtil.SYS_FLAG_OFFSET_POSITION - posInCurBuffer - i - 1))) & 0xff);
+                    physicalOffsetBytes[i] = (byte) ((curCommitLogOffset >> (8 * (MessageFormatUtil.SYS_FLAG_OFFSET_POSITION - posInCurBuffer - i - 1))) & 0xff);
                 }
                 System.arraycopy(physicalOffsetBytes, 0, b, off, realReadLen);
             } else {

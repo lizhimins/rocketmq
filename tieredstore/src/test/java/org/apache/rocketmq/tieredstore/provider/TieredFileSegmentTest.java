@@ -20,12 +20,12 @@ import java.nio.ByteBuffer;
 import java.util.concurrent.CompletableFuture;
 import org.apache.rocketmq.common.message.MessageQueue;
 import org.apache.rocketmq.tieredstore.common.FileSegmentType;
-import org.apache.rocketmq.tieredstore.common.TieredMessageStoreConfig;
+import org.apache.rocketmq.tieredstore.TieredMessageStoreConfig;
 import org.apache.rocketmq.tieredstore.file.TieredCommitLog;
 import org.apache.rocketmq.tieredstore.file.TieredConsumeQueue;
 import org.apache.rocketmq.tieredstore.provider.memory.MemoryFileSegment;
-import org.apache.rocketmq.tieredstore.util.MessageBufferUtil;
-import org.apache.rocketmq.tieredstore.util.MessageBufferUtilTest;
+import org.apache.rocketmq.tieredstore.util.MessageFormatUtil;
+import org.apache.rocketmq.tieredstore.util.MessageFormatUtilTest;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -44,19 +44,19 @@ public class TieredFileSegmentTest {
         TieredFileSegment segment = createFileSegment(FileSegmentType.COMMIT_LOG);
         segment.initPosition(segment.getSize());
         long lastSize = segment.getSize();
-        segment.append(MessageBufferUtilTest.buildMockedMessageBuffer(), 0);
-        segment.append(MessageBufferUtilTest.buildMockedMessageBuffer(), 0);
+        segment.append(MessageFormatUtilTest.buildMockedMessageBuffer(), 0);
+        segment.append(MessageFormatUtilTest.buildMockedMessageBuffer(), 0);
         Assert.assertTrue(segment.needCommit());
 
-        ByteBuffer buffer = MessageBufferUtilTest.buildMockedMessageBuffer();
+        ByteBuffer buffer = MessageFormatUtilTest.buildMockedMessageBuffer();
         long msg3StoreTime = System.currentTimeMillis();
-        buffer.putLong(MessageBufferUtil.STORE_TIMESTAMP_POSITION, msg3StoreTime);
+        buffer.putLong(MessageFormatUtil.STORE_TIMESTAMP_POSITION, msg3StoreTime);
         long queueOffset = baseOffset * 1000L;
-        buffer.putLong(MessageBufferUtil.QUEUE_OFFSET_POSITION, queueOffset);
+        buffer.putLong(MessageFormatUtil.QUEUE_OFFSET_POSITION, queueOffset);
         segment.append(buffer, msg3StoreTime);
 
         Assert.assertEquals(baseOffset, segment.getBaseOffset());
-        Assert.assertEquals(baseOffset + lastSize + MessageBufferUtilTest.MSG_LEN * 3, segment.getMaxOffset());
+        Assert.assertEquals(baseOffset + lastSize + MessageFormatUtilTest.MSG_LEN * 3, segment.getMaxOffset());
         Assert.assertEquals(0, segment.getMinTimestamp());
         Assert.assertEquals(msg3StoreTime, segment.getMaxTimestamp());
 
@@ -66,16 +66,16 @@ public class TieredFileSegmentTest {
         Assert.assertEquals(segment.getMaxOffset(), segment.getCommitOffset());
         Assert.assertEquals(queueOffset, segment.getDispatchCommitOffset());
 
-        ByteBuffer msg1 = segment.read(lastSize, MessageBufferUtilTest.MSG_LEN);
-        Assert.assertEquals(baseOffset + lastSize, MessageBufferUtil.getCommitLogOffset(msg1));
+        ByteBuffer msg1 = segment.read(lastSize, MessageFormatUtilTest.MSG_LEN);
+        Assert.assertEquals(baseOffset + lastSize, MessageFormatUtil.getCommitLogOffset(msg1));
 
-        ByteBuffer msg2 = segment.read(lastSize + MessageBufferUtilTest.MSG_LEN, MessageBufferUtilTest.MSG_LEN);
-        Assert.assertEquals(baseOffset + lastSize + MessageBufferUtilTest.MSG_LEN, MessageBufferUtil.getCommitLogOffset(msg2));
+        ByteBuffer msg2 = segment.read(lastSize + MessageFormatUtilTest.MSG_LEN, MessageFormatUtilTest.MSG_LEN);
+        Assert.assertEquals(baseOffset + lastSize + MessageFormatUtilTest.MSG_LEN, MessageFormatUtil.getCommitLogOffset(msg2));
 
-        ByteBuffer msg3 = segment.read(lastSize + MessageBufferUtilTest.MSG_LEN * 2, MessageBufferUtilTest.MSG_LEN);
-        Assert.assertEquals(baseOffset + lastSize + MessageBufferUtilTest.MSG_LEN * 2, MessageBufferUtil.getCommitLogOffset(msg3));
+        ByteBuffer msg3 = segment.read(lastSize + MessageFormatUtilTest.MSG_LEN * 2, MessageFormatUtilTest.MSG_LEN);
+        Assert.assertEquals(baseOffset + lastSize + MessageFormatUtilTest.MSG_LEN * 2, MessageFormatUtil.getCommitLogOffset(msg3));
 
-        ByteBuffer coda = segment.read(lastSize + MessageBufferUtilTest.MSG_LEN * 3, TieredCommitLog.CODA_SIZE);
+        ByteBuffer coda = segment.read(lastSize + MessageFormatUtilTest.MSG_LEN * 3, TieredCommitLog.CODA_SIZE);
         Assert.assertEquals(msg3StoreTime, coda.getLong(4 + 4));
     }
 
@@ -94,9 +94,9 @@ public class TieredFileSegmentTest {
         segment.initPosition(segment.getSize());
         long lastSize = segment.getSize();
         segment.append(buildConsumeQueue(baseOffset), 0);
-        segment.append(buildConsumeQueue(baseOffset + MessageBufferUtilTest.MSG_LEN), 0);
+        segment.append(buildConsumeQueue(baseOffset + MessageFormatUtilTest.MSG_LEN), 0);
         long cqItem3Timestamp = System.currentTimeMillis();
-        segment.append(buildConsumeQueue(baseOffset + MessageBufferUtilTest.MSG_LEN * 2), cqItem3Timestamp);
+        segment.append(buildConsumeQueue(baseOffset + MessageFormatUtilTest.MSG_LEN * 2), cqItem3Timestamp);
 
         Assert.assertEquals(baseOffset + lastSize + TieredConsumeQueue.CONSUME_QUEUE_STORE_UNIT_SIZE * 3, segment.getMaxOffset());
         Assert.assertEquals(0, segment.getMinTimestamp());
@@ -109,10 +109,10 @@ public class TieredFileSegmentTest {
         Assert.assertEquals(baseOffset, cqItem1.getLong());
 
         ByteBuffer cqItem2 = segment.read(lastSize + TieredConsumeQueue.CONSUME_QUEUE_STORE_UNIT_SIZE, TieredConsumeQueue.CONSUME_QUEUE_STORE_UNIT_SIZE);
-        Assert.assertEquals(baseOffset + MessageBufferUtilTest.MSG_LEN, cqItem2.getLong());
+        Assert.assertEquals(baseOffset + MessageFormatUtilTest.MSG_LEN, cqItem2.getLong());
 
         ByteBuffer cqItem3 = segment.read(lastSize + TieredConsumeQueue.CONSUME_QUEUE_STORE_UNIT_SIZE * 2, TieredConsumeQueue.CONSUME_QUEUE_STORE_UNIT_SIZE);
-        Assert.assertEquals(baseOffset + MessageBufferUtilTest.MSG_LEN * 2, cqItem3.getLong());
+        Assert.assertEquals(baseOffset + MessageFormatUtilTest.MSG_LEN * 2, cqItem3.getLong());
     }
 
     @Test
@@ -124,10 +124,10 @@ public class TieredFileSegmentTest {
         segment.initPosition(lastSize);
         segment.setSize((int) lastSize);
 
-        ByteBuffer buffer1 = MessageBufferUtilTest.buildMockedMessageBuffer().putLong(
-            MessageBufferUtil.PHYSICAL_OFFSET_POSITION, baseOffset + lastSize);
-        ByteBuffer buffer2 = MessageBufferUtilTest.buildMockedMessageBuffer().putLong(
-            MessageBufferUtil.PHYSICAL_OFFSET_POSITION, baseOffset + lastSize + MessageBufferUtilTest.MSG_LEN);
+        ByteBuffer buffer1 = MessageFormatUtilTest.buildMockedMessageBuffer().putLong(
+            MessageFormatUtil.PHYSICAL_OFFSET_POSITION, baseOffset + lastSize);
+        ByteBuffer buffer2 = MessageFormatUtilTest.buildMockedMessageBuffer().putLong(
+            MessageFormatUtil.PHYSICAL_OFFSET_POSITION, baseOffset + lastSize + MessageFormatUtilTest.MSG_LEN);
         segment.append(buffer1, 0);
         segment.append(buffer2, 0);
 
@@ -139,9 +139,9 @@ public class TieredFileSegmentTest {
             } catch (InterruptedException e) {
                 Assert.fail(e.getMessage());
             }
-            ByteBuffer buffer = MessageBufferUtilTest.buildMockedMessageBuffer();
-            buffer.putLong(MessageBufferUtil.PHYSICAL_OFFSET_POSITION, MessageBufferUtilTest.MSG_LEN * 2);
-            buffer.putLong(MessageBufferUtil.STORE_TIMESTAMP_POSITION, startTime);
+            ByteBuffer buffer = MessageFormatUtilTest.buildMockedMessageBuffer();
+            buffer.putLong(MessageFormatUtil.PHYSICAL_OFFSET_POSITION, MessageFormatUtilTest.MSG_LEN * 2);
+            buffer.putLong(MessageFormatUtil.STORE_TIMESTAMP_POSITION, startTime);
             segment.append(buffer, 0);
             segment.blocker.complete(false);
         }).start();
@@ -154,21 +154,21 @@ public class TieredFileSegmentTest {
         // Copy data and assume commit success
         segment.getMemStore().put(buffer1);
         segment.getMemStore().put(buffer2);
-        segment.setSize((int) (lastSize + MessageBufferUtilTest.MSG_LEN * 2));
+        segment.setSize((int) (lastSize + MessageFormatUtilTest.MSG_LEN * 2));
 
         segment.commit();
-        Assert.assertEquals(lastSize + MessageBufferUtilTest.MSG_LEN * 3, segment.getCommitPosition());
-        Assert.assertEquals(baseOffset + lastSize + MessageBufferUtilTest.MSG_LEN * 3, segment.getCommitOffset());
-        Assert.assertEquals(baseOffset + lastSize + MessageBufferUtilTest.MSG_LEN * 3, segment.getMaxOffset());
+        Assert.assertEquals(lastSize + MessageFormatUtilTest.MSG_LEN * 3, segment.getCommitPosition());
+        Assert.assertEquals(baseOffset + lastSize + MessageFormatUtilTest.MSG_LEN * 3, segment.getCommitOffset());
+        Assert.assertEquals(baseOffset + lastSize + MessageFormatUtilTest.MSG_LEN * 3, segment.getMaxOffset());
 
-        ByteBuffer msg1 = segment.read(lastSize, MessageBufferUtilTest.MSG_LEN);
-        Assert.assertEquals(baseOffset + lastSize, MessageBufferUtil.getCommitLogOffset(msg1));
+        ByteBuffer msg1 = segment.read(lastSize, MessageFormatUtilTest.MSG_LEN);
+        Assert.assertEquals(baseOffset + lastSize, MessageFormatUtil.getCommitLogOffset(msg1));
 
-        ByteBuffer msg2 = segment.read(lastSize + MessageBufferUtilTest.MSG_LEN, MessageBufferUtilTest.MSG_LEN);
-        Assert.assertEquals(baseOffset + lastSize + MessageBufferUtilTest.MSG_LEN, MessageBufferUtil.getCommitLogOffset(msg2));
+        ByteBuffer msg2 = segment.read(lastSize + MessageFormatUtilTest.MSG_LEN, MessageFormatUtilTest.MSG_LEN);
+        Assert.assertEquals(baseOffset + lastSize + MessageFormatUtilTest.MSG_LEN, MessageFormatUtil.getCommitLogOffset(msg2));
 
-        ByteBuffer msg3 = segment.read(lastSize + MessageBufferUtilTest.MSG_LEN * 2, MessageBufferUtilTest.MSG_LEN);
-        Assert.assertEquals(baseOffset + lastSize + MessageBufferUtilTest.MSG_LEN * 2, MessageBufferUtil.getCommitLogOffset(msg3));
+        ByteBuffer msg3 = segment.read(lastSize + MessageFormatUtilTest.MSG_LEN * 2, MessageFormatUtilTest.MSG_LEN);
+        Assert.assertEquals(baseOffset + lastSize + MessageFormatUtilTest.MSG_LEN * 2, MessageFormatUtil.getCommitLogOffset(msg3));
     }
 
     @Test
@@ -180,10 +180,10 @@ public class TieredFileSegmentTest {
         segment.initPosition(lastSize);
         segment.setSize((int) lastSize);
 
-        ByteBuffer buffer1 = MessageBufferUtilTest.buildMockedMessageBuffer().putLong(
-            MessageBufferUtil.PHYSICAL_OFFSET_POSITION, baseOffset + lastSize);
-        ByteBuffer buffer2 = MessageBufferUtilTest.buildMockedMessageBuffer().putLong(
-            MessageBufferUtil.PHYSICAL_OFFSET_POSITION, baseOffset + lastSize + MessageBufferUtilTest.MSG_LEN);
+        ByteBuffer buffer1 = MessageFormatUtilTest.buildMockedMessageBuffer().putLong(
+            MessageFormatUtil.PHYSICAL_OFFSET_POSITION, baseOffset + lastSize);
+        ByteBuffer buffer2 = MessageFormatUtilTest.buildMockedMessageBuffer().putLong(
+            MessageFormatUtil.PHYSICAL_OFFSET_POSITION, baseOffset + lastSize + MessageFormatUtilTest.MSG_LEN);
         segment.append(buffer1, 0);
         segment.append(buffer2, 0);
 
@@ -195,9 +195,9 @@ public class TieredFileSegmentTest {
             } catch (InterruptedException e) {
                 Assert.fail(e.getMessage());
             }
-            ByteBuffer buffer = MessageBufferUtilTest.buildMockedMessageBuffer();
-            buffer.putLong(MessageBufferUtil.PHYSICAL_OFFSET_POSITION, MessageBufferUtilTest.MSG_LEN * 2);
-            buffer.putLong(MessageBufferUtil.STORE_TIMESTAMP_POSITION, startTime);
+            ByteBuffer buffer = MessageFormatUtilTest.buildMockedMessageBuffer();
+            buffer.putLong(MessageFormatUtil.PHYSICAL_OFFSET_POSITION, MessageFormatUtilTest.MSG_LEN * 2);
+            buffer.putLong(MessageFormatUtil.STORE_TIMESTAMP_POSITION, startTime);
             segment.append(buffer, 0);
             segment.blocker.complete(false);
         }).start();
@@ -208,28 +208,28 @@ public class TieredFileSegmentTest {
 
         Assert.assertEquals(lastSize, segment.getCommitPosition());
         Assert.assertEquals(baseOffset + lastSize, segment.getCommitOffset());
-        Assert.assertEquals(baseOffset + lastSize + MessageBufferUtilTest.MSG_LEN * 3, segment.getMaxOffset());
+        Assert.assertEquals(baseOffset + lastSize + MessageFormatUtilTest.MSG_LEN * 3, segment.getMaxOffset());
 
         segment.blocker.join();
         segment.blocker = null;
 
         segment.commit();
-        Assert.assertEquals(lastSize + MessageBufferUtilTest.MSG_LEN * 2, segment.getCommitPosition());
-        Assert.assertEquals(baseOffset + lastSize + MessageBufferUtilTest.MSG_LEN * 2, segment.getCommitOffset());
-        Assert.assertEquals(baseOffset + lastSize + MessageBufferUtilTest.MSG_LEN * 3, segment.getMaxOffset());
+        Assert.assertEquals(lastSize + MessageFormatUtilTest.MSG_LEN * 2, segment.getCommitPosition());
+        Assert.assertEquals(baseOffset + lastSize + MessageFormatUtilTest.MSG_LEN * 2, segment.getCommitOffset());
+        Assert.assertEquals(baseOffset + lastSize + MessageFormatUtilTest.MSG_LEN * 3, segment.getMaxOffset());
 
         segment.commit();
-        Assert.assertEquals(lastSize + MessageBufferUtilTest.MSG_LEN * 3, segment.getCommitPosition());
-        Assert.assertEquals(baseOffset + lastSize + MessageBufferUtilTest.MSG_LEN * 3, segment.getCommitOffset());
-        Assert.assertEquals(baseOffset + lastSize + MessageBufferUtilTest.MSG_LEN * 3, segment.getMaxOffset());
+        Assert.assertEquals(lastSize + MessageFormatUtilTest.MSG_LEN * 3, segment.getCommitPosition());
+        Assert.assertEquals(baseOffset + lastSize + MessageFormatUtilTest.MSG_LEN * 3, segment.getCommitOffset());
+        Assert.assertEquals(baseOffset + lastSize + MessageFormatUtilTest.MSG_LEN * 3, segment.getMaxOffset());
 
-        ByteBuffer msg1 = segment.read(lastSize, MessageBufferUtilTest.MSG_LEN);
-        Assert.assertEquals(baseOffset + lastSize, MessageBufferUtil.getCommitLogOffset(msg1));
+        ByteBuffer msg1 = segment.read(lastSize, MessageFormatUtilTest.MSG_LEN);
+        Assert.assertEquals(baseOffset + lastSize, MessageFormatUtil.getCommitLogOffset(msg1));
 
-        ByteBuffer msg2 = segment.read(lastSize + MessageBufferUtilTest.MSG_LEN, MessageBufferUtilTest.MSG_LEN);
-        Assert.assertEquals(baseOffset + lastSize + MessageBufferUtilTest.MSG_LEN, MessageBufferUtil.getCommitLogOffset(msg2));
+        ByteBuffer msg2 = segment.read(lastSize + MessageFormatUtilTest.MSG_LEN, MessageFormatUtilTest.MSG_LEN);
+        Assert.assertEquals(baseOffset + lastSize + MessageFormatUtilTest.MSG_LEN, MessageFormatUtil.getCommitLogOffset(msg2));
 
-        ByteBuffer msg3 = segment.read(lastSize + MessageBufferUtilTest.MSG_LEN * 2, MessageBufferUtilTest.MSG_LEN);
-        Assert.assertEquals(baseOffset + lastSize + MessageBufferUtilTest.MSG_LEN * 2, MessageBufferUtil.getCommitLogOffset(msg3));
+        ByteBuffer msg3 = segment.read(lastSize + MessageFormatUtilTest.MSG_LEN * 2, MessageFormatUtilTest.MSG_LEN);
+        Assert.assertEquals(baseOffset + lastSize + MessageFormatUtilTest.MSG_LEN * 2, MessageFormatUtil.getCommitLogOffset(msg3));
     }
 }

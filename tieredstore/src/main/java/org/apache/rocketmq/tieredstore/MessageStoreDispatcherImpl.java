@@ -41,17 +41,14 @@ import org.apache.rocketmq.store.MessageStore;
 import org.apache.rocketmq.store.SelectMappedBufferResult;
 import org.apache.rocketmq.store.queue.ConsumeQueueInterface;
 import org.apache.rocketmq.store.queue.CqUnit;
-import org.apache.rocketmq.tieredstore.common.AppendResult;
 import org.apache.rocketmq.tieredstore.common.FileSegmentType;
-import org.apache.rocketmq.tieredstore.common.TieredMessageStoreConfig;
-import org.apache.rocketmq.tieredstore.common.TieredStoreExecutor;
 import org.apache.rocketmq.tieredstore.file.CompositeFlatFileExt;
 import org.apache.rocketmq.tieredstore.file.TieredFlatFileManager;
 import org.apache.rocketmq.tieredstore.metrics.TieredStoreMetricsConstant;
 import org.apache.rocketmq.tieredstore.metrics.TieredStoreMetricsManager;
 import org.apache.rocketmq.tieredstore.provider.TieredStoreTopicBlackListFilter;
 import org.apache.rocketmq.tieredstore.provider.TieredStoreTopicFilter;
-import org.apache.rocketmq.tieredstore.util.MessageBufferUtil;
+import org.apache.rocketmq.tieredstore.util.MessageFormatUtil;
 import org.apache.rocketmq.tieredstore.util.TieredStoreUtil;
 
 public class MessageStoreDispatcherImpl extends ServiceThread implements MessageStoreDispatcher {
@@ -267,13 +264,13 @@ public class MessageStoreDispatcherImpl extends ServiceThread implements Message
             }
 
             long mappedCommitLogOffset = flatFile.getCommitLogMaxOffset() - byteBuffer.remaining();
-            Map<String, String> properties = MessageBufferUtil.getProperties(byteBuffer);
+            Map<String, String> properties = MessageFormatUtil.getProperties(byteBuffer);
             DispatchRequest dispatchRequest = new DispatchRequest(topic, queueId, mappedCommitLogOffset,
-                cqUnit.getSize(), cqUnit.getTagsCode(), MessageBufferUtil.getStoreTimeStamp(byteBuffer),
+                cqUnit.getSize(), cqUnit.getTagsCode(), MessageFormatUtil.getStoreTimeStamp(byteBuffer),
                 cqUnit.getQueueOffset(), properties.getOrDefault(MessageConst.PROPERTY_KEYS, ""),
                 properties.getOrDefault(MessageConst.PROPERTY_UNIQ_CLIENT_MESSAGE_ID_KEYIDX, ""),
                 0, 0, new HashMap<>());
-            dispatchRequest.setOffsetId(MessageBufferUtil.getOffsetId(byteBuffer));
+            dispatchRequest.setOffsetId(MessageFormatUtil.getOffsetId(byteBuffer));
 
             result = flatFile.appendConsumeQueue(dispatchRequest);
             if (!AppendResult.SUCCESS.equals(result)) {

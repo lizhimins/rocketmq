@@ -47,8 +47,6 @@ import org.apache.rocketmq.store.QueryMessageResult;
 import org.apache.rocketmq.store.SelectMappedBufferResult;
 import org.apache.rocketmq.store.plugin.AbstractPluginMessageStore;
 import org.apache.rocketmq.store.plugin.MessageStorePluginContext;
-import org.apache.rocketmq.tieredstore.common.TieredMessageStoreConfig;
-import org.apache.rocketmq.tieredstore.common.TieredStoreExecutor;
 import org.apache.rocketmq.tieredstore.file.CompositeFlatFile;
 import org.apache.rocketmq.tieredstore.file.TieredFlatFileManager;
 import org.apache.rocketmq.tieredstore.metadata.TieredMetadataStore;
@@ -83,6 +81,27 @@ public class TieredMessageStore extends AbstractPluginMessageStore {
         this.flatFileManager = new TieredFlatFileManager(metadataStore, storeConfig);
         this.fetcher = new MessageStoreFetcherImpl(flatFileManager);
         this.dispatcher = new MessageStoreDispatcherImpl(this);
+    }
+
+
+
+    public static void addSystemTopic(final String topic) {
+        SYSTEM_TOPIC_LIST.add(topic);
+    }
+
+    public static boolean isSystemTopic(final String topic) {
+        if (StringUtils.isBlank(topic)) {
+            return false;
+        }
+
+        if (SYSTEM_TOPIC_WHITE_LIST.contains(topic)) {
+            return false;
+        }
+
+        if (SYSTEM_TOPIC_LIST.contains(topic)) {
+            return true;
+        }
+        return TopicValidator.isSystemTopic(topic);
     }
 
     public MessageStore getMessageStore() {

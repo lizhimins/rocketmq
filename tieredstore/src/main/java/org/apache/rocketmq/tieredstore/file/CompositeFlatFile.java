@@ -39,14 +39,10 @@ import org.apache.rocketmq.common.BoundaryType;
 import org.apache.rocketmq.logging.org.slf4j.Logger;
 import org.apache.rocketmq.logging.org.slf4j.LoggerFactory;
 import org.apache.rocketmq.store.DispatchRequest;
-import org.apache.rocketmq.tieredstore.common.AppendResult;
 import org.apache.rocketmq.tieredstore.common.FileSegmentType;
-import org.apache.rocketmq.tieredstore.common.InFlightRequestFuture;
-import org.apache.rocketmq.tieredstore.common.InFlightRequestKey;
-import org.apache.rocketmq.tieredstore.common.TieredMessageStoreConfig;
+import org.apache.rocketmq.tieredstore.TieredMessageStoreConfig;
 import org.apache.rocketmq.tieredstore.metadata.TieredMetadataStore;
-import org.apache.rocketmq.tieredstore.util.CQItemBufferUtil;
-import org.apache.rocketmq.tieredstore.util.MessageBufferUtil;
+import org.apache.rocketmq.tieredstore.util.MessageFormatUtil;
 import org.apache.rocketmq.tieredstore.util.TieredStoreUtil;
 
 public class CompositeFlatFile implements CompositeFile {
@@ -101,11 +97,8 @@ public class CompositeFlatFile implements CompositeFile {
     public void initOffset(long offset) {
         fileLock.lock();
         try {
-            if (consumeQueue.isInitialized()) {
-                dispatchOffset.set(this.getConsumeQueueCommitOffset());
-            } else {
+            if (!consumeQueue.isInitialized()) {
                 consumeQueue.setBaseOffset(offset * TieredConsumeQueue.CONSUME_QUEUE_STORE_UNIT_SIZE);
-                dispatchOffset.set(offset);
             }
         } finally {
             fileLock.unlock();
@@ -174,7 +167,7 @@ public class CompositeFlatFile implements CompositeFile {
         long storeTime;
         // Handle case 1
         ByteBuffer message = getMessageAsync(maxQueueOffset).join();
-        storeTime = MessageBufferUtil.getStoreTimeStamp(message);
+        storeTime = MessageFormatUtil.getStoreTimeStamp(message);
         if (storeTime < timestamp) {
             switch (boundaryType) {
                 case LOWER:
@@ -189,7 +182,7 @@ public class CompositeFlatFile implements CompositeFile {
 
         // Handle case 2
         message = getMessageAsync(minQueueOffset).join();
-        storeTime = MessageBufferUtil.getStoreTimeStamp(message);
+        storeTime = MessageFormatUtil.getStoreTimeStamp(message);
         if (storeTime > timestamp) {
             switch (boundaryType) {
                 case LOWER:
@@ -210,7 +203,7 @@ public class CompositeFlatFile implements CompositeFile {
         while (high >= low) {
             midOffset = (low + high) / 2;
             message = getMessageAsync(midOffset).join();
-            storeTime = MessageBufferUtil.getStoreTimeStamp(message);
+            storeTime = MessageFormatUtil.getStoreTimeStamp(message);
             if (storeTime == timestamp) {
                 targetOffset = midOffset;
                 break;
@@ -235,7 +228,7 @@ public class CompositeFlatFile implements CompositeFile {
                             break;
                         }
                         message = getMessageAsync(attempt).join();
-                        storeTime = MessageBufferUtil.getStoreTimeStamp(message);
+                        storeTime = MessageFormatUtil.getStoreTimeStamp(message);
                         if (storeTime == timestamp) {
                             previousAttempt = attempt;
                             continue;
@@ -252,7 +245,7 @@ public class CompositeFlatFile implements CompositeFile {
                         }
 
                         message = getMessageAsync(attempt).join();
-                        storeTime = MessageBufferUtil.getStoreTimeStamp(message);
+                        storeTime = MessageFormatUtil.getStoreTimeStamp(message);
                         if (storeTime == timestamp) {
                             previousAttempt = attempt;
                             continue;

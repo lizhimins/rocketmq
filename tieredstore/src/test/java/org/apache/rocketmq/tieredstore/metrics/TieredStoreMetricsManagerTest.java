@@ -17,7 +17,7 @@
 package org.apache.rocketmq.tieredstore.metrics;
 
 import java.io.IOException;
-import org.apache.rocketmq.tieredstore.common.TieredStoreExecutor;
+import org.apache.rocketmq.tieredstore.TieredStoreExecutor;
 import org.junit.After;
 import org.junit.Test;
 

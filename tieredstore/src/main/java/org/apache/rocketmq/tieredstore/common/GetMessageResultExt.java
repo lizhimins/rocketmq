@@ -23,7 +23,7 @@ import org.apache.rocketmq.store.GetMessageResult;
 import org.apache.rocketmq.store.GetMessageStatus;
 import org.apache.rocketmq.store.MessageFilter;
 import org.apache.rocketmq.store.SelectMappedBufferResult;
-import org.apache.rocketmq.tieredstore.util.MessageBufferUtil;
+import org.apache.rocketmq.tieredstore.util.MessageFormatUtil;
 
 public class GetMessageResultExt extends GetMessageResult {
 
@@ -65,7 +65,7 @@ public class GetMessageResultExt extends GetMessageResult {
 
             result.addMessage(new SelectMappedBufferResult(bufferResult.getStartOffset(),
                     bufferResult.getByteBuffer(), bufferResult.getSize(), null),
-                MessageBufferUtil.getQueueOffset(bufferResult.getByteBuffer()));
+                MessageFormatUtil.getQueueOffset(bufferResult.getByteBuffer()));
         }
 
         if (result.getBufferTotalSize() == 0) {

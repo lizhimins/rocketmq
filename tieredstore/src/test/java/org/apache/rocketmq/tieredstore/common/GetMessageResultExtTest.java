@@ -23,7 +23,7 @@ import org.apache.rocketmq.store.GetMessageResult;
 import org.apache.rocketmq.store.GetMessageStatus;
 import org.apache.rocketmq.store.MessageFilter;
 import org.apache.rocketmq.store.SelectMappedBufferResult;
-import org.apache.rocketmq.tieredstore.util.MessageBufferUtilTest;
+import org.apache.rocketmq.tieredstore.util.MessageFormatUtilTest;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -41,10 +41,10 @@ public class GetMessageResultExtTest {
         Assert.assertEquals(0, resultExt.doFilterMessage(null).getMessageCount());
 
         resultExt.addMessageExt(new SelectMappedBufferResult(
-                1000L, MessageBufferUtilTest.buildMockedMessageBuffer(), 100, null),
+                1000L, MessageFormatUtilTest.buildMockedMessageBuffer(), 100, null),
             0, "TagA".hashCode());
         resultExt.addMessageExt(new SelectMappedBufferResult(
-                2000L, MessageBufferUtilTest.buildMockedMessageBuffer(), 100, null),
+                2000L, MessageFormatUtilTest.buildMockedMessageBuffer(), 100, null),
             0, "TagB".hashCode());
         assertEquals(2, resultExt.getMessageCount());
 

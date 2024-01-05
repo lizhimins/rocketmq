@@ -30,9 +30,11 @@ import org.apache.rocketmq.common.topic.TopicValidator;
 import org.apache.rocketmq.logging.org.slf4j.Logger;
 import org.apache.rocketmq.logging.org.slf4j.LoggerFactory;
 
+import javax.annotation.Nullable;
+
 public class TieredStoreUtil {
 
-    private static final Logger logger = LoggerFactory.getLogger(TieredStoreUtil.TIERED_STORE_LOGGER_NAME);
+    public static final String TIERED_STORE_LOGGER_NAME = "RocketmqTieredStore";
 
     public static final long BYTE = 1L;
     public static final long KB = BYTE << 10;
@@ -42,19 +44,7 @@ public class TieredStoreUtil {
     public static final long PB = TB << 10;
     public static final long EB = PB << 10;
 
-    public static final String TIERED_STORE_LOGGER_NAME = "RocketmqTieredStore";
-    public static final String RMQ_SYS_TIERED_STORE_INDEX_TOPIC = "rmq_sys_INDEX";
-    public final static int MSG_ID_LENGTH = 8 + 8;
-
     private static final DecimalFormat DEC_FORMAT = new DecimalFormat("#.##");
-
-    private final static List<String> SYSTEM_TOPIC_LIST = new LinkedList<String>() {
-        {
-            add(RMQ_SYS_TIERED_STORE_INDEX_TOPIC);
-        }
-    };
-
-    private final static List<String> SYSTEM_TOPIC_WHITE_LIST = new LinkedList<>();
 
     private static String formatSize(long size, long divider, String unitName) {
         return DEC_FORMAT.format((double) size / divider) + unitName;
@@ -111,25 +101,6 @@ public class TieredStoreUtil {
 
     public static long fileName2Offset(final String fileName) {
         return Long.parseLong(fileName.substring(fileName.length() - 20));
-    }
-
-    public static void addSystemTopic(final String topic) {
-        SYSTEM_TOPIC_LIST.add(topic);
-    }
-
-    public static boolean isSystemTopic(final String topic) {
-        if (StringUtils.isBlank(topic)) {
-            return false;
-        }
-
-        if (SYSTEM_TOPIC_WHITE_LIST.contains(topic)) {
-            return false;
-        }
-
-        if (SYSTEM_TOPIC_LIST.contains(topic)) {
-            return true;
-        }
-        return TopicValidator.isSystemTopic(topic);
     }
 
     public static String toPath(MessageQueue mq) {

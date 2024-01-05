@@ -23,10 +23,9 @@ import java.util.concurrent.atomic.AtomicLong;
 
 import org.apache.rocketmq.logging.org.slf4j.Logger;
 import org.apache.rocketmq.logging.org.slf4j.LoggerFactory;
-import org.apache.rocketmq.tieredstore.common.AppendResult;
-import org.apache.rocketmq.tieredstore.common.TieredMessageStoreConfig;
+import org.apache.rocketmq.tieredstore.TieredMessageStoreConfig;
 import org.apache.rocketmq.tieredstore.provider.TieredFileSegment;
-import org.apache.rocketmq.tieredstore.util.MessageBufferUtil;
+import org.apache.rocketmq.tieredstore.util.MessageFormatUtil;
 import org.apache.rocketmq.tieredstore.util.TieredStoreUtil;
 
 import static org.apache.rocketmq.tieredstore.file.CompositeFlatFile.OFFSET_NOT_EXIST;
@@ -97,7 +96,7 @@ public class TieredCommitLog {
         }
 
         // queue offset field length is 8
-        int length = MessageBufferUtil.QUEUE_OFFSET_POSITION + 8;
+        int length = MessageFormatUtil.QUEUE_OFFSET_POSITION + 8;
         if (flatFile.getCommitOffset() - flatFile.getMinOffset() < length) {
             this.consumeQueueMinOffset.set(OFFSET_NOT_EXIST);
             return CompletableFuture.completedFuture(OFFSET_NOT_EXIST);
@@ -106,7 +105,7 @@ public class TieredCommitLog {
         try {
             return this.flatFile.readAsync(this.flatFile.getMinOffset(), length)
                     .thenApply(buffer -> {
-                        long offset = MessageBufferUtil.getQueueOffset(buffer);
+                        long offset = MessageFormatUtil.getQueueOffset(buffer);
                         consumeQueueMinOffset.set(offset);
                         log.debug("Correct commitlog min cq offset success, " +
                                         "filePath={}, min cq offset={}, commitlog range={}-{}",
@@ -125,7 +124,7 @@ public class TieredCommitLog {
     }
 
     public AppendResult append(ByteBuffer byteBuf) {
-        return flatFile.append(byteBuf, MessageBufferUtil.getStoreTimeStamp(byteBuf));
+        return flatFile.append(byteBuf, MessageFormatUtil.getStoreTimeStamp(byteBuf));
     }
 
     public void commit(boolean sync) {

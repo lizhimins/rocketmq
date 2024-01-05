@@ -23,16 +23,15 @@ import org.apache.rocketmq.common.message.MessageQueue;
 import org.apache.rocketmq.store.ConsumeQueue;
 import org.apache.rocketmq.store.DispatchRequest;
 import org.apache.rocketmq.tieredstore.MessageStoreTest;
-import org.apache.rocketmq.tieredstore.common.AppendResult;
 import org.apache.rocketmq.tieredstore.common.FileSegmentType;
-import org.apache.rocketmq.tieredstore.common.TieredMessageStoreConfig;
-import org.apache.rocketmq.tieredstore.common.TieredStoreExecutor;
+import org.apache.rocketmq.tieredstore.TieredMessageStoreConfig;
+import org.apache.rocketmq.tieredstore.TieredStoreExecutor;
 import org.apache.rocketmq.tieredstore.metadata.QueueMetadata;
 import org.apache.rocketmq.tieredstore.metadata.TieredMetadataManager;
 import org.apache.rocketmq.tieredstore.metadata.TieredMetadataStore;
 import org.apache.rocketmq.tieredstore.provider.memory.MemoryFileSegment;
-import org.apache.rocketmq.tieredstore.util.MessageBufferUtil;
-import org.apache.rocketmq.tieredstore.util.MessageBufferUtilTest;
+import org.apache.rocketmq.tieredstore.util.MessageFormatUtil;
+import org.apache.rocketmq.tieredstore.util.MessageFormatUtilTest;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
@@ -69,7 +68,7 @@ public class CompositeFlatFileExtTest {
     @Test
     public void testAppendCommitLog() {
         CompositeFlatFileExt flatFile = new CompositeFlatFileExt(tieredFileAllocator, mq);
-        ByteBuffer message = MessageBufferUtilTest.buildMockedMessageBuffer();
+        ByteBuffer message = MessageFormatUtilTest.buildMockedMessageBuffer();
         AppendResult result = flatFile.appendCommitLog(message);
         Assert.assertEquals(AppendResult.SUCCESS, result);
         Assert.assertEquals(123L, flatFile.commitLog.getFlatFile().getFileToWrite().getAppendPosition());
@@ -80,7 +79,7 @@ public class CompositeFlatFileExtTest {
         result = flatFile.appendCommitLog(message);
         Assert.assertEquals(AppendResult.SUCCESS, result);
 
-        message.putLong(MessageBufferUtil.QUEUE_OFFSET_POSITION, 7);
+        message.putLong(MessageFormatUtil.QUEUE_OFFSET_POSITION, 7);
         result = flatFile.appendCommitLog(message);
         Assert.assertEquals(AppendResult.SUCCESS, result);
 
@@ -136,29 +135,29 @@ public class CompositeFlatFileExtTest {
         CompositeFlatFileExt flatFile = new CompositeFlatFileExt(tieredFileAllocator, mq);
         flatFile.initOffset(50);
         long timestamp1 = System.currentTimeMillis();
-        ByteBuffer buffer = MessageBufferUtilTest.buildMockedMessageBuffer();
-        buffer.putLong(MessageBufferUtil.QUEUE_OFFSET_POSITION, 50);
-        buffer.putLong(MessageBufferUtil.STORE_TIMESTAMP_POSITION, timestamp1);
+        ByteBuffer buffer = MessageFormatUtilTest.buildMockedMessageBuffer();
+        buffer.putLong(MessageFormatUtil.QUEUE_OFFSET_POSITION, 50);
+        buffer.putLong(MessageFormatUtil.STORE_TIMESTAMP_POSITION, timestamp1);
         flatFile.appendCommitLog(buffer);
 
         long timestamp2 = timestamp1 + 100;
-        buffer = MessageBufferUtilTest.buildMockedMessageBuffer();
-        buffer.putLong(MessageBufferUtil.QUEUE_OFFSET_POSITION, 51);
-        buffer.putLong(MessageBufferUtil.STORE_TIMESTAMP_POSITION, timestamp2);
+        buffer = MessageFormatUtilTest.buildMockedMessageBuffer();
+        buffer.putLong(MessageFormatUtil.QUEUE_OFFSET_POSITION, 51);
+        buffer.putLong(MessageFormatUtil.STORE_TIMESTAMP_POSITION, timestamp2);
         flatFile.appendCommitLog(buffer);
-        buffer = MessageBufferUtilTest.buildMockedMessageBuffer();
-        buffer.putLong(MessageBufferUtil.QUEUE_OFFSET_POSITION, 52);
-        buffer.putLong(MessageBufferUtil.STORE_TIMESTAMP_POSITION, timestamp2);
+        buffer = MessageFormatUtilTest.buildMockedMessageBuffer();
+        buffer.putLong(MessageFormatUtil.QUEUE_OFFSET_POSITION, 52);
+        buffer.putLong(MessageFormatUtil.STORE_TIMESTAMP_POSITION, timestamp2);
         flatFile.appendCommitLog(buffer);
-        buffer = MessageBufferUtilTest.buildMockedMessageBuffer();
-        buffer.putLong(MessageBufferUtil.QUEUE_OFFSET_POSITION, 53);
-        buffer.putLong(MessageBufferUtil.STORE_TIMESTAMP_POSITION, timestamp2);
+        buffer = MessageFormatUtilTest.buildMockedMessageBuffer();
+        buffer.putLong(MessageFormatUtil.QUEUE_OFFSET_POSITION, 53);
+        buffer.putLong(MessageFormatUtil.STORE_TIMESTAMP_POSITION, timestamp2);
         flatFile.appendCommitLog(buffer);
 
         long timestamp3 = timestamp2 + 100;
-        buffer = MessageBufferUtilTest.buildMockedMessageBuffer();
-        buffer.putLong(MessageBufferUtil.QUEUE_OFFSET_POSITION, 54);
-        buffer.putLong(MessageBufferUtil.STORE_TIMESTAMP_POSITION, timestamp3);
+        buffer = MessageFormatUtilTest.buildMockedMessageBuffer();
+        buffer.putLong(MessageFormatUtil.QUEUE_OFFSET_POSITION, 54);
+        buffer.putLong(MessageFormatUtil.STORE_TIMESTAMP_POSITION, timestamp3);
         flatFile.appendCommitLog(buffer);
 
         // append message to consume queue
@@ -166,8 +165,8 @@ public class CompositeFlatFileExtTest {
 
         for (int i = 0; i < 5; i++) {
             AppendResult appendResult = flatFile.appendConsumeQueue(new DispatchRequest(
-                mq.getTopic(), mq.getQueueId(), MessageBufferUtilTest.MSG_LEN * i,
-                MessageBufferUtilTest.MSG_LEN, 0, timestamp1, 50 + i,
+                mq.getTopic(), mq.getQueueId(), MessageFormatUtilTest.MSG_LEN * i,
+                MessageFormatUtilTest.MSG_LEN, 0, timestamp1, 50 + i,
                 "", "", 0, 0, null));
             Assert.assertEquals(AppendResult.SUCCESS, appendResult);
         }

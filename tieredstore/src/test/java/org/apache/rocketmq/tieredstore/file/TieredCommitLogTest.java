@@ -22,16 +22,15 @@ import java.nio.ByteBuffer;
 import java.util.List;
 import org.apache.rocketmq.common.message.MessageQueue;
 import org.apache.rocketmq.tieredstore.MessageStoreTest;
-import org.apache.rocketmq.tieredstore.common.AppendResult;
 import org.apache.rocketmq.tieredstore.common.FileSegmentType;
-import org.apache.rocketmq.tieredstore.common.TieredMessageStoreConfig;
-import org.apache.rocketmq.tieredstore.common.TieredStoreExecutor;
+import org.apache.rocketmq.tieredstore.TieredMessageStoreConfig;
+import org.apache.rocketmq.tieredstore.TieredStoreExecutor;
 import org.apache.rocketmq.tieredstore.metadata.FileSegmentMetadata;
 import org.apache.rocketmq.tieredstore.metadata.TieredMetadataManager;
 import org.apache.rocketmq.tieredstore.metadata.TieredMetadataStore;
 import org.apache.rocketmq.tieredstore.provider.TieredFileSegment;
-import org.apache.rocketmq.tieredstore.util.MessageBufferUtil;
-import org.apache.rocketmq.tieredstore.util.MessageBufferUtilTest;
+import org.apache.rocketmq.tieredstore.util.MessageFormatUtil;
+import org.apache.rocketmq.tieredstore.util.MessageFormatUtilTest;
 import org.apache.rocketmq.tieredstore.util.TieredStoreUtil;
 import org.junit.After;
 import org.junit.Assert;
@@ -77,8 +76,8 @@ public class TieredCommitLogTest {
 
         // append some messages
         for (int i = 6; i < 50; i++) {
-            ByteBuffer byteBuffer = MessageBufferUtilTest.buildMockedMessageBuffer();
-            byteBuffer.putLong(MessageBufferUtil.QUEUE_OFFSET_POSITION, i);
+            ByteBuffer byteBuffer = MessageFormatUtilTest.buildMockedMessageBuffer();
+            byteBuffer.putLong(MessageFormatUtil.QUEUE_OFFSET_POSITION, i);
             Assert.assertEquals(AppendResult.SUCCESS, tieredCommitLog.append(byteBuffer));
         }
 

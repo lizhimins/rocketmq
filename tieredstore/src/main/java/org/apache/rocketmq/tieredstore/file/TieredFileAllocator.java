@@ -18,7 +18,7 @@
 package org.apache.rocketmq.tieredstore.file;
 
 import org.apache.rocketmq.tieredstore.common.FileSegmentType;
-import org.apache.rocketmq.tieredstore.common.TieredMessageStoreConfig;
+import org.apache.rocketmq.tieredstore.TieredMessageStoreConfig;
 import org.apache.rocketmq.tieredstore.metadata.TieredMetadataStore;
 import org.apache.rocketmq.tieredstore.provider.FileSegmentAllocator;
 

@@ -30,7 +30,7 @@ import java.util.function.Consumer;
 import org.apache.rocketmq.common.ConfigManager;
 import org.apache.rocketmq.common.message.MessageQueue;
 import org.apache.rocketmq.tieredstore.common.FileSegmentType;
-import org.apache.rocketmq.tieredstore.common.TieredMessageStoreConfig;
+import org.apache.rocketmq.tieredstore.TieredMessageStoreConfig;
 
 public class TieredMetadataManager extends ConfigManager implements TieredMetadataStore {
 

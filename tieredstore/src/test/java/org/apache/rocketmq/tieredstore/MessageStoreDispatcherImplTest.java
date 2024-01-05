@@ -18,8 +18,6 @@ package org.apache.rocketmq.tieredstore;
 
 import java.io.IOException;
 import org.apache.rocketmq.common.message.MessageQueue;
-import org.apache.rocketmq.tieredstore.common.TieredMessageStoreConfig;
-import org.apache.rocketmq.tieredstore.common.TieredStoreExecutor;
 import org.apache.rocketmq.tieredstore.metadata.TieredMetadataManager;
 import org.apache.rocketmq.tieredstore.metadata.TieredMetadataStore;
 import org.junit.After;

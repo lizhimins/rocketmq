@@ -38,12 +38,7 @@ import org.apache.rocketmq.store.MessageFilter;
 import org.apache.rocketmq.store.QueryMessageResult;
 import org.apache.rocketmq.store.SelectMappedBufferResult;
 import org.apache.rocketmq.tieredstore.common.GetMessageResultExt;
-import org.apache.rocketmq.tieredstore.common.InFlightRequestFuture;
-import org.apache.rocketmq.tieredstore.common.MessageCacheKey;
 import org.apache.rocketmq.tieredstore.common.SelectBufferResult;
-import org.apache.rocketmq.tieredstore.common.SelectBufferResultWrapper;
-import org.apache.rocketmq.tieredstore.common.TieredMessageStoreConfig;
-import org.apache.rocketmq.tieredstore.common.TieredStoreExecutor;
 import org.apache.rocketmq.tieredstore.exception.TieredStoreException;
 import org.apache.rocketmq.tieredstore.file.CompositeFlatFile;
 import org.apache.rocketmq.tieredstore.file.CompositeFlatFileExt;
@@ -54,8 +49,7 @@ import org.apache.rocketmq.tieredstore.metadata.TieredMetadataStore;
 import org.apache.rocketmq.tieredstore.metadata.TopicMetadata;
 import org.apache.rocketmq.tieredstore.metrics.TieredStoreMetricsConstant;
 import org.apache.rocketmq.tieredstore.metrics.TieredStoreMetricsManager;
-import org.apache.rocketmq.tieredstore.util.CQItemBufferUtil;
-import org.apache.rocketmq.tieredstore.util.MessageBufferUtil;
+import org.apache.rocketmq.tieredstore.util.MessageFormatUtil;
 import org.apache.rocketmq.tieredstore.util.TieredStoreUtil;
 
 public class MessageStoreFetcherImpl implements MessageStoreFetcher {
@@ -403,7 +397,7 @@ public class MessageStoreFetcherImpl implements MessageStoreFetcher {
 
         int finalBatchSize = batchSize;
         return readConsumeQueueFuture.thenCombine(readCommitLogFuture, (cqBuffer, msgBuffer) -> {
-            List<SelectBufferResult> bufferList = MessageBufferUtil.splitMessageBuffer(cqBuffer, msgBuffer);
+            List<SelectBufferResult> bufferList = MessageFormatUtil.splitMessageBuffer(cqBuffer, msgBuffer);
             int requestSize = cqBuffer.remaining() / TieredConsumeQueue.CONSUME_QUEUE_STORE_UNIT_SIZE;
             if (bufferList.isEmpty()) {
                 result.setStatus(GetMessageStatus.NO_MATCHED_MESSAGE);
@@ -417,7 +411,7 @@ public class MessageStoreFetcherImpl implements MessageStoreFetcher {
                     slice.limit(bufferResult.getSize());
                     SelectMappedBufferResult msg = new SelectMappedBufferResult(bufferResult.getStartOffset(),
                         bufferResult.getByteBuffer(), bufferResult.getSize(), null);
-                    result.addMessageExt(msg, MessageBufferUtil.getQueueOffset(slice), bufferResult.getTagCode());
+                    result.addMessageExt(msg, MessageFormatUtil.getQueueOffset(slice), bufferResult.getTagCode());
                 }
             }
             return result;
@@ -486,9 +480,9 @@ public class MessageStoreFetcherImpl implements MessageStoreFetcher {
         }
 
         // read from timestamp to timestamp + length
-        int length = MessageBufferUtil.STORE_TIMESTAMP_POSITION + 8;
+        int length = MessageFormatUtil.STORE_TIMESTAMP_POSITION + 8;
         return flatFile.getCommitLogAsync(flatFile.getCommitLogMinOffset(), length)
-            .thenApply(MessageBufferUtil::getStoreTimeStamp);
+            .thenApply(MessageFormatUtil::getStoreTimeStamp);
     }
 
     @Override
@@ -504,7 +498,7 @@ public class MessageStoreFetcherImpl implements MessageStoreFetcher {
                 int size = CQItemBufferUtil.getSize(cqItem);
                 return flatFile.getCommitLogAsync(commitLogOffset, size);
             }, TieredStoreExecutor.fetchDataExecutor)
-            .thenApply(MessageBufferUtil::getStoreTimeStamp)
+            .thenApply(MessageFormatUtil::getStoreTimeStamp)
             .exceptionally(e -> {
                 LOGGER.error("MessageStoreFetcherImpl#getMessageStoreTimeStampAsync: " +
                     "get or decode message failed: topic: {}, queue: {}, offset: {}", topic, queueId, queueOffset, e);

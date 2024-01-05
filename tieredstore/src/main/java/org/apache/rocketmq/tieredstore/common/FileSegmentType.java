@@ -17,30 +17,29 @@
 package org.apache.rocketmq.tieredstore.common;
 
 public enum FileSegmentType {
+
     COMMIT_LOG(0),
+
     CONSUME_QUEUE(1),
+
     INDEX(2);
 
-    private final int type;
+    private final int fileType;
 
-    FileSegmentType(int type) {
-        this.type = type;
+    FileSegmentType(int fileType) {
+        this.fileType = fileType;
     }
 
-    public int getType() {
-        return type;
+    public int getFileType() {
+        return fileType;
     }
 
-    public static FileSegmentType valueOf(int type) {
-        switch (type) {
-            case 0:
-                return COMMIT_LOG;
-            case 1:
-                return CONSUME_QUEUE;
-            case 2:
-                return INDEX;
-            default:
-                throw new IllegalStateException("Unexpected value: " + type);
+    public static FileSegmentType valueOf(int fileType) {
+        for (FileSegmentType fileSegmentType : FileSegmentType.values()) {
+            if (fileSegmentType.getFileType() == fileType) {
+                return fileSegmentType;
+            }
         }
+        return COMMIT_LOG;
     }
 }

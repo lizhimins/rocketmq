@@ -16,12 +16,10 @@
  */
 package org.apache.rocketmq.tieredstore.file;
 
-import com.google.common.annotations.VisibleForTesting;
 import java.nio.ByteBuffer;
 import java.util.concurrent.CompletableFuture;
 import org.apache.commons.lang3.tuple.Pair;
 import org.apache.rocketmq.common.BoundaryType;
-import org.apache.rocketmq.tieredstore.common.AppendResult;
 import org.apache.rocketmq.tieredstore.provider.TieredFileSegment;
 
 public class TieredConsumeQueue {
@@ -40,20 +38,11 @@ public class TieredConsumeQueue {
     }
 
     public boolean isInitialized() {
-        return flatFile.getBaseOffset() != -1L;
+        return flatFile.getMinOffset() != -1L;
     }
 
-    @VisibleForTesting
     public TieredFlatFile getFlatFile() {
         return flatFile;
-    }
-
-    public long getBaseOffset() {
-        return flatFile.getBaseOffset();
-    }
-
-    public void setBaseOffset(long baseOffset) {
-        flatFile.setBaseOffset(baseOffset);
     }
 
     public long getMinOffset() {
