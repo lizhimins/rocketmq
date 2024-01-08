@@ -18,27 +18,11 @@ package org.apache.rocketmq.tieredstore.util;
 
 import java.util.HashMap;
 import java.util.Map;
+import org.apache.rocketmq.common.message.MessageQueue;
 import org.junit.Assert;
 import org.junit.Test;
 
 public class MessageStoreUtilTest {
-
-    @Test
-    public void getHashTest() {
-        Assert.assertEquals("161c08ff", MessageStoreUtil.getHash("TieredStorageDailyTest"));
-    }
-
-    @Test
-    public void offset2FileNameTest() {
-        Assert.assertEquals("cfcd208400000000000000000000", MessageStoreUtil.offset2FileName(0));
-        Assert.assertEquals("b10da56800000000004294937144", MessageStoreUtil.offset2FileName(4294937144L));
-    }
-
-    @Test
-    public void fileName2OffsetTest() {
-        Assert.assertEquals(0, MessageStoreUtil.fileName2Offset("cfcd208400000000000000000000"));
-        Assert.assertEquals(4294937144L, MessageStoreUtil.fileName2Offset("b10da56800000000004294937144"));
-    }
 
     @Test
     public void toHumanReadableTest() {
@@ -58,5 +42,31 @@ public class MessageStoreUtilTest {
         };
         testTable.forEach((in, expected) ->
             Assert.assertEquals(expected, MessageStoreUtil.toHumanReadable(in)));
+    }
+
+    @Test
+    public void getHashTest() {
+        Assert.assertEquals("161c08ff", MessageStoreUtil.getHash("TieredStorageDailyTest"));
+    }
+
+    @Test
+    public void filePathTest() {
+        MessageQueue mq = new MessageQueue();
+        mq.setBrokerName("BrokerName");
+        mq.setTopic("topicName");
+        mq.setQueueId(2);
+        Assert.assertEquals("BrokerName/topicName/2", MessageStoreUtil.toFilePath(mq));
+    }
+
+    @Test
+    public void offset2FileNameTest() {
+        Assert.assertEquals("cfcd208400000000000000000000", MessageStoreUtil.offset2FileName(0));
+        Assert.assertEquals("b10da56800000000004294937144", MessageStoreUtil.offset2FileName(4294937144L));
+    }
+
+    @Test
+    public void fileName2OffsetTest() {
+        Assert.assertEquals(0, MessageStoreUtil.fileName2Offset("cfcd208400000000000000000000"));
+        Assert.assertEquals(4294937144L, MessageStoreUtil.fileName2Offset("b10da56800000000004294937144"));
     }
 }

@@ -34,6 +34,10 @@ public class MessageStoreExecutor {
     public final ExecutorService bufferFetchExecutor;
     public final ExecutorService fileRecyclingExecutor;
 
+    public MessageStoreExecutor() {
+        this(10000);
+    }
+
     public MessageStoreExecutor(int maxQueueCapacity) {
 
         this.commonExecutor = ThreadUtils.newScheduledThreadPool(

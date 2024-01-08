@@ -76,19 +76,4 @@ public interface FileSegmentProvider {
      * @return put result, <code>true</code> if data successfully write; <code>false</code> otherwise
      */
     CompletableFuture<Boolean> commit0(FileSegmentInputStream inputStream, long position, int length, boolean append);
-
-    /**
-     * The max segment size of a file is determined by the file type
-     */
-    static long getMaxSizeByFileType(MessageStoreConfig messageStoreConfig, FileSegmentType fileType) {
-        switch (fileType) {
-            case COMMIT_LOG:
-                return messageStoreConfig.getTieredStoreCommitLogMaxSize();
-            case CONSUME_QUEUE:
-                return messageStoreConfig.getTieredStoreConsumeQueueMaxSize();
-            case INDEX:
-            default:
-                return Long.MAX_VALUE;
-        }
-    }
 }

@@ -87,9 +87,9 @@ public class FileSegmentInputStreamTest {
             bufferSize += byteBuffer.remaining();
         }
 
-        ByteBuffer codaBuffer = ByteBuffer.allocate(FlatCommitLogFile.CODA_SIZE);
-        codaBuffer.putInt(FlatCommitLogFile.CODA_SIZE);
-        codaBuffer.putInt(FlatCommitLogFile.BLANK_MAGIC_CODE);
+        ByteBuffer codaBuffer = ByteBuffer.allocate(MessageFormatUtil.COMMIT_LOG_CODA_SIZE);
+        codaBuffer.putInt(MessageFormatUtil.COMMIT_LOG_CODA_SIZE);
+        codaBuffer.putInt(MessageFormatUtil.BLANK_MAGIC_CODE);
         long timeMillis = System.currentTimeMillis();
         codaBuffer.putLong(timeMillis);
         codaBuffer.flip();
@@ -140,7 +140,7 @@ public class FileSegmentInputStreamTest {
         }
 
         int finalBufferSize = bufferSize;
-        int[] batchReadSizeTestSet = {FlatConsumeQueueFile.CONSUME_QUEUE_STORE_UNIT_SIZE - 1, FlatConsumeQueueFile.CONSUME_QUEUE_STORE_UNIT_SIZE, FlatConsumeQueueFile.CONSUME_QUEUE_STORE_UNIT_SIZE + 1};
+        int[] batchReadSizeTestSet = {MessageFormatUtil.CONSUME_QUEUE_UNIT_SIZE - 1, MessageFormatUtil.CONSUME_QUEUE_UNIT_SIZE, MessageFormatUtil.CONSUME_QUEUE_UNIT_SIZE + 1};
         verifyReadAndReset(expectedByteBuffer, () -> FileSegmentInputStreamFactory.build(
             FileSegmentType.CONSUME_QUEUE, COMMIT_LOG_START_OFFSET, uploadBufferList, null, finalBufferSize), bufferSize, batchReadSizeTestSet);
     }

@@ -90,7 +90,7 @@ public class FlatMessageFile implements FlatFileInterface {
 //        fileLock.lock();
 //        try {
 //            if (!consumeQueue.isInitialized()) {
-//                consumeQueue.setBaseOffset(offset * FlatConsumeQueueFile.CONSUME_QUEUE_STORE_UNIT_SIZE);
+//                consumeQueue.setBaseOffset(offset * MessageFormatUtil.CONSUME_QUEUE_UNIT_SIZE);
 //            }
 //        } finally {
 //            fileLock.unlock();
@@ -114,19 +114,19 @@ public class FlatMessageFile implements FlatFileInterface {
 
     @Override
     public long getConsumeQueueMinOffset() {
-        long cqOffset = consumeQueue.getMinOffset() / FlatConsumeQueueFile.CONSUME_QUEUE_STORE_UNIT_SIZE;
+        long cqOffset = consumeQueue.getMinOffset() / MessageFormatUtil.CONSUME_QUEUE_UNIT_SIZE;
         long effectiveOffset = this.commitLog.getMinConsumeQueueOffset();
         return Math.max(cqOffset, effectiveOffset);
     }
 
     @Override
     public long getConsumeQueueMaxOffset() {
-        return consumeQueue.getMaxOffset() / FlatConsumeQueueFile.CONSUME_QUEUE_STORE_UNIT_SIZE;
+        return consumeQueue.getMaxOffset() / MessageFormatUtil.CONSUME_QUEUE_UNIT_SIZE;
     }
 
     @Override
     public long getConsumeQueueCommitOffset() {
-        return consumeQueue.getCommitOffset() / FlatConsumeQueueFile.CONSUME_QUEUE_STORE_UNIT_SIZE;
+        return consumeQueue.getCommitOffset() / MessageFormatUtil.CONSUME_QUEUE_UNIT_SIZE;
     }
 
     @Override
@@ -338,8 +338,8 @@ public class FlatMessageFile implements FlatFileInterface {
 
     @Override
     public CompletableFuture<ByteBuffer> getConsumeQueueAsync(long queueOffset, int count) {
-        return consumeQueue.readAsync(queueOffset * FlatConsumeQueueFile.CONSUME_QUEUE_STORE_UNIT_SIZE,
-            count * FlatConsumeQueueFile.CONSUME_QUEUE_STORE_UNIT_SIZE);
+        return consumeQueue.readAsync(queueOffset * MessageFormatUtil.CONSUME_QUEUE_UNIT_SIZE,
+            count * MessageFormatUtil.CONSUME_QUEUE_UNIT_SIZE);
     }
 
     @Override

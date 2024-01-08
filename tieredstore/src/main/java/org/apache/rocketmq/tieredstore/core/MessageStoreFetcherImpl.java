@@ -366,7 +366,7 @@ public class MessageStoreFetcherImpl implements MessageStoreFetcher {
 
         CompletableFuture<ByteBuffer> readCommitLogFuture = readConsumeQueueFuture.thenCompose(cqBuffer -> {
             long firstCommitLogOffset = MessageFormatUtil.getCommitLogOffset(cqBuffer);
-            cqBuffer.position(cqBuffer.remaining() - FlatConsumeQueueFile.CONSUME_QUEUE_STORE_UNIT_SIZE);
+            cqBuffer.position(cqBuffer.remaining() - MessageFormatUtil.CONSUME_QUEUE_UNIT_SIZE);
             long lastCommitLogOffset = MessageFormatUtil.getCommitLogOffset(cqBuffer);
             if (lastCommitLogOffset < firstCommitLogOffset) {
                 log.error("MessageFetcher#getMessageFromTieredStoreAsync, " +
@@ -379,10 +379,10 @@ public class MessageStoreFetcherImpl implements MessageStoreFetcher {
 
             // Get the total size of the data by reducing the length limit of cq to prevent OOM
             long length = lastCommitLogOffset - firstCommitLogOffset + MessageFormatUtil.getSizeFromItem(cqBuffer);
-            while (cqBuffer.limit() > FlatConsumeQueueFile.CONSUME_QUEUE_STORE_UNIT_SIZE &&
+            while (cqBuffer.limit() > MessageFormatUtil.CONSUME_QUEUE_UNIT_SIZE &&
                 length > storeConfig.getReadAheadMessageSizeThreshold()) {
                 cqBuffer.limit(cqBuffer.position());
-                cqBuffer.position(cqBuffer.limit() - FlatConsumeQueueFile.CONSUME_QUEUE_STORE_UNIT_SIZE);
+                cqBuffer.position(cqBuffer.limit() - MessageFormatUtil.CONSUME_QUEUE_UNIT_SIZE);
                 length = MessageFormatUtil.getCommitLogOffset(cqBuffer)
                     - firstCommitLogOffset + MessageFormatUtil.getSizeFromItem(cqBuffer);
             }
@@ -393,7 +393,7 @@ public class MessageStoreFetcherImpl implements MessageStoreFetcher {
         int finalBatchSize = batchSize;
         return readConsumeQueueFuture.thenCombine(readCommitLogFuture, (cqBuffer, msgBuffer) -> {
             List<SelectBufferResult> bufferList = MessageFormatUtil.splitMessageBuffer(cqBuffer, msgBuffer);
-            int requestSize = cqBuffer.remaining() / FlatConsumeQueueFile.CONSUME_QUEUE_STORE_UNIT_SIZE;
+            int requestSize = cqBuffer.remaining() / MessageFormatUtil.CONSUME_QUEUE_UNIT_SIZE;
             if (bufferList.isEmpty()) {
                 result.setStatus(GetMessageStatus.NO_MATCHED_MESSAGE);
                 result.setNextBeginOffset(queueOffset + requestSize);

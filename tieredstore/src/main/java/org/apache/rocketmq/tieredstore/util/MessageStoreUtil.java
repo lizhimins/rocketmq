@@ -71,18 +71,18 @@ public class MessageStoreUtil {
         }
     }
 
+    public static String toFilePath(MessageQueue mq) {
+        return String.format("%s/%s/%s", mq.getBrokerName(), mq.getTopic(), mq.getQueueId());
+    }
+
     public static String offset2FileName(final long offset) {
         final NumberFormat numberFormat = NumberFormat.getInstance();
-
         numberFormat.setMinimumIntegerDigits(20);
         numberFormat.setMaximumFractionDigits(0);
         numberFormat.setGroupingUsed(false);
-
         try {
             MessageDigest md = MessageDigest.getInstance("MD5");
-
             md.update(Long.toString(offset).getBytes(StandardCharsets.UTF_8));
-
             byte[] digest = md.digest();
             String hash = String.format("%032x", new BigInteger(1, digest)).substring(0, 8);
             return hash + numberFormat.format(offset);
@@ -93,9 +93,5 @@ public class MessageStoreUtil {
 
     public static long fileName2Offset(final String fileName) {
         return Long.parseLong(fileName.substring(fileName.length() - 20));
-    }
-
-    public static String toFilePath(MessageQueue mq) {
-        return String.format("%s/%s/%s", mq.getBrokerName(), mq.getTopic(), mq.getQueueId());
     }
 }

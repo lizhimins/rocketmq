@@ -22,15 +22,9 @@ import org.apache.commons.lang3.tuple.Pair;
 import org.apache.rocketmq.common.BoundaryType;
 import org.apache.rocketmq.tieredstore.common.AppendResult;
 import org.apache.rocketmq.tieredstore.provider.FileSegment;
+import org.apache.rocketmq.tieredstore.util.MessageFormatUtil;
 
 public class FlatConsumeQueueFile {
-
-    /**
-     * commit log offset: long, 8 bytes
-     * message size: int, 4 bytes
-     * tag hash code: long, 8 bytes
-     */
-    public static final int CONSUME_QUEUE_STORE_UNIT_SIZE = 8 + 4 + 8;
 
     private final FlatCompositeFile flatCompositeFile;
 
@@ -59,7 +53,7 @@ public class FlatConsumeQueueFile {
     }
 
     public AppendResult append(final long offset, final int size, final long tagsCode, long timeStamp) {
-        ByteBuffer cqItem = ByteBuffer.allocate(CONSUME_QUEUE_STORE_UNIT_SIZE);
+        ByteBuffer cqItem = ByteBuffer.allocate(MessageFormatUtil.CONSUME_QUEUE_UNIT_SIZE);
         cqItem.putLong(offset).putInt(size).putLong(tagsCode).flip();
         return flatCompositeFile.append(cqItem, timeStamp, true);
     }
@@ -85,8 +79,8 @@ public class FlatConsumeQueueFile {
         if (fileSegment == null) {
             return Pair.of(-1L, -1L);
         }
-        return Pair.of(fileSegment.getBaseOffset() / FlatConsumeQueueFile.CONSUME_QUEUE_STORE_UNIT_SIZE,
-            fileSegment.getCommitOffset() / FlatConsumeQueueFile.CONSUME_QUEUE_STORE_UNIT_SIZE - 1);
+        return Pair.of(fileSegment.getBaseOffset() / MessageFormatUtil.CONSUME_QUEUE_UNIT_SIZE,
+            fileSegment.getCommitOffset() / MessageFormatUtil.CONSUME_QUEUE_UNIT_SIZE - 1);
     }
 
     public void destroy() {

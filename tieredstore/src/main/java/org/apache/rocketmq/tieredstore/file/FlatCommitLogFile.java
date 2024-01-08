@@ -34,14 +34,6 @@ public class FlatCommitLogFile {
 
     private static final Logger log = LoggerFactory.getLogger(MessageStoreUtil.TIERED_STORE_LOGGER_NAME);
 
-    /**
-     * item size: int, 4 bytes
-     * magic code: int, 4 bytes
-     * max store timestamp: long, 8 bytes
-     */
-    public static final int CODA_SIZE = 4 + 8 + 4;
-    public static final int BLANK_MAGIC_CODE = 0xBBCCDDEE ^ 1880681586 + 8;
-
     private final MessageStoreConfig storeConfig;
     private final FlatCompositeFile flatCompositeFile;
     private final AtomicLong consumeQueueMinOffset;

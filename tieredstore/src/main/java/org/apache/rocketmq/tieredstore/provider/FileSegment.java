@@ -27,9 +27,9 @@ import org.apache.rocketmq.tieredstore.common.AppendResult;
 import org.apache.rocketmq.tieredstore.common.FileSegmentType;
 import org.apache.rocketmq.tieredstore.exception.MessageStoreErrorCode;
 import org.apache.rocketmq.tieredstore.exception.MessageStoreException;
-import org.apache.rocketmq.tieredstore.file.FlatConsumeQueueFile;
 import org.apache.rocketmq.tieredstore.stream.FileSegmentInputStream;
 import org.apache.rocketmq.tieredstore.stream.FileSegmentInputStreamFactory;
+import org.apache.rocketmq.tieredstore.util.MessageFormatUtil;
 import org.apache.rocketmq.tieredstore.util.MessageStoreUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -60,14 +60,14 @@ public abstract class FileSegment implements Comparable<FileSegment>, FileSegmen
 
     private volatile List<ByteBuffer> bufferList = new ArrayList<>();
     private volatile FileSegmentInputStream fileSegmentInputStream;
-    private volatile CompletableFuture<Boolean> flightCommitRequest = CompletableFuture.completedFuture(false);
+    private volatile CompletableFuture<Boolean> flightCommitRequest;
 
     public FileSegment(MessageStoreConfig storeConfig, FileSegmentType fileType, String filePath, long baseOffset) {
         this.storeConfig = storeConfig;
         this.fileType = fileType;
         this.filePath = filePath;
         this.baseOffset = baseOffset;
-        this.maxSize = FileSegmentProvider.getMaxSizeByFileType(storeConfig, fileType);
+        this.maxSize = this.getMaxSizeByFileType();
     }
 
     @Override
@@ -79,16 +79,36 @@ public abstract class FileSegment implements Comparable<FileSegment>, FileSegmen
         return baseOffset;
     }
 
-    public long getCommitOffset() {
-        return baseOffset + commitPosition;
-    }
-
     public long getCommitPosition() {
         return commitPosition;
     }
 
-    public long getMaxOffset() {
+    public long getAppendPosition() {
+        return appendPosition;
+    }
+
+    public long getCommitOffset() {
+        return baseOffset + commitPosition;
+    }
+
+    public long getAppendOffset() {
         return baseOffset + appendPosition;
+    }
+
+    public FileSegmentType getFileType() {
+        return fileType;
+    }
+
+    public long getMaxSizeByFileType() {
+        switch (fileType) {
+            case COMMIT_LOG:
+                return storeConfig.getTieredStoreCommitLogMaxSize();
+            case CONSUME_QUEUE:
+                return storeConfig.getTieredStoreConsumeQueueMaxSize();
+            case INDEX:
+            default:
+                return Long.MAX_VALUE;
+        }
     }
 
     public long getMaxSize() {
@@ -115,46 +135,36 @@ public abstract class FileSegment implements Comparable<FileSegment>, FileSegmen
         return closed;
     }
 
-    public void setClosed(boolean closed) {
-        this.closed = closed;
-    }
-
-    //public void markSealed() {
-    //    this.markSealed(true);
-    //}
-    //
-    //public void markSealed(boolean appendCoda) {
-    //    segmentLock.lock();
-    //    try {
-    //        closed = true;
-    //        if (fileType == FileSegmentType.COMMIT_LOG && appendCoda) {
-    //            appendCoda();
-    //        }
-    //    } finally {
-    //        segmentLock.unlock();
-    //    }
-    //}
-
-    public boolean isDeleted() {
-        return deleted;
-    }
-
-    public void markDeleted(boolean deleted) {
+    public void close() {
         fileLock.lock();
         try {
-            this.deleted = deleted;
+            this.closed = true;
         } finally {
             fileLock.unlock();
         }
     }
 
-    public FileSegmentType getFileType() {
-        return fileType;
+    public boolean isDeleted() {
+        return deleted;
+    }
+
+    public void markDeleted() {
+        fileLock.lock();
+        try {
+            this.deleted = true;
+        } finally {
+            fileLock.unlock();
+        }
     }
 
     public void initPosition(long pos) {
-        this.commitPosition = pos;
-        this.appendPosition = pos;
+        fileLock.lock();
+        try {
+            this.commitPosition = pos;
+            this.appendPosition = pos;
+        } finally {
+            fileLock.unlock();
+        }
     }
 
     private List<ByteBuffer> borrowBuffer() {
@@ -220,18 +230,6 @@ public abstract class FileSegment implements Comparable<FileSegment>, FileSegmen
         }
     }
 
-    public void setCommitPosition(long commitPosition) {
-        this.commitPosition = commitPosition;
-    }
-
-    public long getAppendPosition() {
-        return appendPosition;
-    }
-
-    public void setAppendPosition(long appendPosition) {
-        this.appendPosition = appendPosition;
-    }
-
     public ByteBuffer read(long position, int length) {
         return readAsync(position, length).join();
     }
@@ -263,7 +261,7 @@ public abstract class FileSegment implements Comparable<FileSegment>, FileSegmen
                     new MessageStoreException(MessageStoreErrorCode.NO_NEW_DATA, "request position is equal to commit position"));
                 return future;
             }
-            if (fileType == FileSegmentType.CONSUME_QUEUE && length % FlatConsumeQueueFile.CONSUME_QUEUE_STORE_UNIT_SIZE != 0) {
+            if (fileType == FileSegmentType.CONSUME_QUEUE && length % MessageFormatUtil.CONSUME_QUEUE_UNIT_SIZE != 0) {
                 future.completeExceptionally(
                     new MessageStoreException(MessageStoreErrorCode.ILLEGAL_PARAM, "position and length is illegal"));
                 return future;
@@ -319,7 +317,7 @@ public abstract class FileSegment implements Comparable<FileSegment>, FileSegmen
             if (fileSegmentInputStream != null) {
                 long fileSize = this.getSize();
                 if (fileSize == -1L) {
-                    log.error("Get commit position error before commit, Commit: %d, Expect: %d, Current Max: %d, FileName: %s",
+                    log.error("Get commit position error before commit, Commit: {}, Expect: {}, Current Max: {}, FileName: {}",
                         commitPosition, commitPosition + fileSegmentInputStream.getContentLength(), appendPosition, getPath());
                     releaseCommitLock();
                     return CompletableFuture.completedFuture(false);

@@ -25,8 +25,6 @@ import org.apache.rocketmq.common.message.MessageDecoder;
 import org.apache.rocketmq.logging.org.slf4j.Logger;
 import org.apache.rocketmq.logging.org.slf4j.LoggerFactory;
 import org.apache.rocketmq.tieredstore.common.SelectBufferResult;
-import org.apache.rocketmq.tieredstore.file.FlatCommitLogFile;
-import org.apache.rocketmq.tieredstore.file.FlatConsumeQueueFile;
 
 public class MessageFormatUtil {
 
@@ -36,9 +34,23 @@ public class MessageFormatUtil {
     public static final int MAGIC_CODE_POSITION = 4;
     public static final int QUEUE_OFFSET_POSITION = 20;
     public static final int PHYSICAL_OFFSET_POSITION = 28;
-    public static final int SYS_FLAG_OFFSET_POSITION = 36;
     public static final int STORE_TIMESTAMP_POSITION = 56;
     public static final int STORE_HOST_POSITION = 64;
+
+    /**
+     * item size:           int, 4 bytes
+     * magic code:          int, 4 bytes
+     * max store timestamp: long, 8 bytes
+     */
+    public static final int COMMIT_LOG_CODA_SIZE = 4 + 8 + 4;
+    public static final int BLANK_MAGIC_CODE = 0xBBCCDDEE ^ 1880681586 + 8;
+
+    /**
+     * commit log offset: long, 8 bytes
+     * message size: int, 4 bytes
+     * tag hash code: long, 8 bytes
+     */
+    public static final int CONSUME_QUEUE_UNIT_SIZE = 8 + 4 + 8;
 
     public static int getTotalSize(ByteBuffer message) {
         return message.getInt(message.position());
@@ -90,27 +102,32 @@ public class MessageFormatUtil {
 
     public static List<SelectBufferResult> splitMessageBuffer(ByteBuffer cqBuffer, ByteBuffer msgBuffer) {
 
+        if (cqBuffer == null || msgBuffer == null) {
+            log.error("MessageFormatUtil split buffer error, cq buffer or msg buffer is null");
+            return new ArrayList<>();
+        }
+
         cqBuffer.rewind();
         msgBuffer.rewind();
 
         List<SelectBufferResult> bufferResultList = new ArrayList<>(
-            cqBuffer.remaining() / FlatConsumeQueueFile.CONSUME_QUEUE_STORE_UNIT_SIZE);
+            cqBuffer.remaining() / CONSUME_QUEUE_UNIT_SIZE);
 
         if (msgBuffer.remaining() == 0) {
             log.error("MessageFormatUtil split buffer error, msg buffer length is 0");
             return bufferResultList;
         }
 
-        if (cqBuffer.remaining() % FlatConsumeQueueFile.CONSUME_QUEUE_STORE_UNIT_SIZE != 0) {
+        if (cqBuffer.remaining() == 0 || cqBuffer.remaining() % CONSUME_QUEUE_UNIT_SIZE != 0) {
             log.error("MessageFormatUtil split buffer error, cq buffer size is {}", cqBuffer.remaining());
             return bufferResultList;
         }
 
         try {
-            long firstCommitLogOffset = MessageFormatUtil.getCommitLogOffset(cqBuffer);
+            long firstCommitLogOffset = MessageFormatUtil.getCommitLogOffsetFromItem(cqBuffer);
 
             for (int position = cqBuffer.position(); position < cqBuffer.limit();
-                position += FlatConsumeQueueFile.CONSUME_QUEUE_STORE_UNIT_SIZE) {
+                position += CONSUME_QUEUE_UNIT_SIZE) {
 
                 cqBuffer.position(position);
                 long logOffset = MessageFormatUtil.getCommitLogOffsetFromItem(cqBuffer);
@@ -126,8 +143,8 @@ public class MessageFormatUtil {
 
                 msgBuffer.position(offset);
                 int magicCode = getMagicCode(msgBuffer);
-                if (magicCode == FlatCommitLogFile.BLANK_MAGIC_CODE) {
-                    offset += FlatCommitLogFile.CODA_SIZE;
+                if (magicCode == BLANK_MAGIC_CODE) {
+                    offset += COMMIT_LOG_CODA_SIZE;
                     msgBuffer.position(offset);
                     magicCode = getMagicCode(msgBuffer);
                 }

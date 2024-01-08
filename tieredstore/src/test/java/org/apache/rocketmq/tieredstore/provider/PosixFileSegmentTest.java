@@ -23,6 +23,7 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.Random;
 import org.apache.rocketmq.common.message.MessageQueue;
+import org.apache.rocketmq.tieredstore.MessageStoreExecutor;
 import org.apache.rocketmq.tieredstore.MessageStoreTest;
 import org.apache.rocketmq.tieredstore.common.FileSegmentType;
 import org.apache.rocketmq.tieredstore.MessageStoreConfig;
@@ -37,20 +38,31 @@ public class PosixFileSegmentTest {
     private final String storePath = MessageStoreTest.getRandomStorePath();
     private MessageStoreConfig storeConfig;
     private MessageQueue mq;
+    private MessageStoreExecutor storeExecutor;
 
     @Before
-    public void setUp() {
+    public void init() {
         storeConfig = new MessageStoreConfig();
         storeConfig.setTieredStoreFilePath(storePath);
-        mq = new MessageQueue("OSSFileSegmentTest", "broker", 0);
-        // MessageStoreExecutor.init();
+        mq = new MessageQueue("FileSegmentTest", "brokerName", 0);
+        storeExecutor = new MessageStoreExecutor();
     }
 
     @After
-    public void tearDown() throws IOException {
+    public void shutdown() {
         MessageStoreTest.deleteStoreDirectory(storePath);
-        // MessageStoreExecutor.shutdown();
+        storeExecutor.shutdown();
     }
+
+    @Test
+    public void fileSizeTest() {
+        FileSegment fileSegment = new PosixFileSegment(
+            storeConfig, FileSegmentType.CONSUME_QUEUE, MessageStoreUtil.toFilePath(mq), 0);
+        Assert.assertTrue(fileSegment.getPath().startsWith(storePath));
+        Assert.assertTrue(fileSegment.getPath().endsWith(File.separator + "0.0.0.0_0"));
+        Assert.assertTrue(fileSegment.getPath().endsWith(File.separator + "0.0.0.0_0.cq"));
+    }
+
 
     @Test
     public void testCommitAndRead() throws IOException {

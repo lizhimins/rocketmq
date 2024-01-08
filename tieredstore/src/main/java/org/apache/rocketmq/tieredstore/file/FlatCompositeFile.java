@@ -96,7 +96,7 @@ public class FlatCompositeFile {
             if (fileSegmentTable.isEmpty()) {
                 return OFFSET_NOT_EXIST;
             }
-            return fileSegmentTable.lastEntry().getValue().getMaxOffset();
+            return fileSegmentTable.lastEntry().getValue().getAppendOffset();
         } finally {
             fileSegmentLock.readLock().unlock();
         }
@@ -433,7 +433,7 @@ public class FlatCompositeFile {
             while (!fileSegmentTable.isEmpty()) {
                 FileSegment fileSegment = fileSegmentTable.firstEntry().getValue();
                 try {
-                    fileSegment.markDeleted(true);
+                    fileSegment.markDeleted();
                     fileSegment.destroyFile();
                     if (!fileSegment.exists()) {
                         fileSegmentTable.remove(fileSegment.getBaseOffset());

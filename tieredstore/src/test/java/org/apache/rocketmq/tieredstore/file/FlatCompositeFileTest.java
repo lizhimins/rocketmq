@@ -25,6 +25,7 @@ import org.apache.rocketmq.tieredstore.metadata.DefaultMetadataStore;
 import org.apache.rocketmq.tieredstore.metadata.MetadataStore;
 import org.apache.rocketmq.tieredstore.provider.FileSegment;
 import org.apache.rocketmq.tieredstore.provider.MemoryFileSegment;
+import org.apache.rocketmq.tieredstore.util.MessageFormatUtil;
 import org.apache.rocketmq.tieredstore.util.MessageStoreUtil;
 import org.junit.After;
 import org.junit.Assert;
@@ -93,7 +94,7 @@ public class FlatCompositeFileTest {
         fileSegment.commit();
         fileQueue.updateFileSegment(fileSegment);
         metadata = metadataStore.getFileSegment(fileSegment.getPath(), FileSegmentType.COMMIT_LOG, 100);
-        Assert.assertEquals(1000 + FlatCommitLogFile.CODA_SIZE, metadata.getSize());
+        Assert.assertEquals(1000 + MessageFormatUtil.COMMIT_LOG_CODA_SIZE, metadata.getSize());
         Assert.assertTrue(metadata.getSealTimestamp() > 0);
 
         MemoryFileSegment fileSegment2 = new MemoryFileSegment(FileSegmentType.COMMIT_LOG,
@@ -125,12 +126,12 @@ public class FlatCompositeFileTest {
 
         FileSegment segment2 = fileQueue.getFileToWrite();
         Assert.assertNotSame(segment1, segment2);
-        Assert.assertEquals(1000 + 100 + FlatCommitLogFile.CODA_SIZE, segment1.getMaxOffset());
-        Assert.assertEquals(1000 + 100 + FlatCommitLogFile.CODA_SIZE, segment2.getBaseOffset());
+        Assert.assertEquals(1000 + 100 + MessageFormatUtil.COMMIT_LOG_CODA_SIZE, segment1.getAppendOffset());
+        Assert.assertEquals(1000 + 100 + MessageFormatUtil.COMMIT_LOG_CODA_SIZE, segment2.getBaseOffset());
 
 //        Assert.assertSame(fileQueue.getSegmentIndexByOffset(1000), 0);
 //        Assert.assertSame(fileQueue.getSegmentIndexByOffset(1050), 0);
-//        Assert.assertSame(fileQueue.getSegmentIndexByOffset(1100 + FlatCommitLogFile.CODA_SIZE), 1);
+//        Assert.assertSame(fileQueue.getSegmentIndexByOffset(1100 + MessageFormatUtil.COMMIT_LOG_CODA_SIZE), 1);
 //        Assert.assertSame(fileQueue.getSegmentIndexByOffset(1150), -1);
     }
 
@@ -152,7 +153,7 @@ public class FlatCompositeFileTest {
         buffer.putLong(currentTimeMillis);
         buffer.rewind();
         fileQueue.append(buffer);
-        Assert.assertEquals(1100, segment1.getMaxOffset());
+        Assert.assertEquals(1100, segment1.getAppendOffset());
 
 //        segment1.setFull();
         fileQueue.commit(true);

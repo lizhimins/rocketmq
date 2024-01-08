@@ -61,16 +61,17 @@ public class MessageStoreTest {
 
     public static String getRandomStorePath() {
         return Paths.get(FileUtils.getTempDirectoryPath(),
-                TIERED_STORE_PATH, UUID.randomUUID().toString()).toString();
+            TIERED_STORE_PATH, UUID.randomUUID().toString()).toString();
     }
 
     public static void deleteStoreDirectory(String storePath) {
         try {
             FileUtils.deleteDirectory(new File(storePath));
         } catch (IOException e) {
-            log.error("Delete store directory failed, filePath: {}", storePath);
+            log.error("Delete store directory failed, filePath: {}", storePath, e);
         }
     }
+
     private final String storePath = MessageStoreTest.getRandomStorePath();
 
     private MessageStoreConfig storeConfig;
