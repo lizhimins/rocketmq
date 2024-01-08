@@ -38,13 +38,12 @@ import org.apache.rocketmq.logging.org.slf4j.Logger;
 import org.apache.rocketmq.logging.org.slf4j.LoggerFactory;
 import org.apache.rocketmq.store.logfile.DefaultMappedFile;
 import org.apache.rocketmq.tieredstore.MessageStoreConfig;
-import org.apache.rocketmq.tieredstore.MessageStoreExecutor;
 import org.apache.rocketmq.tieredstore.MessageStoreTest;
 import org.apache.rocketmq.tieredstore.common.AppendResult;
 import org.apache.rocketmq.tieredstore.file.FlatFileFactory;
 import org.apache.rocketmq.tieredstore.metadata.DefaultMetadataStore;
 import org.apache.rocketmq.tieredstore.metadata.MetadataStore;
-import org.apache.rocketmq.tieredstore.util.TieredStoreUtil;
+import org.apache.rocketmq.tieredstore.util.MessageStoreUtil;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
@@ -54,7 +53,7 @@ import static org.awaitility.Awaitility.await;
 
 public class IndexStoreServiceTest {
 
-    private static final Logger log = LoggerFactory.getLogger(TieredStoreUtil.TIERED_STORE_LOGGER_NAME);
+    private static final Logger log = LoggerFactory.getLogger(MessageStoreUtil.TIERED_STORE_LOGGER_NAME);
 
     private static final String TOPIC_NAME = "TopicTest";
     private static final int TOPIC_ID = 123;

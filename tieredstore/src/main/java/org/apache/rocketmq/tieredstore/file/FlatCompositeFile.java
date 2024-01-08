@@ -34,11 +34,11 @@ import org.apache.rocketmq.tieredstore.metadata.MetadataStore;
 import org.apache.rocketmq.tieredstore.metadata.entity.FileSegmentMetadata;
 import org.apache.rocketmq.tieredstore.provider.FileSegment;
 import org.apache.rocketmq.tieredstore.provider.FileSegmentFactory;
-import org.apache.rocketmq.tieredstore.util.TieredStoreUtil;
+import org.apache.rocketmq.tieredstore.util.MessageStoreUtil;
 
 public class FlatCompositeFile {
 
-    private static final Logger log = LoggerFactory.getLogger(TieredStoreUtil.TIERED_STORE_LOGGER_NAME);
+    private static final Logger log = LoggerFactory.getLogger(MessageStoreUtil.TIERED_STORE_LOGGER_NAME);
     private static final long OFFSET_NOT_EXIST = -1L;
 
     private final String filePath;

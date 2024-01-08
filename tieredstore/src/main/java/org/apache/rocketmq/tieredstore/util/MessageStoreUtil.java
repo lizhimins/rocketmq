@@ -16,15 +16,15 @@
  */
 package org.apache.rocketmq.tieredstore.util;
 
-import java.io.File;
 import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.text.DecimalFormat;
 import java.text.NumberFormat;
 import org.apache.rocketmq.common.message.MessageQueue;
 
-public class TieredStoreUtil {
+public class MessageStoreUtil {
 
     public static final String TIERED_STORE_LOGGER_NAME = "RocketmqTieredStore";
 
@@ -66,8 +66,8 @@ public class TieredStoreUtil {
             md.update(str.getBytes(StandardCharsets.UTF_8));
             byte[] digest = md.digest();
             return String.format("%032x", new BigInteger(1, digest)).substring(0, 8);
-        } catch (Exception ignore) {
-            return "";
+        } catch (NoSuchAlgorithmException e) {
+            throw new RuntimeException(e);
         }
     }
 
@@ -95,7 +95,7 @@ public class TieredStoreUtil {
         return Long.parseLong(fileName.substring(fileName.length() - 20));
     }
 
-    public static String toPath(MessageQueue mq) {
-        return mq.getBrokerName() + File.separator + mq.getTopic() + File.separator + mq.getQueueId();
+    public static String toFilePath(MessageQueue mq) {
+        return String.format("%s/%s/%s", mq.getBrokerName(), mq.getTopic(), mq.getQueueId());
     }
 }

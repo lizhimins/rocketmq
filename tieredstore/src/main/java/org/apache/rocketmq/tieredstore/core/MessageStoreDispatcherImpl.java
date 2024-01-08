@@ -49,11 +49,11 @@ import org.apache.rocketmq.tieredstore.file.FlatMessageFileExt;
 import org.apache.rocketmq.tieredstore.metrics.MessageStoreMetricsConstant;
 import org.apache.rocketmq.tieredstore.metrics.MessageStoreMetricsManager;
 import org.apache.rocketmq.tieredstore.util.MessageFormatUtil;
-import org.apache.rocketmq.tieredstore.util.TieredStoreUtil;
+import org.apache.rocketmq.tieredstore.util.MessageStoreUtil;
 
 public class MessageStoreDispatcherImpl extends ServiceThread implements MessageStoreDispatcher {
 
-    protected static final Logger log = LoggerFactory.getLogger(TieredStoreUtil.TIERED_STORE_LOGGER_NAME);
+    protected static final Logger log = LoggerFactory.getLogger(MessageStoreUtil.TIERED_STORE_LOGGER_NAME);
 
     protected static final long OFFSET_NOT_EXIST = -1L;
     protected volatile boolean stopped = true;

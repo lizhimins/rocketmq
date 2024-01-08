@@ -22,6 +22,7 @@ import io.opentelemetry.api.common.AttributesBuilder;
 import io.opentelemetry.api.metrics.Meter;
 import io.opentelemetry.sdk.metrics.InstrumentSelector;
 import io.opentelemetry.sdk.metrics.ViewBuilder;
+import java.io.File;
 import java.lang.reflect.Constructor;
 import java.util.List;
 import java.util.Set;
@@ -54,11 +55,11 @@ import org.apache.rocketmq.tieredstore.metrics.MessageStoreMetricsManager;
 import org.apache.rocketmq.tieredstore.core.MessageStoreDispatcherImpl;
 import org.apache.rocketmq.tieredstore.core.MessageStoreFetcherImpl;
 import org.apache.rocketmq.tieredstore.core.MessageStoreFilter;
-import org.apache.rocketmq.tieredstore.util.TieredStoreUtil;
+import org.apache.rocketmq.tieredstore.util.MessageStoreUtil;
 
 public class MessageStore extends AbstractPluginMessageStore {
 
-    protected static final Logger logger = LoggerFactory.getLogger(TieredStoreUtil.TIERED_STORE_LOGGER_NAME);
+    protected static final Logger logger = LoggerFactory.getLogger(MessageStoreUtil.TIERED_STORE_LOGGER_NAME);
 
     protected final String brokerName;
     protected final org.apache.rocketmq.store.MessageStore defaultStore;
@@ -85,6 +86,10 @@ public class MessageStore extends AbstractPluginMessageStore {
         this.flatFileManager = new FlatFileStore(metadataStore, storeConfig);
         this.fetcher = new MessageStoreFetcherImpl(flatFileManager);
         this.dispatcher = new MessageStoreDispatcherImpl(this);
+    }
+
+    public static String toPath(MessageQueue mq) {
+        return mq.getBrokerName() + File.separator + mq.getTopic() + File.separator + mq.getQueueId();
     }
 
 //    public static void addSystemTopic(final String topic) {

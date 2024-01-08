@@ -30,11 +30,10 @@ import org.apache.rocketmq.common.UtilAll;
 import org.apache.rocketmq.logging.org.slf4j.Logger;
 import org.apache.rocketmq.logging.org.slf4j.LoggerFactory;
 import org.apache.rocketmq.tieredstore.MessageStoreConfig;
-import org.apache.rocketmq.tieredstore.MessageStoreExecutor;
 import org.apache.rocketmq.tieredstore.file.FlatFileFactory;
 import org.apache.rocketmq.tieredstore.metadata.DefaultMetadataStore;
 import org.apache.rocketmq.tieredstore.metadata.MetadataStore;
-import org.apache.rocketmq.tieredstore.util.TieredStoreUtil;
+import org.apache.rocketmq.tieredstore.util.MessageStoreUtil;
 import org.junit.Assert;
 import org.junit.Ignore;
 import org.openjdk.jmh.annotations.BenchmarkMode;
@@ -58,7 +57,7 @@ import org.openjdk.jmh.runner.options.OptionsBuilder;
 @Fork(value = 1, jvmArgs = {"-Djava.net.preferIPv4Stack=true", "-Djmh.rmi.port=1099"})
 public class IndexStoreServiceBenchTest {
 
-    private static final Logger log = LoggerFactory.getLogger(TieredStoreUtil.TIERED_STORE_LOGGER_NAME);
+    private static final Logger log = LoggerFactory.getLogger(MessageStoreUtil.TIERED_STORE_LOGGER_NAME);
     private static final String TOPIC_NAME = "TopicTest";
     private MessageStoreConfig storeConfig;
     private IndexStoreService indexStoreService;

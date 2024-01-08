@@ -47,7 +47,7 @@ import org.apache.rocketmq.tieredstore.common.FileSegmentType;
 import org.apache.rocketmq.tieredstore.file.FlatFileStore;
 import org.apache.rocketmq.tieredstore.file.FlatMessageFileExt;
 import org.apache.rocketmq.tieredstore.metadata.MetadataStore;
-import org.apache.rocketmq.tieredstore.util.TieredStoreUtil;
+import org.apache.rocketmq.tieredstore.util.MessageStoreUtil;
 
 import static org.apache.rocketmq.store.metrics.DefaultStoreMetricsConstant.GAUGE_STORAGE_SIZE;
 import static org.apache.rocketmq.store.metrics.DefaultStoreMetricsConstant.LABEL_STORAGE_MEDIUM;
@@ -71,7 +71,7 @@ import static org.apache.rocketmq.tieredstore.metrics.MessageStoreMetricsConstan
 
 public class MessageStoreMetricsManager {
 
-    private static final Logger logger = LoggerFactory.getLogger(TieredStoreUtil.TIERED_STORE_LOGGER_NAME);
+    private static final Logger logger = LoggerFactory.getLogger(MessageStoreUtil.TIERED_STORE_LOGGER_NAME);
     public static Supplier<AttributesBuilder> attributesBuilderSupplier;
     private static String storageMedium = STORAGE_MEDIUM_BLOB;
 
@@ -124,7 +124,7 @@ public class MessageStoreMetricsManager {
             .build();
 
         ViewBuilder bufferSizeViewBuilder = View.builder()
-            .setAggregation(Aggregation.explicitBucketHistogram(Arrays.asList(1d * TieredStoreUtil.KB, 10d * TieredStoreUtil.KB, 100d * TieredStoreUtil.KB, 1d * TieredStoreUtil.MB, 10d * TieredStoreUtil.MB, 32d * TieredStoreUtil.MB, 50d * TieredStoreUtil.MB, 100d * TieredStoreUtil.MB)))
+            .setAggregation(Aggregation.explicitBucketHistogram(Arrays.asList(1d * MessageStoreUtil.KB, 10d * MessageStoreUtil.KB, 100d * MessageStoreUtil.KB, 1d * MessageStoreUtil.MB, 10d * MessageStoreUtil.MB, 32d * MessageStoreUtil.MB, 50d * MessageStoreUtil.MB, 100d * MessageStoreUtil.MB)))
             .setDescription("tiered_store_buffer_size_view");
 
         res.add(new Pair<>(rpcLatencySelector, rpcLatencyViewBuilder));

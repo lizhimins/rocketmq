@@ -31,15 +31,14 @@ import org.apache.rocketmq.common.message.MessageQueue;
 import org.apache.rocketmq.logging.org.slf4j.Logger;
 import org.apache.rocketmq.logging.org.slf4j.LoggerFactory;
 import org.apache.rocketmq.tieredstore.MessageStoreConfig;
-import org.apache.rocketmq.tieredstore.MessageStoreExecutor;
 import org.apache.rocketmq.tieredstore.index.IndexService;
 import org.apache.rocketmq.tieredstore.index.IndexStoreService;
 import org.apache.rocketmq.tieredstore.metadata.MetadataStore;
-import org.apache.rocketmq.tieredstore.util.TieredStoreUtil;
+import org.apache.rocketmq.tieredstore.util.MessageStoreUtil;
 
 public class FlatFileStore {
 
-    private static final Logger log = LoggerFactory.getLogger(TieredStoreUtil.TIERED_STORE_LOGGER_NAME);
+    private static final Logger log = LoggerFactory.getLogger(MessageStoreUtil.TIERED_STORE_LOGGER_NAME);
     private static final String RMQ_SYS_TIERED_STORE_INDEX_TOPIC = "rmq_sys_INDEX";
 
     private final MetadataStore metadataStore;
@@ -54,8 +53,9 @@ public class FlatFileStore {
         this.storeConfig = storeConfig;
         this.metadataStore = metadataStore;
         this.fileAllocator = new FlatFileFactory(metadataStore, storeConfig);
-        this.indexStoreService = new IndexStoreService(fileAllocator, TieredStoreUtil.toPath(new MessageQueue(
-            RMQ_SYS_TIERED_STORE_INDEX_TOPIC, storeConfig.getBrokerName(), 0)));
+        this.indexStoreService = null;
+//        this.indexStoreService = new IndexStoreService(fileAllocator, MessageStoreUtil.toPath(new MessageQueue(
+//            RMQ_SYS_TIERED_STORE_INDEX_TOPIC, storeConfig.getBrokerName(), 0)));
         this.flatFileConcurrentMap = new ConcurrentHashMap<>();
     }
 

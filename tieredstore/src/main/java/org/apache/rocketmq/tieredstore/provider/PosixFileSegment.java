@@ -36,7 +36,7 @@ import org.apache.rocketmq.tieredstore.MessageStoreExecutor;
 import org.apache.rocketmq.tieredstore.common.FileSegmentType;
 import org.apache.rocketmq.tieredstore.metrics.MessageStoreMetricsManager;
 import org.apache.rocketmq.tieredstore.stream.FileSegmentInputStream;
-import org.apache.rocketmq.tieredstore.util.TieredStoreUtil;
+import org.apache.rocketmq.tieredstore.util.MessageStoreUtil;
 
 import static org.apache.rocketmq.tieredstore.metrics.MessageStoreMetricsConstant.LABEL_FILE_TYPE;
 import static org.apache.rocketmq.tieredstore.metrics.MessageStoreMetricsConstant.LABEL_OPERATION;
@@ -48,7 +48,7 @@ import static org.apache.rocketmq.tieredstore.metrics.MessageStoreMetricsConstan
  */
 public class PosixFileSegment extends FileSegment {
 
-    private static final Logger logger = LoggerFactory.getLogger(TieredStoreUtil.TIERED_STORE_LOGGER_NAME);
+    private static final Logger logger = LoggerFactory.getLogger(MessageStoreUtil.TIERED_STORE_LOGGER_NAME);
 
     private static final String UNDERLINE = "_";
     private static final String OPERATION_POSIX_READ = "read";
@@ -70,9 +70,9 @@ public class PosixFileSegment extends FileSegment {
 
         // fullPath: basePath/hash_cluster/broker/topic/queueId/fileType/baseOffset
         String brokerClusterName = storeConfig.getBrokerClusterName();
-        String clusterBasePath = TieredStoreUtil.getHash(brokerClusterName) + UNDERLINE + brokerClusterName;
+        String clusterBasePath = MessageStoreUtil.getHash(brokerClusterName) + UNDERLINE + brokerClusterName;
         this.fullPath = Paths.get(basePath, clusterBasePath, filePath,
-            fileType.toString(), TieredStoreUtil.offset2FileName(baseOffset)).toString();
+            fileType.toString(), MessageStoreUtil.offset2FileName(baseOffset)).toString();
         logger.info("Constructing Posix FileSegment, filePath: {}", fullPath);
 
         createFile();

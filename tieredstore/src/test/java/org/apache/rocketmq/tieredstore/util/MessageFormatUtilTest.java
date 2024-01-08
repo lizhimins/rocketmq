@@ -34,7 +34,6 @@ import org.junit.Test;
 
 public class MessageFormatUtilTest {
 
-
     private static ByteBuffer cqItem;
 
     @BeforeClass

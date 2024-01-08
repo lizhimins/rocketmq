@@ -30,7 +30,7 @@ import org.apache.rocketmq.tieredstore.file.FlatConsumeQueueFile;
 
 public class MessageFormatUtil {
 
-    private static final Logger log = LoggerFactory.getLogger(TieredStoreUtil.TIERED_STORE_LOGGER_NAME);
+    private static final Logger log = LoggerFactory.getLogger(MessageStoreUtil.TIERED_STORE_LOGGER_NAME);
 
     public static final int MSG_ID_LENGTH = 8 + 8;
     public static final int MAGIC_CODE_POSITION = 4;

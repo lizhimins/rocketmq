@@ -20,7 +20,7 @@ package org.apache.rocketmq.tieredstore.file;
 import org.apache.rocketmq.common.message.MessageQueue;
 import org.apache.rocketmq.tieredstore.metadata.entity.QueueMetadata;
 import org.apache.rocketmq.tieredstore.metadata.entity.TopicMetadata;
-import org.apache.rocketmq.tieredstore.util.TieredStoreUtil;
+import org.apache.rocketmq.tieredstore.util.MessageStoreUtil;
 
 public class FlatMessageFileExt extends FlatMessageFile {
 
@@ -30,7 +30,7 @@ public class FlatMessageFileExt extends FlatMessageFile {
 
     public FlatMessageFileExt(FlatFileFactory fileQueueFactory, MessageQueue messageQueue) {
 
-        super(fileQueueFactory, TieredStoreUtil.toPath(messageQueue));
+        super(fileQueueFactory, MessageStoreUtil.toFilePath(messageQueue));
         this.messageQueue = messageQueue;
         this.topicMetadata = this.recoverTopicMetadata();
         this.queueMetadata = this.recoverQueueMetadata();

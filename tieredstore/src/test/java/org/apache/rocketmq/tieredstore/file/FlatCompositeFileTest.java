@@ -16,18 +16,16 @@
  */
 package org.apache.rocketmq.tieredstore.file;
 
-import org.apache.rocketmq.common.BoundaryType;
 import org.apache.rocketmq.common.message.MessageQueue;
 import org.apache.rocketmq.tieredstore.MessageStoreTest;
 import org.apache.rocketmq.tieredstore.common.FileSegmentType;
 import org.apache.rocketmq.tieredstore.MessageStoreConfig;
-import org.apache.rocketmq.tieredstore.MessageStoreExecutor;
 import org.apache.rocketmq.tieredstore.metadata.entity.FileSegmentMetadata;
 import org.apache.rocketmq.tieredstore.metadata.DefaultMetadataStore;
 import org.apache.rocketmq.tieredstore.metadata.MetadataStore;
 import org.apache.rocketmq.tieredstore.provider.FileSegment;
 import org.apache.rocketmq.tieredstore.provider.MemoryFileSegment;
-import org.apache.rocketmq.tieredstore.util.TieredStoreUtil;
+import org.apache.rocketmq.tieredstore.util.MessageStoreUtil;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
@@ -74,7 +72,7 @@ public class FlatCompositeFileTest {
             FileSegmentType.COMMIT_LOG, queue, 100, storeConfig);
         fileSegment.initPosition(fileSegment.getSize());
 
-        String filePath = TieredStoreUtil.toPath(queue);
+        String filePath = MessageStoreUtil.toFilePath(queue);
         FlatCompositeFile fileQueue = fileQueueFactory.createFlatFileForCommitLog(filePath);
         fileQueue.updateFileSegment(fileSegment);
 
@@ -117,7 +115,7 @@ public class FlatCompositeFileTest {
      */
     @Test
     public void testGetFileSegment() {
-        FlatCompositeFile fileQueue = fileQueueFactory.createFlatFileForCommitLog(TieredStoreUtil.toPath(queue));
+        FlatCompositeFile fileQueue = fileQueueFactory.createFlatFileForCommitLog(MessageStoreUtil.toFilePath(queue));
 //        fileQueue.setBaseOffset(0);
         FileSegment segment1 = fileQueue.getFileToWrite();
         segment1.initPosition(1000);
@@ -138,7 +136,7 @@ public class FlatCompositeFileTest {
 
     @Test
     public void testAppendAndRead() {
-        FlatCompositeFile fileQueue = fileQueueFactory.createFlatFileForConsumeQueue(TieredStoreUtil.toPath(queue));
+        FlatCompositeFile fileQueue = fileQueueFactory.createFlatFileForConsumeQueue(MessageStoreUtil.toFilePath(queue));
 //        fileQueue.setBaseOffset(0);
         Assert.assertEquals(0, fileQueue.getMinOffset());
 //        Assert.assertEquals(0, fileQueue.getDispatchCommitOffset());

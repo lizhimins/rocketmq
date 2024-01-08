@@ -18,22 +18,12 @@ package org.apache.rocketmq.tieredstore.file;
 
 import java.io.File;
 import java.io.IOException;
-import java.nio.ByteBuffer;
-import java.util.List;
 import org.apache.rocketmq.common.message.MessageQueue;
 import org.apache.rocketmq.tieredstore.MessageStoreTest;
-import org.apache.rocketmq.tieredstore.common.FileSegmentType;
 import org.apache.rocketmq.tieredstore.MessageStoreConfig;
-import org.apache.rocketmq.tieredstore.MessageStoreExecutor;
 import org.apache.rocketmq.tieredstore.metadata.DefaultMetadataStore;
-import org.apache.rocketmq.tieredstore.metadata.entity.FileSegmentMetadata;
 import org.apache.rocketmq.tieredstore.metadata.MetadataStore;
-import org.apache.rocketmq.tieredstore.provider.FileSegment;
-import org.apache.rocketmq.tieredstore.util.MessageFormatUtil;
-import org.apache.rocketmq.tieredstore.util.MessageFormatUtilTest;
-import org.apache.rocketmq.tieredstore.util.TieredStoreUtil;
 import org.junit.After;
-import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 

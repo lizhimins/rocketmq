@@ -30,7 +30,7 @@ import org.apache.rocketmq.tieredstore.MessageStoreConfig;
 import org.apache.rocketmq.tieredstore.metadata.entity.FileSegmentMetadata;
 import org.apache.rocketmq.tieredstore.metadata.entity.QueueMetadata;
 import org.apache.rocketmq.tieredstore.metadata.entity.TopicMetadata;
-import org.apache.rocketmq.tieredstore.util.TieredStoreUtil;
+import org.apache.rocketmq.tieredstore.util.MessageStoreUtil;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
@@ -159,7 +159,7 @@ public class DefaultMetadataStoreTest {
 
     @Test
     public void testFileSegment() {
-        String filePath = TieredStoreUtil.toPath(mq0);
+        String filePath = MessageStoreUtil.toFilePath(mq0);
         FileSegmentMetadata segmentMetadata1 = new FileSegmentMetadata(
             filePath, 0L, FileSegmentType.COMMIT_LOG.getCode());
         metadataStore.updateFileSegment(segmentMetadata1);
@@ -188,8 +188,8 @@ public class DefaultMetadataStoreTest {
 
     @Test
     public void testFileSegmentDelete() {
-        String filePath0 = TieredStoreUtil.toPath(mq0);
-        String filePath1 = TieredStoreUtil.toPath(mq1);
+        String filePath0 = MessageStoreUtil.toFilePath(mq0);
+        String filePath1 = MessageStoreUtil.toFilePath(mq1);
         for (int i = 0; i < 10; i++) {
             FileSegmentMetadata segmentMetadata = new FileSegmentMetadata(
                 filePath0, i * 1000L * 1000L, FileSegmentType.COMMIT_LOG.getCode());
@@ -223,7 +223,7 @@ public class DefaultMetadataStoreTest {
         defaultMetadataStore.addQueue(mq1, 4);
         defaultMetadataStore.addQueue(mq2, 8);
 
-        String filePath0 = TieredStoreUtil.toPath(mq0);
+        String filePath0 = MessageStoreUtil.toFilePath(mq0);
         FileSegmentMetadata segmentMetadata =
             new FileSegmentMetadata(filePath0, 100, FileSegmentType.COMMIT_LOG.getCode());
         metadataStore.updateFileSegment(segmentMetadata);

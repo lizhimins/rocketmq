@@ -23,7 +23,7 @@ import org.apache.rocketmq.common.message.MessageQueue;
 import org.apache.rocketmq.tieredstore.MessageStoreConfig;
 import org.apache.rocketmq.tieredstore.common.FileSegmentType;
 import org.apache.rocketmq.tieredstore.stream.FileSegmentInputStream;
-import org.apache.rocketmq.tieredstore.util.TieredStoreUtil;
+import org.apache.rocketmq.tieredstore.util.MessageStoreUtil;
 
 public class MemoryFileSegment extends FileSegment {
 
@@ -37,7 +37,7 @@ public class MemoryFileSegment extends FileSegment {
 
     public MemoryFileSegment(FileSegmentType fileType, MessageQueue messageQueue, long baseOffset,
         MessageStoreConfig storeConfig) {
-        this(storeConfig, fileType, TieredStoreUtil.toPath(messageQueue), baseOffset);
+        this(storeConfig, fileType, MessageStoreUtil.toFilePath(messageQueue), baseOffset);
     }
 
     public MemoryFileSegment(MessageStoreConfig storeConfig,

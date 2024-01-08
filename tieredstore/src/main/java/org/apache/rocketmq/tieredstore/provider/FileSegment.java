@@ -30,7 +30,7 @@ import org.apache.rocketmq.tieredstore.exception.MessageStoreException;
 import org.apache.rocketmq.tieredstore.file.FlatConsumeQueueFile;
 import org.apache.rocketmq.tieredstore.stream.FileSegmentInputStream;
 import org.apache.rocketmq.tieredstore.stream.FileSegmentInputStreamFactory;
-import org.apache.rocketmq.tieredstore.util.TieredStoreUtil;
+import org.apache.rocketmq.tieredstore.util.MessageStoreUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -39,7 +39,7 @@ import static org.apache.rocketmq.tieredstore.index.IndexStoreFile.INDEX_END_TIM
 
 public abstract class FileSegment implements Comparable<FileSegment>, FileSegmentProvider {
 
-    private static final Logger log = LoggerFactory.getLogger(TieredStoreUtil.TIERED_STORE_LOGGER_NAME);
+    private static final Logger log = LoggerFactory.getLogger(MessageStoreUtil.TIERED_STORE_LOGGER_NAME);
 
     protected final String filePath;
     protected final long baseOffset;

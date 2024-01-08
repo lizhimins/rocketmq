@@ -45,11 +45,11 @@ import org.apache.rocketmq.tieredstore.metadata.entity.TopicMetadata;
 import org.apache.rocketmq.tieredstore.metrics.MessageStoreMetricsConstant;
 import org.apache.rocketmq.tieredstore.metrics.MessageStoreMetricsManager;
 import org.apache.rocketmq.tieredstore.util.MessageFormatUtil;
-import org.apache.rocketmq.tieredstore.util.TieredStoreUtil;
+import org.apache.rocketmq.tieredstore.util.MessageStoreUtil;
 
 public class MessageStoreFetcherImpl implements MessageStoreFetcher {
 
-    private static final Logger log = LoggerFactory.getLogger(TieredStoreUtil.TIERED_STORE_LOGGER_NAME);
+    private static final Logger log = LoggerFactory.getLogger(MessageStoreUtil.TIERED_STORE_LOGGER_NAME);
 
     private final String brokerName;
     private final MetadataStore metadataStore;
