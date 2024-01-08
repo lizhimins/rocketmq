@@ -28,10 +28,9 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import org.apache.rocketmq.common.ThreadFactoryImpl;
-import org.apache.rocketmq.tieredstore.MessageStoreTest;
 import org.apache.rocketmq.tieredstore.common.FileSegmentType;
-import org.apache.rocketmq.tieredstore.TieredMessageStoreConfig;
-import org.apache.rocketmq.tieredstore.TieredStoreExecutor;
+import org.apache.rocketmq.tieredstore.MessageStoreConfig;
+import org.apache.rocketmq.tieredstore.MessageStoreExecutor;
 import org.apache.rocketmq.tieredstore.provider.TieredFileSegment;
 import org.apache.rocketmq.tieredstore.provider.posix.PosixFileSegment;
 import org.junit.After;
@@ -50,15 +49,15 @@ public class IndexStoreFileTest {
     private static final Set<String> KEY_SET = Collections.singleton(KEY);
 
     private String filePath;
-    private TieredMessageStoreConfig storeConfig;
+    private MessageStoreConfig storeConfig;
     private IndexStoreFile indexStoreFile;
 
     @Before
     public void init() throws IOException {
-        TieredStoreExecutor.init();
+        MessageStoreExecutor.init();
         filePath = UUID.randomUUID().toString().replace("-", "").substring(0, 8);
         String directory = Paths.get(System.getProperty("user.home"), "store_test", filePath).toString();
-        storeConfig = new TieredMessageStoreConfig();
+        storeConfig = new MessageStoreConfig();
         storeConfig.setStorePathRootDir(directory);
         storeConfig.setTieredStoreFilePath(directory);
         storeConfig.setTieredStoreIndexFileMaxHashSlotNum(5);
@@ -74,7 +73,7 @@ public class IndexStoreFileTest {
             this.indexStoreFile.destroy();
         }
         MessageStoreTest.deleteStoreDirectory(storeConfig.getTieredStoreFilePath());
-        TieredStoreExecutor.shutdown();
+        MessageStoreExecutor.shutdown();
     }
 
     @Test

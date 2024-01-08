@@ -22,13 +22,12 @@ import org.apache.rocketmq.common.BoundaryType;
 import org.apache.rocketmq.common.message.MessageQueue;
 import org.apache.rocketmq.store.ConsumeQueue;
 import org.apache.rocketmq.store.DispatchRequest;
-import org.apache.rocketmq.tieredstore.MessageStoreTest;
 import org.apache.rocketmq.tieredstore.common.FileSegmentType;
-import org.apache.rocketmq.tieredstore.TieredMessageStoreConfig;
-import org.apache.rocketmq.tieredstore.TieredStoreExecutor;
+import org.apache.rocketmq.tieredstore.MessageStoreConfig;
+import org.apache.rocketmq.tieredstore.MessageStoreExecutor;
+import org.apache.rocketmq.tieredstore.metadata.MetadataManager;
 import org.apache.rocketmq.tieredstore.metadata.QueueMetadata;
-import org.apache.rocketmq.tieredstore.metadata.TieredMetadataManager;
-import org.apache.rocketmq.tieredstore.metadata.TieredMetadataStore;
+import org.apache.rocketmq.tieredstore.metadata.MetadataStore;
 import org.apache.rocketmq.tieredstore.provider.memory.MemoryFileSegment;
 import org.apache.rocketmq.tieredstore.util.MessageFormatUtil;
 import org.apache.rocketmq.tieredstore.util.MessageFormatUtilTest;
@@ -40,29 +39,29 @@ import org.junit.Test;
 public class CompositeFlatFileExtTest {
 
     private final String storePath = MessageStoreTest.getRandomStorePath();
-    private TieredMessageStoreConfig storeConfig;
-    private TieredMetadataStore metadataStore;
+    private MessageStoreConfig storeConfig;
+    private MetadataStore metadataStore;
     private TieredFileAllocator tieredFileAllocator;
     private MessageQueue mq;
 
     @Before
     public void setUp() throws ClassNotFoundException, NoSuchMethodException {
-        storeConfig = new TieredMessageStoreConfig();
+        storeConfig = new MessageStoreConfig();
         storeConfig.setBrokerName("brokerName");
         storeConfig.setStorePathRootDir(storePath);
         storeConfig.setTieredBackendServiceProvider("org.apache.rocketmq.tieredstore.provider.memory.MemoryFileSegment");
         storeConfig.setCommitLogRollingInterval(0);
         storeConfig.setCommitLogRollingMinimumSize(999);
         mq = new MessageQueue("CompositeQueueFlatFileTest", storeConfig.getBrokerName(), 0);
-        metadataStore = new TieredMetadataManager(storeConfig);
+        metadataStore = new MetadataManager(storeConfig);
         tieredFileAllocator = new TieredFileAllocator(metadataStore, storeConfig);
-        TieredStoreExecutor.init();
+        MessageStoreExecutor.init();
     }
 
     @After
     public void tearDown() throws IOException {
         MessageStoreTest.deleteStoreDirectory(storePath);
-        TieredStoreExecutor.shutdown();
+        MessageStoreExecutor.shutdown();
     }
 
     @Test

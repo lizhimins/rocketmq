@@ -30,11 +30,11 @@ import org.apache.rocketmq.common.constant.LoggerName;
 import org.apache.rocketmq.common.message.MessageQueue;
 import org.apache.rocketmq.logging.org.slf4j.Logger;
 import org.apache.rocketmq.logging.org.slf4j.LoggerFactory;
-import org.apache.rocketmq.tieredstore.TieredMessageStoreConfig;
-import org.apache.rocketmq.tieredstore.TieredStoreExecutor;
+import org.apache.rocketmq.tieredstore.MessageStoreConfig;
+import org.apache.rocketmq.tieredstore.MessageStoreExecutor;
 import org.apache.rocketmq.tieredstore.index.IndexService;
 import org.apache.rocketmq.tieredstore.index.IndexStoreService;
-import org.apache.rocketmq.tieredstore.metadata.TieredMetadataStore;
+import org.apache.rocketmq.tieredstore.metadata.MetadataStore;
 import org.apache.rocketmq.tieredstore.util.TieredStoreUtil;
 
 public class TieredFlatFileManager {
@@ -42,13 +42,13 @@ public class TieredFlatFileManager {
     private static final Logger log = LoggerFactory.getLogger(TieredStoreUtil.TIERED_STORE_LOGGER_NAME);
     private static final String RMQ_SYS_TIERED_STORE_INDEX_TOPIC = "rmq_sys_INDEX";
 
-    private final TieredMetadataStore metadataStore;
-    private final TieredMessageStoreConfig storeConfig;
+    private final MetadataStore metadataStore;
+    private final MessageStoreConfig storeConfig;
     private final IndexStoreService indexStoreService;
     private final TieredFileAllocator fileAllocator;
     private final ConcurrentMap<MessageQueue, CompositeFlatFileExt> flatFileConcurrentMap;
 
-    public TieredFlatFileManager(TieredMetadataStore metadataStore, TieredMessageStoreConfig storeConfig)
+    public TieredFlatFileManager(MetadataStore metadataStore, MessageStoreConfig storeConfig)
         throws ClassNotFoundException, NoSuchMethodException {
 
         this.storeConfig = storeConfig;
@@ -87,7 +87,7 @@ public class TieredFlatFileManager {
     }
 
     public void recoverTieredFlatFile() {
-        Semaphore semaphore = new Semaphore((int) (TieredStoreExecutor.QUEUE_CAPACITY * 0.75));
+        Semaphore semaphore = new Semaphore((int) (MessageStoreExecutor.QUEUE_CAPACITY * 0.75));
         List<CompletableFuture<Void>> futures = new ArrayList<>();
         metadataStore.iterateTopic(topicMetadata -> {
             try {
@@ -116,7 +116,7 @@ public class TieredFlatFileManager {
                     } finally {
                         semaphore.release();
                     }
-                }, TieredStoreExecutor.commitExecutor);
+                }, MessageStoreExecutor.commitExecutor);
                 futures.add(future);
             } catch (Exception e) {
                 throw new RuntimeException(e);
@@ -125,11 +125,11 @@ public class TieredFlatFileManager {
         CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
     }
 
-    public TieredMetadataStore getMetadataStore() {
+    public MetadataStore getMetadataStore() {
         return metadataStore;
     }
 
-    public TieredMessageStoreConfig getStoreConfig() {
+    public MessageStoreConfig getStoreConfig() {
         return storeConfig;
     }
 
@@ -170,7 +170,7 @@ public class TieredFlatFileManager {
     }
 
     public void doScheduleCommitTask() {
-        TieredStoreExecutor.commonScheduledExecutor.scheduleWithFixedDelay(() -> {
+        MessageStoreExecutor.commonScheduledExecutor.scheduleWithFixedDelay(() -> {
             try {
 
             } catch (Throwable e) {
@@ -184,7 +184,7 @@ public class TieredFlatFileManager {
             TimeUnit.HOURS.toMillis(storeConfig.getTieredStoreFileReservedTime());
 
         for (CompositeFlatFileExt flatFile : deepCopyFlatFileToList()) {
-            TieredStoreExecutor.cleanExpiredFileExecutor.submit(() -> {
+            MessageStoreExecutor.cleanExpiredFileExecutor.submit(() -> {
                 flatFile.cleanExpiredFile(expiredTimeStamp);
                 flatFile.destroyExpiredFile();
             });

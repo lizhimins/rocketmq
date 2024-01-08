@@ -21,7 +21,7 @@ import org.apache.rocketmq.logging.org.slf4j.Logger;
 import org.apache.rocketmq.logging.org.slf4j.LoggerFactory;
 import org.apache.rocketmq.tieredstore.common.FileSegmentType;
 import org.apache.rocketmq.tieredstore.metadata.FileSegmentMetadata;
-import org.apache.rocketmq.tieredstore.metadata.TieredMetadataStore;
+import org.apache.rocketmq.tieredstore.metadata.MetadataStore;
 import org.apache.rocketmq.tieredstore.provider.FileSegmentAllocator;
 import org.apache.rocketmq.tieredstore.provider.TieredFileSegment;
 import org.apache.rocketmq.tieredstore.util.TieredStoreUtil;
@@ -42,7 +42,7 @@ public class TieredFlatFile {
 
     private final String filePath;
     private final FileSegmentType fileType;
-    private final TieredMetadataStore metadataStore;
+    private final MetadataStore metadataStore;
     private final FileSegmentAllocator fileSegmentAllocator;
     private final ReentrantReadWriteLock fileSegmentLock;
     private final ConcurrentNavigableMap<Long, TieredFileSegment> fileSegmentTable;

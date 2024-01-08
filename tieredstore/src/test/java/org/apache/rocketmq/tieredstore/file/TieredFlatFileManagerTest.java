@@ -19,11 +19,10 @@ package org.apache.rocketmq.tieredstore.file;
 import java.io.IOException;
 import java.util.concurrent.TimeUnit;
 import org.apache.rocketmq.common.message.MessageQueue;
-import org.apache.rocketmq.tieredstore.MessageStoreTest;
-import org.apache.rocketmq.tieredstore.TieredMessageStoreConfig;
-import org.apache.rocketmq.tieredstore.TieredStoreExecutor;
-import org.apache.rocketmq.tieredstore.metadata.TieredMetadataManager;
-import org.apache.rocketmq.tieredstore.metadata.TieredMetadataStore;
+import org.apache.rocketmq.tieredstore.MessageStoreConfig;
+import org.apache.rocketmq.tieredstore.MessageStoreExecutor;
+import org.apache.rocketmq.tieredstore.metadata.MetadataStore;
+import org.apache.rocketmq.tieredstore.metadata.MetadataManager;
 import org.awaitility.Awaitility;
 import org.junit.After;
 import org.junit.Assert;
@@ -33,25 +32,25 @@ import org.junit.Test;
 public class TieredFlatFileManagerTest {
 
     private final String storePath = MessageStoreTest.getRandomStorePath();
-    private TieredMessageStoreConfig storeConfig;
+    private MessageStoreConfig storeConfig;
     private MessageQueue mq;
-    private TieredMetadataStore metadataStore;
+    private MetadataStore metadataStore;
 
     @Before
     public void setUp() {
-        storeConfig = new TieredMessageStoreConfig();
+        storeConfig = new MessageStoreConfig();
         storeConfig.setStorePathRootDir(storePath);
         storeConfig.setTieredBackendServiceProvider("org.apache.rocketmq.tieredstore.provider.memory.MemoryFileSegment");
         storeConfig.setBrokerName(storeConfig.getBrokerName());
         mq = new MessageQueue("TieredFlatFileManagerTest", storeConfig.getBrokerName(), 0);
-        metadataStore = new TieredMetadataManager(storeConfig);
-        TieredStoreExecutor.init();
+        metadataStore = new MetadataManager(storeConfig);
+        MessageStoreExecutor.init();
     }
 
     @After
     public void tearDown() throws IOException {
         MessageStoreTest.deleteStoreDirectory(storePath);
-        TieredStoreExecutor.shutdown();
+        MessageStoreExecutor.shutdown();
     }
 
     @Test

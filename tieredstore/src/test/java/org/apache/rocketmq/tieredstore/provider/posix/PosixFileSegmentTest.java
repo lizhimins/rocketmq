@@ -23,10 +23,9 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.Random;
 import org.apache.rocketmq.common.message.MessageQueue;
-import org.apache.rocketmq.tieredstore.MessageStoreTest;
 import org.apache.rocketmq.tieredstore.common.FileSegmentType;
-import org.apache.rocketmq.tieredstore.TieredMessageStoreConfig;
-import org.apache.rocketmq.tieredstore.TieredStoreExecutor;
+import org.apache.rocketmq.tieredstore.MessageStoreConfig;
+import org.apache.rocketmq.tieredstore.MessageStoreExecutor;
 import org.apache.rocketmq.tieredstore.util.TieredStoreUtil;
 import org.junit.After;
 import org.junit.Assert;
@@ -36,21 +35,21 @@ import org.junit.Test;
 public class PosixFileSegmentTest {
 
     private final String storePath = MessageStoreTest.getRandomStorePath();
-    private TieredMessageStoreConfig storeConfig;
+    private MessageStoreConfig storeConfig;
     private MessageQueue mq;
 
     @Before
     public void setUp() {
-        storeConfig = new TieredMessageStoreConfig();
+        storeConfig = new MessageStoreConfig();
         storeConfig.setTieredStoreFilePath(storePath);
         mq = new MessageQueue("OSSFileSegmentTest", "broker", 0);
-        TieredStoreExecutor.init();
+        MessageStoreExecutor.init();
     }
 
     @After
     public void tearDown() throws IOException {
         MessageStoreTest.deleteStoreDirectory(storePath);
-        TieredStoreExecutor.shutdown();
+        MessageStoreExecutor.shutdown();
     }
 
     @Test

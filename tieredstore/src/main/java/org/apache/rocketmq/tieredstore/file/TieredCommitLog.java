@@ -23,7 +23,7 @@ import java.util.concurrent.atomic.AtomicLong;
 
 import org.apache.rocketmq.logging.org.slf4j.Logger;
 import org.apache.rocketmq.logging.org.slf4j.LoggerFactory;
-import org.apache.rocketmq.tieredstore.TieredMessageStoreConfig;
+import org.apache.rocketmq.tieredstore.MessageStoreConfig;
 import org.apache.rocketmq.tieredstore.provider.TieredFileSegment;
 import org.apache.rocketmq.tieredstore.util.MessageFormatUtil;
 import org.apache.rocketmq.tieredstore.util.TieredStoreUtil;
@@ -42,7 +42,7 @@ public class TieredCommitLog {
     public static final int CODA_SIZE = 4 + 8 + 4;
     public static final int BLANK_MAGIC_CODE = 0xBBCCDDEE ^ 1880681586 + 8;
 
-    private final TieredMessageStoreConfig storeConfig;
+    private final MessageStoreConfig storeConfig;
     private final TieredFlatFile flatFile;
     private final AtomicLong consumeQueueMinOffset;
 

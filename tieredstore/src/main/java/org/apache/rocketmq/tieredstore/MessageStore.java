@@ -41,7 +41,6 @@ import org.apache.rocketmq.logging.org.slf4j.LoggerFactory;
 import org.apache.rocketmq.store.GetMessageResult;
 import org.apache.rocketmq.store.GetMessageStatus;
 import org.apache.rocketmq.store.MessageFilter;
-import org.apache.rocketmq.store.MessageStore;
 import org.apache.rocketmq.store.PutMessageResult;
 import org.apache.rocketmq.store.QueryMessageResult;
 import org.apache.rocketmq.store.SelectMappedBufferResult;
@@ -49,34 +48,36 @@ import org.apache.rocketmq.store.plugin.AbstractPluginMessageStore;
 import org.apache.rocketmq.store.plugin.MessageStorePluginContext;
 import org.apache.rocketmq.tieredstore.file.CompositeFlatFile;
 import org.apache.rocketmq.tieredstore.file.TieredFlatFileManager;
-import org.apache.rocketmq.tieredstore.metadata.TieredMetadataStore;
+import org.apache.rocketmq.tieredstore.metadata.MetadataStore;
 import org.apache.rocketmq.tieredstore.metrics.TieredStoreMetricsConstant;
 import org.apache.rocketmq.tieredstore.metrics.TieredStoreMetricsManager;
+import org.apache.rocketmq.tieredstore.provider.TieredStoreTopicFilter;
 import org.apache.rocketmq.tieredstore.util.TieredStoreUtil;
 
-public class TieredMessageStore extends AbstractPluginMessageStore {
+public class MessageStore extends AbstractPluginMessageStore {
 
     protected static final Logger logger = LoggerFactory.getLogger(TieredStoreUtil.TIERED_STORE_LOGGER_NAME);
 
     protected final String brokerName;
-    protected final MessageStore defaultStore;
-    protected final TieredMessageStoreConfig storeConfig;
-    protected final TieredMetadataStore metadataStore;
+    protected final org.apache.rocketmq.store.MessageStore defaultStore;
+    protected final MessageStoreConfig storeConfig;
+    protected final MetadataStore metadataStore;
 
+    protected final TieredStoreTopicFilter topicFilter;
     protected final MessageStoreFetcherImpl fetcher;
     protected final MessageStoreDispatcherImpl dispatcher;
     protected final TieredFlatFileManager flatFileManager;
 
-    public TieredMessageStore(MessageStorePluginContext context, MessageStore next) throws Exception {
+    public MessageStore(MessageStorePluginContext context, org.apache.rocketmq.store.MessageStore next) throws Exception {
         super(context, next);
-        this.storeConfig = new TieredMessageStoreConfig();
+        this.storeConfig = new MessageStoreConfig();
         context.registerConfiguration(storeConfig);
         this.brokerName = storeConfig.getBrokerName();
         TieredStoreUtil.addSystemTopic(storeConfig.getBrokerClusterName());
         TieredStoreUtil.addSystemTopic(brokerName);
 
         this.defaultStore = next;
-        TieredStoreExecutor.init();
+        MessageStoreExecutor.init();
         this.metadataStore = this.getMetadataStore(storeConfig);
         this.flatFileManager = new TieredFlatFileManager(metadataStore, storeConfig);
         this.fetcher = new MessageStoreFetcherImpl(flatFileManager);
@@ -104,14 +105,14 @@ public class TieredMessageStore extends AbstractPluginMessageStore {
         return TopicValidator.isSystemTopic(topic);
     }
 
-    public MessageStore getMessageStore() {
+    public org.apache.rocketmq.store.MessageStore getMessageStore() {
         return defaultStore;
     }
 
-    public TieredMetadataStore getMetadataStore(TieredMessageStoreConfig storeConfig) throws Exception {
-        Class<? extends TieredMetadataStore> clazz =
-            Class.forName(storeConfig.getTieredMetadataServiceProvider()).asSubclass(TieredMetadataStore.class);
-        Constructor<? extends TieredMetadataStore> constructor = clazz.getConstructor(TieredMessageStoreConfig.class);
+    public MetadataStore getMetadataStore(MessageStoreConfig storeConfig) throws Exception {
+        Class<? extends MetadataStore> clazz =
+            Class.forName(storeConfig.getTieredMetadataServiceProvider()).asSubclass(MetadataStore.class);
+        Constructor<? extends MetadataStore> constructor = clazz.getConstructor(MessageStoreConfig.class);
         return constructor.newInstance(storeConfig);
     }
 
@@ -119,11 +120,11 @@ public class TieredMessageStore extends AbstractPluginMessageStore {
         return brokerName;
     }
 
-    public MessageStore getDefaultStore() {
+    public org.apache.rocketmq.store.MessageStore getDefaultStore() {
         return defaultStore;
     }
 
-    public TieredMetadataStore getMetadataStore() {
+    public MetadataStore getMetadataStore() {
         return metadataStore;
     }
 
@@ -150,7 +151,7 @@ public class TieredMessageStore extends AbstractPluginMessageStore {
         return result;
     }
 
-    public TieredMessageStoreConfig getStoreConfig() {
+    public MessageStoreConfig getStoreConfig() {
         return storeConfig;
     }
 
@@ -159,9 +160,9 @@ public class TieredMessageStore extends AbstractPluginMessageStore {
     }
 
     public boolean fetchFromCurrentStore(String topic, int queueId, long offset, int batchSize) {
-        TieredMessageStoreConfig.TieredStorageLevel deepStorageLevel = storeConfig.getTieredStorageLevel();
+        MessageStoreConfig.TieredStorageLevel deepStorageLevel = storeConfig.getTieredStorageLevel();
 
-        if (deepStorageLevel.check(TieredMessageStoreConfig.TieredStorageLevel.FORCE)) {
+        if (deepStorageLevel.check(MessageStoreConfig.TieredStorageLevel.FORCE)) {
             return true;
         }
 
@@ -179,12 +180,12 @@ public class TieredMessageStore extends AbstractPluginMessageStore {
         }
 
         // determine whether tiered storage path conditions are met
-        if (deepStorageLevel.check(TieredMessageStoreConfig.TieredStorageLevel.NOT_IN_DISK)
+        if (deepStorageLevel.check(MessageStoreConfig.TieredStorageLevel.NOT_IN_DISK)
             && !next.checkInStoreByConsumeOffset(topic, queueId, offset)) {
             return true;
         }
 
-        if (deepStorageLevel.check(TieredMessageStoreConfig.TieredStorageLevel.NOT_IN_MEM)
+        if (deepStorageLevel.check(MessageStoreConfig.TieredStorageLevel.NOT_IN_MEM)
             && !next.checkInMemByConsumeOffset(topic, queueId, offset, batchSize)) {
             return true;
         }
@@ -356,7 +357,7 @@ public class TieredMessageStore extends AbstractPluginMessageStore {
             logger.warn("TieredMessageStore#getOffsetInQueueByTimeAsync: get earliest message time in next store failed: {}", earliestTimeInNextStore);
             return next.getOffsetInQueueByTime(topic, queueId, timestamp);
         }
-        boolean isForce = storeConfig.getTieredStorageLevel() == TieredMessageStoreConfig.TieredStorageLevel.FORCE;
+        boolean isForce = storeConfig.getTieredStorageLevel() == MessageStoreConfig.TieredStorageLevel.FORCE;
         if (timestamp < earliestTimeInNextStore || isForce) {
             Stopwatch stopwatch = Stopwatch.createStarted();
             long offsetInTieredStore = fetcher.getOffsetInQueueByTime(topic, queueId, timestamp, boundaryType);
@@ -385,7 +386,7 @@ public class TieredMessageStore extends AbstractPluginMessageStore {
         if (earliestTimeInNextStore <= 0) {
             logger.warn("TieredMessageStore#queryMessageAsync: get earliest message time in next store failed: {}", earliestTimeInNextStore);
         }
-        boolean isForce = storeConfig.getTieredStorageLevel() == TieredMessageStoreConfig.TieredStorageLevel.FORCE;
+        boolean isForce = storeConfig.getTieredStorageLevel() == MessageStoreConfig.TieredStorageLevel.FORCE;
         QueryMessageResult result = end < earliestTimeInNextStore || isForce ?
             new QueryMessageResult() :
             next.queryMessage(topic, key, maxNum, begin, end);
@@ -440,7 +441,7 @@ public class TieredMessageStore extends AbstractPluginMessageStore {
         if (flatFileManager != null) {
             flatFileManager.shutdown();
         }
-        TieredStoreExecutor.shutdown();
+        MessageStoreExecutor.shutdown();
     }
 
     @Override

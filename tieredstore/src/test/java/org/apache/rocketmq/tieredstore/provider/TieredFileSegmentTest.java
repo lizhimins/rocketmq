@@ -20,7 +20,7 @@ import java.nio.ByteBuffer;
 import java.util.concurrent.CompletableFuture;
 import org.apache.rocketmq.common.message.MessageQueue;
 import org.apache.rocketmq.tieredstore.common.FileSegmentType;
-import org.apache.rocketmq.tieredstore.TieredMessageStoreConfig;
+import org.apache.rocketmq.tieredstore.MessageStoreConfig;
 import org.apache.rocketmq.tieredstore.file.TieredCommitLog;
 import org.apache.rocketmq.tieredstore.file.TieredConsumeQueue;
 import org.apache.rocketmq.tieredstore.provider.memory.MemoryFileSegment;
@@ -34,9 +34,9 @@ public class TieredFileSegmentTest {
     public int baseOffset = 1000;
 
     public TieredFileSegment createFileSegment(FileSegmentType fileType) {
-        String brokerName = new TieredMessageStoreConfig().getBrokerName();
+        String brokerName = new MessageStoreConfig().getBrokerName();
         return new MemoryFileSegment(fileType, new MessageQueue("TieredFileSegmentTest", brokerName, 0),
-            baseOffset, new TieredMessageStoreConfig());
+            baseOffset, new MessageStoreConfig());
     }
 
     @Test

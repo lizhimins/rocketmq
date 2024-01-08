@@ -21,7 +21,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import org.apache.rocketmq.common.message.MessageQueue;
 import org.apache.rocketmq.tieredstore.common.FileSegmentType;
-import org.apache.rocketmq.tieredstore.TieredMessageStoreConfig;
+import org.apache.rocketmq.tieredstore.MessageStoreConfig;
 import org.apache.rocketmq.tieredstore.provider.TieredFileSegment;
 import org.apache.rocketmq.tieredstore.provider.stream.FileSegmentInputStream;
 import org.apache.rocketmq.tieredstore.util.TieredStoreUtil;
@@ -38,12 +38,12 @@ public class MemoryFileSegment extends TieredFileSegment {
     protected boolean checkSize = true;
 
     public MemoryFileSegment(FileSegmentType fileType, MessageQueue messageQueue, long baseOffset,
-        TieredMessageStoreConfig storeConfig) {
+        MessageStoreConfig storeConfig) {
         this(storeConfig, fileType, TieredStoreUtil.toPath(messageQueue), baseOffset);
     }
 
-    public MemoryFileSegment(TieredMessageStoreConfig storeConfig,
-        FileSegmentType fileType, String filePath, long baseOffset) {
+    public MemoryFileSegment(MessageStoreConfig storeConfig,
+                             FileSegmentType fileType, String filePath, long baseOffset) {
         super(storeConfig, fileType, filePath, baseOffset);
         switch (fileType) {
             case COMMIT_LOG:

@@ -30,16 +30,16 @@ import java.util.function.Consumer;
 import org.apache.rocketmq.common.ConfigManager;
 import org.apache.rocketmq.common.message.MessageQueue;
 import org.apache.rocketmq.tieredstore.common.FileSegmentType;
-import org.apache.rocketmq.tieredstore.TieredMessageStoreConfig;
+import org.apache.rocketmq.tieredstore.MessageStoreConfig;
 
-public class TieredMetadataManager extends ConfigManager implements TieredMetadataStore {
+public class MetadataManager extends ConfigManager implements MetadataStore {
 
     private static final int DEFAULT_CAPACITY = 1024;
     private static final String DEFAULT_CONFIG_NAME = "config";
     private static final String DEFAULT_FILE_NAME = "tieredStoreMetadata.json";
 
     private final AtomicLong topicSequenceNumber;
-    private final TieredMessageStoreConfig storeConfig;
+    private final MessageStoreConfig storeConfig;
     private final ConcurrentMap<String /* topic */, TopicMetadata> topicMetadataTable;
     private final ConcurrentMap<String /* topic */, ConcurrentMap<Integer, QueueMetadata>> queueMetadataTable;
 
@@ -49,7 +49,7 @@ public class TieredMetadataManager extends ConfigManager implements TieredMetada
     private final ConcurrentMap<String, ConcurrentMap<Long, FileSegmentMetadata>> consumeQueueFileSegmentTable;
     private final ConcurrentMap<String, ConcurrentMap<Long, FileSegmentMetadata>> indexFileSegmentTable;
 
-    public TieredMetadataManager(TieredMessageStoreConfig storeConfig) {
+    public MetadataManager(MessageStoreConfig storeConfig) {
         this.storeConfig = storeConfig;
         this.topicSequenceNumber = new AtomicLong(-1L);
         this.topicMetadataTable = new ConcurrentHashMap<>(DEFAULT_CAPACITY);

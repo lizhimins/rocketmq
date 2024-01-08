@@ -40,8 +40,8 @@ import org.apache.rocketmq.logging.org.slf4j.Logger;
 import org.apache.rocketmq.logging.org.slf4j.LoggerFactory;
 import org.apache.rocketmq.store.DispatchRequest;
 import org.apache.rocketmq.tieredstore.common.FileSegmentType;
-import org.apache.rocketmq.tieredstore.TieredMessageStoreConfig;
-import org.apache.rocketmq.tieredstore.metadata.TieredMetadataStore;
+import org.apache.rocketmq.tieredstore.MessageStoreConfig;
+import org.apache.rocketmq.tieredstore.metadata.MetadataStore;
 import org.apache.rocketmq.tieredstore.util.MessageFormatUtil;
 import org.apache.rocketmq.tieredstore.util.TieredStoreUtil;
 
@@ -53,8 +53,8 @@ public class CompositeFlatFile implements CompositeFile {
 
     protected final String filePath;
     protected final ReentrantLock fileLock;
-    protected final TieredMessageStoreConfig storeConfig;
-    protected final TieredMetadataStore metadataStore;
+    protected final MessageStoreConfig storeConfig;
+    protected final MetadataStore metadataStore;
     protected final TieredCommitLog commitLog;
     protected final TieredConsumeQueue consumeQueue;
     protected final AtomicInteger readAheadFactor;

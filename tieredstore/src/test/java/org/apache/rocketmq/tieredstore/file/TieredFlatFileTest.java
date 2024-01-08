@@ -18,13 +18,12 @@ package org.apache.rocketmq.tieredstore.file;
 
 import org.apache.rocketmq.common.BoundaryType;
 import org.apache.rocketmq.common.message.MessageQueue;
-import org.apache.rocketmq.tieredstore.MessageStoreTest;
 import org.apache.rocketmq.tieredstore.common.FileSegmentType;
-import org.apache.rocketmq.tieredstore.TieredMessageStoreConfig;
-import org.apache.rocketmq.tieredstore.TieredStoreExecutor;
+import org.apache.rocketmq.tieredstore.MessageStoreConfig;
+import org.apache.rocketmq.tieredstore.MessageStoreExecutor;
 import org.apache.rocketmq.tieredstore.metadata.FileSegmentMetadata;
-import org.apache.rocketmq.tieredstore.metadata.TieredMetadataManager;
-import org.apache.rocketmq.tieredstore.metadata.TieredMetadataStore;
+import org.apache.rocketmq.tieredstore.metadata.MetadataManager;
+import org.apache.rocketmq.tieredstore.metadata.MetadataStore;
 import org.apache.rocketmq.tieredstore.provider.TieredFileSegment;
 import org.apache.rocketmq.tieredstore.provider.memory.MemoryFileSegment;
 import org.apache.rocketmq.tieredstore.util.TieredStoreUtil;
@@ -42,27 +41,27 @@ public class TieredFlatFileTest {
 
     private final String storePath = MessageStoreTest.getRandomStorePath();
     private MessageQueue queue;
-    private TieredMessageStoreConfig storeConfig;
+    private MessageStoreConfig storeConfig;
     private TieredFileAllocator fileQueueFactory;
 
     @Before
     public void setUp() throws ClassNotFoundException, NoSuchMethodException {
-        storeConfig = new TieredMessageStoreConfig();
+        storeConfig = new MessageStoreConfig();
         storeConfig.setBrokerName("brokerName");
         storeConfig.setStorePathRootDir(storePath);
         storeConfig.setTieredBackendServiceProvider("org.apache.rocketmq.tieredstore.provider.memory.MemoryFileSegment");
         queue = new MessageQueue("TieredFlatFileTest", storeConfig.getBrokerName(), 0);
-        TieredMetadataStore metadataStore = new TieredMetadataManager(storeConfig);
+        MetadataStore metadataStore = new MetadataManager(storeConfig);
         fileQueueFactory = new TieredFileAllocator(metadataStore, storeConfig);
     }
 
     @After
     public void tearDown() throws IOException {
         MessageStoreTest.deleteStoreDirectory(storePath);
-        TieredStoreExecutor.shutdown();
+        MessageStoreExecutor.shutdown();
     }
 
-    private List<FileSegmentMetadata> getSegmentMetadataList(TieredMetadataStore metadataStore) {
+    private List<FileSegmentMetadata> getSegmentMetadataList(MetadataStore metadataStore) {
         List<FileSegmentMetadata> result = new ArrayList<>();
         metadataStore.iterateFileSegment(result::add);
         return result;
@@ -78,7 +77,7 @@ public class TieredFlatFileTest {
         TieredFlatFile fileQueue = fileQueueFactory.createFlatFileForCommitLog(filePath);
         fileQueue.updateFileSegment(fileSegment);
 
-        TieredMetadataStore metadataStore = new TieredMetadataManager(storeConfig);
+        MetadataStore metadataStore = new MetadataManager(storeConfig);
         FileSegmentMetadata metadata =
             metadataStore.getFileSegment(filePath, FileSegmentType.COMMIT_LOG, 100);
         Assert.assertEquals(fileSegment.getPath(), metadata.getPath());
@@ -268,7 +267,7 @@ public class TieredFlatFileTest {
         TieredFlatFile fileQueue = fileQueueFactory.createFlatFileForConsumeQueue(filePath);
         Assert.assertEquals(2, fileQueue.getFileSegmentCount());
 
-        TieredMetadataStore metadataStore = new TieredMetadataManager(storeConfig);
+        MetadataStore metadataStore = new MetadataManager(storeConfig);
         fileQueue.cleanExpiredFile(file1CreateTimeStamp);
         fileQueue.destroyExpiredFile();
         Assert.assertEquals(1, fileQueue.getFileSegmentCount());
@@ -282,7 +281,7 @@ public class TieredFlatFileTest {
         Assert.assertNull(getMetadata(metadataStore, fileSegment2));
     }
 
-    private FileSegmentMetadata getMetadata(TieredMetadataStore metadataStore, TieredFileSegment fileSegment) {
+    private FileSegmentMetadata getMetadata(MetadataStore metadataStore, TieredFileSegment fileSegment) {
         return metadataStore.getFileSegment(
             fileSegment.getPath(), fileSegment.getFileType(), fileSegment.getBaseOffset());
     }

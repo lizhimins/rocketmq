@@ -45,7 +45,7 @@ import org.apache.rocketmq.tieredstore.file.CompositeFlatFileExt;
 import org.apache.rocketmq.tieredstore.file.TieredConsumeQueue;
 import org.apache.rocketmq.tieredstore.file.TieredFlatFileManager;
 import org.apache.rocketmq.tieredstore.index.IndexItem;
-import org.apache.rocketmq.tieredstore.metadata.TieredMetadataStore;
+import org.apache.rocketmq.tieredstore.metadata.MetadataStore;
 import org.apache.rocketmq.tieredstore.metadata.TopicMetadata;
 import org.apache.rocketmq.tieredstore.metrics.TieredStoreMetricsConstant;
 import org.apache.rocketmq.tieredstore.metrics.TieredStoreMetricsManager;
@@ -54,11 +54,11 @@ import org.apache.rocketmq.tieredstore.util.TieredStoreUtil;
 
 public class MessageStoreFetcherImpl implements MessageStoreFetcher {
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(TieredStoreUtil.TIERED_STORE_LOGGER_NAME);
+    private static final Logger log = LoggerFactory.getLogger(TieredStoreUtil.TIERED_STORE_LOGGER_NAME);
 
     private final String brokerName;
-    private final TieredMetadataStore metadataStore;
-    private final TieredMessageStoreConfig storeConfig;
+    private final MetadataStore metadataStore;
+    private final MessageStoreConfig storeConfig;
     private final TieredFlatFileManager flatFileManager;
     private final Cache<MessageCacheKey, SelectBufferResultWrapper> readAheadCache;
 
@@ -70,7 +70,7 @@ public class MessageStoreFetcherImpl implements MessageStoreFetcher {
         this.readAheadCache = this.initCache(storeConfig);
     }
 
-    private Cache<MessageCacheKey, SelectBufferResultWrapper> initCache(TieredMessageStoreConfig storeConfig) {
+    private Cache<MessageCacheKey, SelectBufferResultWrapper> initCache(MessageStoreConfig storeConfig) {
         long memoryMaxSize =
             (long) (Runtime.getRuntime().maxMemory() * storeConfig.getReadAheadCacheSizeThresholdRate());
 
@@ -165,7 +165,7 @@ public class MessageStoreFetcherImpl implements MessageStoreFetcher {
                     futureList.add(Pair.of(requestBatchSize, future));
                 }
                 flatFile.putInflightRequest(group, queueOffset, maxCount * factor, futureList);
-                LOGGER.debug("MessageStoreFetcherImpl#preFetchMessage: try to prefetch messages for later requests: next begin offset: {}, request offset: {}, factor: {}, flag: {}, request batch: {}, concurrency: {}",
+                log.debug("MessageStoreFetcherImpl#preFetchMessage: try to prefetch messages for later requests: next begin offset: {}, request offset: {}, factor: {}, flag: {}, request batch: {}, concurrency: {}",
                     nextBeginOffset, queueOffset, factor, flag, requestBatchSize, concurrency);
             }
         }
@@ -182,7 +182,7 @@ public class MessageStoreFetcherImpl implements MessageStoreFetcher {
                     return -1L;
                 }
                 if (result.getStatus() != GetMessageStatus.FOUND) {
-                    LOGGER.warn("MessageFetcher prefetch message then put to cache failed, result: {}, " +
+                    log.warn("MessageFetcher prefetch message then put to cache failed, result: {}, " +
                             "topic: {}, queue: {}, queue offset: {}, batch size: {}",
                         result.getStatus(), mq.getTopic(), mq.getQueueId(), queueOffset, batchSize);
                     return -1L;
@@ -199,7 +199,7 @@ public class MessageStoreFetcherImpl implements MessageStoreFetcher {
                     }
                     return offsetList.get(offsetList.size() - 1);
                 } catch (Exception e) {
-                    LOGGER.error("MessageFetcher prefetch message then put to cache failed, " +
+                    log.error("MessageFetcher prefetch message then put to cache failed, " +
                             "topic: {}, queue: {}, queue offset: {}, batch size: {}",
                         mq.getTopic(), mq.getQueueId(), queueOffset, batchSize, e);
                 }
@@ -243,10 +243,10 @@ public class MessageStoreFetcherImpl implements MessageStoreFetcher {
                 Stopwatch stopwatch = Stopwatch.createStarted();
                 // to prevent starvation issues, only allow waiting for processing request once
                 return future.thenComposeAsync(v -> {
-                    LOGGER.debug("MessageFetcher#getMessageFromCacheAsync: wait for response cost: {}ms",
+                    log.debug("MessageFetcher#getMessageFromCacheAsync: wait for response cost: {}ms",
                         stopwatch.elapsed(TimeUnit.MILLISECONDS));
                     return getMessageFromCacheAsync(flatFile, group, queueOffset, maxCount, false);
-                }, TieredStoreExecutor.fetchDataExecutor);
+                }, MessageStoreExecutor.fetchDataExecutor);
             }
         }
 
@@ -265,11 +265,11 @@ public class MessageStoreFetcherImpl implements MessageStoreFetcher {
 
         if (resultWrapperList.isEmpty()) {
             // If cache miss, pull messages immediately
-            LOGGER.info("MessageFetcher cache miss, group: {}, topic: {}, queueId: {}, offset: {}, maxCount: {}",
+            log.info("MessageFetcher cache miss, group: {}, topic: {}, queueId: {}, offset: {}, maxCount: {}",
                 group, mq.getTopic(), mq.getQueueId(), queueOffset, maxCount);
         } else {
             // If cache hit, return buffer result immediately and asynchronously prefetch messages
-            LOGGER.debug("MessageFetcher cache hit, group: {}, topic: {}, queueId: {}, offset: {}, maxCount: {}, resultSize: {}",
+            log.debug("MessageFetcher cache hit, group: {}, topic: {}, queueId: {}, offset: {}, maxCount: {}, resultSize: {}",
                 group, mq.getTopic(), mq.getQueueId(), queueOffset, maxCount, resultWrapperList.size());
 
             GetMessageResultExt result = new GetMessageResultExt();
@@ -346,7 +346,7 @@ public class MessageStoreFetcherImpl implements MessageStoreFetcher {
             return CompletableFuture.completedFuture(result);
         }
 
-        LOGGER.info("MessageFetcher#getMessageFromTieredStoreAsync, " +
+        log.info("MessageFetcher#getMessageFromTieredStoreAsync, " +
                 "topic: {}, queueId: {}, broker offset: {}-{}, offset: {}, expect: {}",
             flatFile.getMessageQueue().getTopic(), flatFile.getMessageQueue().getQueueId(),
             result.getMinOffset(), result.getMaxOffset(), queueOffset, batchSize);
@@ -374,7 +374,7 @@ public class MessageStoreFetcherImpl implements MessageStoreFetcher {
             cqBuffer.position(cqBuffer.remaining() - TieredConsumeQueue.CONSUME_QUEUE_STORE_UNIT_SIZE);
             long lastCommitLogOffset = CQItemBufferUtil.getCommitLogOffset(cqBuffer);
             if (lastCommitLogOffset < firstCommitLogOffset) {
-                LOGGER.error("MessageFetcher#getMessageFromTieredStoreAsync, " +
+                log.error("MessageFetcher#getMessageFromTieredStoreAsync, " +
                         "last offset is smaller than first offset, " +
                         "topic: {} queueId: {}, offset: {}, firstOffset: {}, lastOffset: {}",
                     flatFile.getMessageQueue().getTopic(), flatFile.getMessageQueue().getQueueId(), queueOffset,
@@ -417,7 +417,7 @@ public class MessageStoreFetcherImpl implements MessageStoreFetcher {
             return result;
         }).exceptionally(e -> {
             MessageQueue mq = flatFile.getMessageQueue();
-            LOGGER.warn("MessageFetcher#getMessageFromTieredStoreAsync failed, " +
+            log.warn("MessageFetcher#getMessageFromTieredStoreAsync failed, " +
                 "topic: {} queueId: {}, offset: {}, batchSize: {}", mq.getTopic(), mq.getQueueId(), queueOffset, finalBatchSize, e);
             result.setStatus(GetMessageStatus.OFFSET_FOUND_NULL);
             result.setNextBeginOffset(queueOffset);
@@ -497,10 +497,10 @@ public class MessageStoreFetcherImpl implements MessageStoreFetcher {
                 long commitLogOffset = CQItemBufferUtil.getCommitLogOffset(cqItem);
                 int size = CQItemBufferUtil.getSize(cqItem);
                 return flatFile.getCommitLogAsync(commitLogOffset, size);
-            }, TieredStoreExecutor.fetchDataExecutor)
+            }, MessageStoreExecutor.fetchDataExecutor)
             .thenApply(MessageFormatUtil::getStoreTimeStamp)
             .exceptionally(e -> {
-                LOGGER.error("MessageStoreFetcherImpl#getMessageStoreTimeStampAsync: " +
+                log.error("MessageStoreFetcherImpl#getMessageStoreTimeStampAsync: " +
                     "get or decode message failed: topic: {}, queue: {}, offset: {}", topic, queueId, queueOffset, e);
                 return -1L;
             });
@@ -516,7 +516,7 @@ public class MessageStoreFetcherImpl implements MessageStoreFetcher {
         try {
             return flatFile.getOffsetInConsumeQueueByTime(timestamp, type);
         } catch (Exception e) {
-            LOGGER.error("MessageStoreFetcherImpl#getOffsetInQueueByTime: " +
+            log.error("MessageStoreFetcherImpl#getOffsetInQueueByTime: " +
                     "get offset in queue by time failed: topic: {}, queue: {}, timestamp: {}, type: {}",
                 topic, queueId, timestamp, type, e);
         }
@@ -531,12 +531,12 @@ public class MessageStoreFetcherImpl implements MessageStoreFetcher {
         try {
             TopicMetadata topicMetadata = metadataStore.getTopic(topic);
             if (topicMetadata == null) {
-                LOGGER.info("MessageFetcher#queryMessageAsync, topic metadata not found, topic: {}", topic);
+                log.info("MessageFetcher#queryMessageAsync, topic metadata not found, topic: {}", topic);
                 return CompletableFuture.completedFuture(new QueryMessageResult());
             }
             topicId = topicMetadata.getTopicId();
         } catch (Exception e) {
-            LOGGER.error("MessageFetcher#queryMessageAsync, get topic id failed, topic: {}", topic, e);
+            log.error("MessageFetcher#queryMessageAsync, get topic id failed, topic: {}", topic, e);
             return CompletableFuture.completedFuture(new QueryMessageResult());
         }
 
@@ -568,7 +568,7 @@ public class MessageStoreFetcherImpl implements MessageStoreFetcher {
             return CompletableFuture.allOf(futureList.toArray(new CompletableFuture[0])).thenApply(v -> result);
         }).whenComplete((result, throwable) -> {
             if (result != null) {
-                LOGGER.info("MessageFetcher#queryMessageAsync, " +
+                log.info("MessageFetcher#queryMessageAsync, " +
                         "query result: {}, topic: {}, topicId: {}, key: {}, maxCount: {}, timestamp: {}-{}",
                     result.getMessageBufferList().size(), topic, topicId, key, maxCount, begin, end);
             }

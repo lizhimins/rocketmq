@@ -42,7 +42,7 @@ import org.apache.rocketmq.logging.org.slf4j.Logger;
 import org.apache.rocketmq.logging.org.slf4j.LoggerFactory;
 import org.apache.rocketmq.store.logfile.DefaultMappedFile;
 import org.apache.rocketmq.store.logfile.MappedFile;
-import org.apache.rocketmq.tieredstore.TieredMessageStoreConfig;
+import org.apache.rocketmq.tieredstore.MessageStoreConfig;
 import org.apache.rocketmq.tieredstore.file.TieredFileAllocator;
 import org.apache.rocketmq.tieredstore.file.TieredFlatFile;
 import org.apache.rocketmq.tieredstore.provider.TieredFileSegment;
@@ -59,7 +59,7 @@ public class IndexStoreService extends ServiceThread implements IndexService {
      * File status in table example:
      * upload, upload, upload, sealed, sealed, unsealed
      */
-    private final TieredMessageStoreConfig storeConfig;
+    private final MessageStoreConfig storeConfig;
     private final ConcurrentSkipListMap<Long /* timestamp */, IndexFile> timeStoreTable;
     private final ReadWriteLock readWriteLock;
     private final AtomicLong compactTimestamp;

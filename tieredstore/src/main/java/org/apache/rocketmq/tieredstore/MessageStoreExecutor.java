@@ -24,7 +24,7 @@ import java.util.concurrent.TimeUnit;
 import org.apache.rocketmq.common.ThreadFactoryImpl;
 import org.apache.rocketmq.common.utils.ThreadUtils;
 
-public class TieredStoreExecutor {
+public class MessageStoreExecutor {
 
     public final BlockingQueue<Runnable> bufferCommitThreadPoolQueue;
     public final BlockingQueue<Runnable> bufferFetchThreadPoolQueue;
@@ -35,7 +35,7 @@ public class TieredStoreExecutor {
     public final ExecutorService bufferFetchExecutor;
     public final ExecutorService fileRecyclingExecutor;
 
-    public TieredStoreExecutor(int maxQueueCapacity) {
+    public MessageStoreExecutor(int maxQueueCapacity) {
 
         this.commonExecutor = ThreadUtils.newScheduledThreadPool(
                 Math.max(4, Runtime.getRuntime().availableProcessors()),

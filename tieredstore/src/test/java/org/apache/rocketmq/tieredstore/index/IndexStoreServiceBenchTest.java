@@ -29,11 +29,11 @@ import java.util.concurrent.atomic.LongAdder;
 import org.apache.rocketmq.common.UtilAll;
 import org.apache.rocketmq.logging.org.slf4j.Logger;
 import org.apache.rocketmq.logging.org.slf4j.LoggerFactory;
-import org.apache.rocketmq.tieredstore.TieredMessageStoreConfig;
-import org.apache.rocketmq.tieredstore.TieredStoreExecutor;
+import org.apache.rocketmq.tieredstore.MessageStoreConfig;
+import org.apache.rocketmq.tieredstore.MessageStoreExecutor;
 import org.apache.rocketmq.tieredstore.file.TieredFileAllocator;
-import org.apache.rocketmq.tieredstore.metadata.TieredMetadataManager;
-import org.apache.rocketmq.tieredstore.metadata.TieredMetadataStore;
+import org.apache.rocketmq.tieredstore.metadata.MetadataManager;
+import org.apache.rocketmq.tieredstore.metadata.MetadataStore;
 import org.apache.rocketmq.tieredstore.util.TieredStoreUtil;
 import org.junit.Assert;
 import org.junit.Ignore;
@@ -60,7 +60,7 @@ public class IndexStoreServiceBenchTest {
 
     private static final Logger log = LoggerFactory.getLogger(TieredStoreUtil.TIERED_STORE_LOGGER_NAME);
     private static final String TOPIC_NAME = "TopicTest";
-    private TieredMessageStoreConfig storeConfig;
+    private MessageStoreConfig storeConfig;
     private IndexStoreService indexStoreService;
     private final LongAdder failureCount = new LongAdder();
 
@@ -69,15 +69,15 @@ public class IndexStoreServiceBenchTest {
         String storePath = Paths.get(System.getProperty("user.home"), "store_test", "index").toString();
         UtilAll.deleteFile(new File(storePath));
         UtilAll.deleteFile(new File("./e96d41b2_IndexService"));
-        storeConfig = new TieredMessageStoreConfig();
+        storeConfig = new MessageStoreConfig();
         storeConfig.setBrokerClusterName("IndexService");
         storeConfig.setBrokerName("IndexServiceBroker");
         storeConfig.setStorePathRootDir(storePath);
         storeConfig.setTieredBackendServiceProvider("org.apache.rocketmq.tieredstore.provider.posix.PosixFileSegment");
         storeConfig.setTieredStoreIndexFileMaxHashSlotNum(500 * 1000);
         storeConfig.setTieredStoreIndexFileMaxIndexNum(2000 * 1000);
-        TieredMetadataStore metadataStore = new TieredMetadataManager(storeConfig);
-        TieredStoreExecutor.init();
+        MetadataStore metadataStore = new MetadataManager(storeConfig);
+        MessageStoreExecutor.init();
         TieredFileAllocator tieredFileAllocator = new TieredFileAllocator(metadataStore, storeConfig);
         indexStoreService = new IndexStoreService(tieredFileAllocator, storePath);
         indexStoreService.start();
@@ -87,7 +87,7 @@ public class IndexStoreServiceBenchTest {
     public void shutdown() throws IOException {
         indexStoreService.shutdown();
         indexStoreService.destroy();
-        TieredStoreExecutor.shutdown();
+        MessageStoreExecutor.shutdown();
     }
 
     //@Benchmark

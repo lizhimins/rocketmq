@@ -20,7 +20,8 @@ import java.io.File;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 
-public class TieredMessageStoreConfig {
+public class MessageStoreConfig {
+
     private String brokerName = localHostName();
     private String brokerClusterName = "DefaultCluster";
     private TieredStorageLevel tieredStorageLevel = TieredStorageLevel.NOT_IN_DISK;

@@ -45,10 +45,10 @@ import org.apache.rocketmq.logging.org.slf4j.LoggerFactory;
 import org.apache.rocketmq.store.MessageStore;
 import org.apache.rocketmq.tieredstore.MessageStoreFetcherImpl;
 import org.apache.rocketmq.tieredstore.common.FileSegmentType;
-import org.apache.rocketmq.tieredstore.TieredMessageStoreConfig;
+import org.apache.rocketmq.tieredstore.MessageStoreConfig;
 import org.apache.rocketmq.tieredstore.file.CompositeFlatFileExt;
 import org.apache.rocketmq.tieredstore.file.TieredFlatFileManager;
-import org.apache.rocketmq.tieredstore.metadata.TieredMetadataStore;
+import org.apache.rocketmq.tieredstore.metadata.MetadataStore;
 import org.apache.rocketmq.tieredstore.util.TieredStoreUtil;
 
 import static org.apache.rocketmq.store.metrics.DefaultStoreMetricsConstant.GAUGE_STORAGE_SIZE;
@@ -143,8 +143,8 @@ public class TieredStoreMetricsManager {
     }
 
     public static void init(Meter meter, Supplier<AttributesBuilder> attributesBuilderSupplier,
-        TieredMessageStoreConfig storeConfig, MessageStoreFetcherImpl fetcher,
-        TieredFlatFileManager flatFileManager, MessageStore next) {
+                            MessageStoreConfig storeConfig, MessageStoreFetcherImpl fetcher,
+                            TieredFlatFileManager flatFileManager, MessageStore next) {
 
         TieredStoreMetricsManager.attributesBuilderSupplier = attributesBuilderSupplier;
 
@@ -282,7 +282,7 @@ public class TieredStoreMetricsManager {
             .buildWithCallback(measurement -> {
                 Map<String, Map<FileSegmentType, Long>> topicFileSizeMap = new HashMap<>();
                 try {
-                    TieredMetadataStore metadataStore = flatFileManager.getMetadataStore();
+                    MetadataStore metadataStore = flatFileManager.getMetadataStore();
                     metadataStore.iterateFileSegment(fileSegment -> {
                         Map<FileSegmentType, Long> subMap =
                             topicFileSizeMap.computeIfAbsent(fileSegment.getPath(), k -> new HashMap<>());

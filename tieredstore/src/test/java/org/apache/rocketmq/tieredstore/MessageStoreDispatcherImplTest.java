@@ -18,33 +18,33 @@ package org.apache.rocketmq.tieredstore;
 
 import java.io.IOException;
 import org.apache.rocketmq.common.message.MessageQueue;
-import org.apache.rocketmq.tieredstore.metadata.TieredMetadataManager;
-import org.apache.rocketmq.tieredstore.metadata.TieredMetadataStore;
+import org.apache.rocketmq.tieredstore.metadata.MetadataManager;
+import org.apache.rocketmq.tieredstore.metadata.MetadataStore;
 import org.junit.After;
 import org.junit.Before;
 
 public class MessageStoreDispatcherImplTest {
 
     private final String storePath = MessageStoreTest.getRandomStorePath();
-    private TieredMessageStoreConfig storeConfig;
+    private MessageStoreConfig storeConfig;
     private MessageQueue mq;
-    private TieredMetadataStore metadataStore;
+    private MetadataStore metadataStore;
 
     @Before
     public void setUp() {
-        storeConfig = new TieredMessageStoreConfig();
+        storeConfig = new MessageStoreConfig();
         storeConfig.setStorePathRootDir(storePath);
         storeConfig.setTieredBackendServiceProvider("org.apache.rocketmq.tieredstore.provider.memory.MemoryFileSegmentWithoutCheck");
         storeConfig.setBrokerName(storeConfig.getBrokerName());
         mq = new MessageQueue("CompositeQueueFlatFileTest", storeConfig.getBrokerName(), 0);
-        metadataStore = new TieredMetadataManager(storeConfig);
-        TieredStoreExecutor.init();
+        metadataStore = new MetadataManager(storeConfig);
+        MessageStoreExecutor.init();
     }
 
     @After
     public void tearDown() throws IOException {
         MessageStoreTest.deleteStoreDirectory(storePath);
-        TieredStoreExecutor.shutdown();
+        MessageStoreExecutor.shutdown();
     }
 
     //@Test

@@ -17,7 +17,7 @@
 package org.apache.rocketmq.tieredstore.metrics;
 
 import java.io.IOException;
-import org.apache.rocketmq.tieredstore.TieredStoreExecutor;
+import org.apache.rocketmq.tieredstore.MessageStoreExecutor;
 import org.junit.After;
 import org.junit.Test;
 
@@ -27,7 +27,7 @@ public class TieredStoreMetricsManagerTest {
     public void tearDown() throws IOException {
         //MessageStoreTest.destroyCompositeFlatFileManager();
         //MessageStoreTest.destroyMetadataStore();
-        TieredStoreExecutor.shutdown();
+        MessageStoreExecutor.shutdown();
     }
 
     @Test
@@ -37,7 +37,7 @@ public class TieredStoreMetricsManagerTest {
 
     @Test
     public void init() {
-        TieredStoreExecutor.init();
+        MessageStoreExecutor.init();
         //TieredMessageStoreConfig storeConfig = new TieredMessageStoreConfig();
         //storeConfig.setTieredBackendServiceProvider("org.apache.rocketmq.tieredstore.provider.memory.MemoryFileSegment");
         //TieredStoreMetricsManager.init(OpenTelemetrySdk.builder().build().getMeter(""),

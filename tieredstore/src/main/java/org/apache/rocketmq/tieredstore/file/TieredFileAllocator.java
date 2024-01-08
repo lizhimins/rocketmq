@@ -18,17 +18,17 @@
 package org.apache.rocketmq.tieredstore.file;
 
 import org.apache.rocketmq.tieredstore.common.FileSegmentType;
-import org.apache.rocketmq.tieredstore.TieredMessageStoreConfig;
-import org.apache.rocketmq.tieredstore.metadata.TieredMetadataStore;
+import org.apache.rocketmq.tieredstore.MessageStoreConfig;
+import org.apache.rocketmq.tieredstore.metadata.MetadataStore;
 import org.apache.rocketmq.tieredstore.provider.FileSegmentAllocator;
 
 public class TieredFileAllocator {
 
-    private final TieredMetadataStore metadataStore;
-    private final TieredMessageStoreConfig storeConfig;
+    private final MetadataStore metadataStore;
+    private final MessageStoreConfig storeConfig;
     private final FileSegmentAllocator fileSegmentAllocator;
 
-    public TieredFileAllocator(TieredMetadataStore metadataStore, TieredMessageStoreConfig storeConfig)
+    public TieredFileAllocator(MetadataStore metadataStore, MessageStoreConfig storeConfig)
         throws ClassNotFoundException, NoSuchMethodException {
 
         this.metadataStore = metadataStore;
@@ -36,11 +36,11 @@ public class TieredFileAllocator {
         this.fileSegmentAllocator = new FileSegmentAllocator(metadataStore, storeConfig);
     }
 
-    public TieredMessageStoreConfig getStoreConfig() {
+    public MessageStoreConfig getStoreConfig() {
         return storeConfig;
     }
 
-    public TieredMetadataStore getMetadataStore() {
+    public MetadataStore getMetadataStore() {
         return metadataStore;
     }
 

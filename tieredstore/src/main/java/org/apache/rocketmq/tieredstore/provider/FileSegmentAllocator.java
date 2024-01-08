@@ -21,19 +21,19 @@ import java.lang.reflect.Constructor;
 import org.apache.rocketmq.logging.org.slf4j.Logger;
 import org.apache.rocketmq.logging.org.slf4j.LoggerFactory;
 import org.apache.rocketmq.tieredstore.common.FileSegmentType;
-import org.apache.rocketmq.tieredstore.TieredMessageStoreConfig;
-import org.apache.rocketmq.tieredstore.metadata.TieredMetadataStore;
+import org.apache.rocketmq.tieredstore.MessageStoreConfig;
+import org.apache.rocketmq.tieredstore.metadata.MetadataStore;
 import org.apache.rocketmq.tieredstore.util.TieredStoreUtil;
 
 public class FileSegmentAllocator {
 
     private static final Logger log = LoggerFactory.getLogger(TieredStoreUtil.TIERED_STORE_LOGGER_NAME);
 
-    private final TieredMetadataStore metadataStore;
-    private final TieredMessageStoreConfig storeConfig;
+    private final MetadataStore metadataStore;
+    private final MessageStoreConfig storeConfig;
     private final Constructor<? extends TieredFileSegment> fileSegmentConstructor;
 
-    public FileSegmentAllocator(TieredMetadataStore metadataStore, TieredMessageStoreConfig storeConfig)
+    public FileSegmentAllocator(MetadataStore metadataStore, MessageStoreConfig storeConfig)
         throws ClassNotFoundException, NoSuchMethodException {
 
         this.storeConfig = storeConfig;
@@ -41,14 +41,14 @@ public class FileSegmentAllocator {
         Class<? extends TieredFileSegment> clazz =
             Class.forName(storeConfig.getTieredBackendServiceProvider()).asSubclass(TieredFileSegment.class);
         fileSegmentConstructor = clazz.getConstructor(
-            TieredMessageStoreConfig.class, FileSegmentType.class, String.class, Long.TYPE);
+            MessageStoreConfig.class, FileSegmentType.class, String.class, Long.TYPE);
     }
 
-    public TieredMessageStoreConfig getStoreConfig() {
+    public MessageStoreConfig getStoreConfig() {
         return storeConfig;
     }
 
-    public TieredMetadataStore getMetadataStore() {
+    public MetadataStore getMetadataStore() {
         return metadataStore;
     }
 

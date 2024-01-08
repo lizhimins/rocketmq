@@ -32,8 +32,8 @@ import org.apache.commons.lang3.StringUtils;
 import org.apache.rocketmq.logging.org.slf4j.Logger;
 import org.apache.rocketmq.logging.org.slf4j.LoggerFactory;
 import org.apache.rocketmq.tieredstore.common.FileSegmentType;
-import org.apache.rocketmq.tieredstore.TieredMessageStoreConfig;
-import org.apache.rocketmq.tieredstore.TieredStoreExecutor;
+import org.apache.rocketmq.tieredstore.MessageStoreConfig;
+import org.apache.rocketmq.tieredstore.MessageStoreExecutor;
 import org.apache.rocketmq.tieredstore.metrics.TieredStoreMetricsManager;
 import org.apache.rocketmq.tieredstore.provider.TieredFileSegment;
 import org.apache.rocketmq.tieredstore.provider.stream.FileSegmentInputStream;
@@ -60,8 +60,8 @@ public class PosixFileSegment extends TieredFileSegment {
     private volatile FileChannel readFileChannel;
     private volatile FileChannel writeFileChannel;
 
-    public PosixFileSegment(TieredMessageStoreConfig storeConfig,
-        FileSegmentType fileType, String filePath, long baseOffset) {
+    public PosixFileSegment(MessageStoreConfig storeConfig,
+                            FileSegmentType fileType, String filePath, long baseOffset) {
 
         super(storeConfig, fileType, filePath, baseOffset);
 
@@ -193,7 +193,7 @@ public class PosixFileSegment extends TieredFileSegment {
 
         CompletableFuture<Boolean> future = new CompletableFuture<>();
         try {
-            TieredStoreExecutor.commitExecutor.execute(() -> {
+            MessageStoreExecutor.commitExecutor.execute(() -> {
                 try {
                     byte[] byteArray = ByteStreams.toByteArray(inputStream);
                     if (byteArray.length != length) {

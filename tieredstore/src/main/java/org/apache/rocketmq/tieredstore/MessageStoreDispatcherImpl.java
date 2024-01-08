@@ -37,7 +37,6 @@ import org.apache.rocketmq.common.message.MessageQueue;
 import org.apache.rocketmq.logging.org.slf4j.Logger;
 import org.apache.rocketmq.logging.org.slf4j.LoggerFactory;
 import org.apache.rocketmq.store.DispatchRequest;
-import org.apache.rocketmq.store.MessageStore;
 import org.apache.rocketmq.store.SelectMappedBufferResult;
 import org.apache.rocketmq.store.queue.ConsumeQueueInterface;
 import org.apache.rocketmq.store.queue.CqUnit;
@@ -60,26 +59,26 @@ public class MessageStoreDispatcherImpl extends ServiceThread implements Message
     protected TieredStoreTopicFilter topicFilter;
     protected final String brokerName;
     protected final Semaphore semaphore;
-    protected final MessageStore defaultStore;
-    protected final TieredMessageStore messageStore;
-    protected final TieredMessageStoreConfig storeConfig;
+    protected final org.apache.rocketmq.store.MessageStore defaultStore;
+    protected final MessageStore messageStoreExt;
+    protected final MessageStoreConfig storeConfig;
     protected final TieredFlatFileManager flatFileManager;
 
     protected final ReentrantLock dispatchLock;
     protected ConcurrentMap<CompositeFlatFileExt, List<DispatchRequest>> dispatchRequestReadMap;
     protected ConcurrentMap<CompositeFlatFileExt, List<DispatchRequest>> dispatchRequestWriteMap;
 
-    public MessageStoreDispatcherImpl(TieredMessageStore messageStore) {
-        this.messageStore = messageStore;
-        this.defaultStore = messageStore.getMessageStore();
-        this.storeConfig = messageStore.getStoreConfig();
+    public MessageStoreDispatcherImpl(MessageStore messageStoreExt) {
+        this.messageStoreExt = messageStoreExt;
+        this.defaultStore = messageStoreExt.getMessageStore();
+        this.storeConfig = messageStoreExt.getStoreConfig();
         this.brokerName = storeConfig.getBrokerName();
         this.dispatchLock = new ReentrantLock();
         this.dispatchRequestReadMap = new ConcurrentHashMap<>();
         this.dispatchRequestWriteMap = new ConcurrentHashMap<>();
-        this.semaphore = new Semaphore(TieredStoreExecutor.QUEUE_CAPACITY / 4);
+        this.semaphore = new Semaphore(10000 / 4);
         this.topicFilter = new TieredStoreTopicBlackListFilter();
-        this.flatFileManager = messageStore.getFlatFileManager();
+        this.flatFileManager = messageStoreExt.getFlatFileManager();
         this.initScheduledTasks();
     }
 
@@ -94,10 +93,10 @@ public class MessageStoreDispatcherImpl extends ServiceThread implements Message
     }
 
     public void initScheduledTasks() {
-        TieredStoreExecutor.commonScheduledExecutor.scheduleWithFixedDelay(
+        MessageStoreExecutor.commonScheduledExecutor.scheduleWithFixedDelay(
             this::submitAll, 0, 30, TimeUnit.MILLISECONDS);
 
-        TieredStoreExecutor.commonScheduledExecutor.scheduleWithFixedDelay(
+        MessageStoreExecutor.commonScheduledExecutor.scheduleWithFixedDelay(
             this::cleanExpiredFile, 0, 30, TimeUnit.MILLISECONDS);
     }
 
@@ -108,7 +107,7 @@ public class MessageStoreDispatcherImpl extends ServiceThread implements Message
         try {
             for (CompositeFlatFileExt flatFile : flatFileManager.deepCopyFlatFileToList()) {
                 semaphore.acquire();
-                TieredStoreExecutor.commitExecutor.submit(() -> {
+                MessageStoreExecutor.commitExecutor.submit(() -> {
                     try {
                         while (true) {
                             if (!dispatchFlatFile(flatFile)) {
@@ -135,7 +134,7 @@ public class MessageStoreDispatcherImpl extends ServiceThread implements Message
         try {
             for (CompositeFlatFileExt flatFile : flatFileManager.deepCopyFlatFileToList()) {
                 semaphore.acquire();
-                TieredStoreExecutor.commitExecutor.submit(() -> {
+                MessageStoreExecutor.commitExecutor.submit(() -> {
                     try {
                         // dispatchFlatFile(flatFile);
                     } finally {

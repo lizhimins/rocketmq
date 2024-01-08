@@ -22,7 +22,7 @@ import org.apache.rocketmq.tieredstore.file.CompositeFlatFileExt;
 
 public interface MessageStoreDispatcher extends CommitLogDispatcher {
 
-    boolean dispatchFlatFile(CompositeFlatFileExt flatFile) throws InterruptedException, Exception;
+    boolean dispatchFlatFile(CompositeFlatFileExt flatFile) throws Exception;
 
     void deleteExpiredFile(CompositeFlatFileExt flatFile);
 }

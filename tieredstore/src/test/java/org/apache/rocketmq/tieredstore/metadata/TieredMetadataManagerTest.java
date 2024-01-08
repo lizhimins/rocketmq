@@ -24,9 +24,8 @@ import java.util.Objects;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import org.apache.rocketmq.common.message.MessageQueue;
-import org.apache.rocketmq.tieredstore.MessageStoreTest;
 import org.apache.rocketmq.tieredstore.common.FileSegmentType;
-import org.apache.rocketmq.tieredstore.TieredMessageStoreConfig;
+import org.apache.rocketmq.tieredstore.MessageStoreConfig;
 import org.apache.rocketmq.tieredstore.util.TieredStoreUtil;
 import org.junit.After;
 import org.junit.Assert;
@@ -39,18 +38,18 @@ public class TieredMetadataManagerTest {
     private MessageQueue mq0;
     private MessageQueue mq1;
     private MessageQueue mq2;
-    private TieredMessageStoreConfig storeConfig;
-    private TieredMetadataStore metadataStore;
+    private MessageStoreConfig storeConfig;
+    private MetadataStore metadataStore;
 
     @Before
     public void setUp() {
-        storeConfig = new TieredMessageStoreConfig();
+        storeConfig = new MessageStoreConfig();
         storeConfig.setBrokerName("brokerName");
         storeConfig.setStorePathRootDir(storePath);
         mq0 = new MessageQueue("MetadataStoreTest0", storeConfig.getBrokerName(), 0);
         mq1 = new MessageQueue("MetadataStoreTest1", storeConfig.getBrokerName(), 0);
         mq2 = new MessageQueue("MetadataStoreTest1", storeConfig.getBrokerName(), 1);
-        metadataStore = new TieredMetadataManager(storeConfig);
+        metadataStore = new MetadataManager(storeConfig);
     }
 
     @After
@@ -141,13 +140,13 @@ public class TieredMetadataManagerTest {
         Assert.assertNotNull(metadataStore.getTopic(topic1));
     }
 
-    private long countFileSegment(TieredMetadataStore metadataStore) {
+    private long countFileSegment(MetadataStore metadataStore) {
         AtomicLong count = new AtomicLong();
         metadataStore.iterateFileSegment(segmentMetadata -> count.incrementAndGet());
         return count.get();
     }
 
-    private long countFileSegment(TieredMetadataStore metadataStore, String filePath) {
+    private long countFileSegment(MetadataStore metadataStore, String filePath) {
         AtomicLong count = new AtomicLong();
         metadataStore.iterateFileSegment(
             filePath, FileSegmentType.COMMIT_LOG, segmentMetadata -> count.incrementAndGet());
@@ -212,7 +211,7 @@ public class TieredMetadataManagerTest {
 
     @Test
     public void testReload() {
-        TieredMetadataManager metadataManager = (TieredMetadataManager) metadataStore;
+        MetadataManager metadataManager = (MetadataManager) metadataStore;
         metadataManager.addTopic(mq0.getTopic(), 1);
         metadataManager.addTopic(mq1.getTopic(), 2);
 
@@ -231,7 +230,7 @@ public class TieredMetadataManagerTest {
         Assert.assertTrue(new File(metadataManager.configFilePath()).exists());
 
         // Reload from disk
-        metadataManager = new TieredMetadataManager(storeConfig);
+        metadataManager = new MetadataManager(storeConfig);
         metadataManager.load();
         TopicMetadata topicMetadata = metadataManager.getTopic(mq0.getTopic());
         Assert.assertNotNull(topicMetadata);

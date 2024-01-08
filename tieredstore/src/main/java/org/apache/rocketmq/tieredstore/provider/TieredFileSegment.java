@@ -25,7 +25,7 @@ import java.util.concurrent.locks.ReentrantLock;
 import org.apache.rocketmq.logging.org.slf4j.Logger;
 import org.apache.rocketmq.logging.org.slf4j.LoggerFactory;
 import org.apache.rocketmq.tieredstore.common.FileSegmentType;
-import org.apache.rocketmq.tieredstore.TieredMessageStoreConfig;
+import org.apache.rocketmq.tieredstore.MessageStoreConfig;
 import org.apache.rocketmq.tieredstore.exception.TieredStoreErrorCode;
 import org.apache.rocketmq.tieredstore.exception.TieredStoreException;
 import org.apache.rocketmq.tieredstore.file.TieredCommitLog;
@@ -44,7 +44,7 @@ public abstract class TieredFileSegment implements Comparable<TieredFileSegment>
     protected final String filePath;
     protected final long baseOffset;
     protected final FileSegmentType fileType;
-    protected final TieredMessageStoreConfig storeConfig;
+    protected final MessageStoreConfig storeConfig;
 
     private final long maxSize;
     private final ReentrantLock bufferLock = new ReentrantLock();
@@ -63,8 +63,8 @@ public abstract class TieredFileSegment implements Comparable<TieredFileSegment>
     private FileSegmentInputStream fileSegmentInputStream;
     private CompletableFuture<Boolean> flightCommitRequest = CompletableFuture.completedFuture(false);
 
-    public TieredFileSegment(TieredMessageStoreConfig storeConfig,
-        FileSegmentType fileType, String filePath, long baseOffset) {
+    public TieredFileSegment(MessageStoreConfig storeConfig,
+                             FileSegmentType fileType, String filePath, long baseOffset) {
 
         this.storeConfig = storeConfig;
         this.fileType = fileType;

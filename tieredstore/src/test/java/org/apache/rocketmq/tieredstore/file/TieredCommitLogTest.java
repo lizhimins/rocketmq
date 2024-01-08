@@ -21,13 +21,12 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.List;
 import org.apache.rocketmq.common.message.MessageQueue;
-import org.apache.rocketmq.tieredstore.MessageStoreTest;
 import org.apache.rocketmq.tieredstore.common.FileSegmentType;
-import org.apache.rocketmq.tieredstore.TieredMessageStoreConfig;
-import org.apache.rocketmq.tieredstore.TieredStoreExecutor;
+import org.apache.rocketmq.tieredstore.MessageStoreConfig;
+import org.apache.rocketmq.tieredstore.MessageStoreExecutor;
 import org.apache.rocketmq.tieredstore.metadata.FileSegmentMetadata;
-import org.apache.rocketmq.tieredstore.metadata.TieredMetadataManager;
-import org.apache.rocketmq.tieredstore.metadata.TieredMetadataStore;
+import org.apache.rocketmq.tieredstore.metadata.MetadataManager;
+import org.apache.rocketmq.tieredstore.metadata.MetadataStore;
 import org.apache.rocketmq.tieredstore.provider.TieredFileSegment;
 import org.apache.rocketmq.tieredstore.util.MessageFormatUtil;
 import org.apache.rocketmq.tieredstore.util.MessageFormatUtilTest;
@@ -42,11 +41,11 @@ public class TieredCommitLogTest {
     private final String storePath = MessageStoreTest.getRandomStorePath();
     private MessageQueue mq;
     private TieredFileAllocator fileAllocator;
-    private TieredMetadataStore metadataStore;
+    private MetadataStore metadataStore;
 
     @Before
     public void setUp() throws ClassNotFoundException, NoSuchMethodException {
-        TieredMessageStoreConfig storeConfig = new TieredMessageStoreConfig();
+        MessageStoreConfig storeConfig = new MessageStoreConfig();
         storeConfig.setBrokerName("brokerName");
         storeConfig.setStorePathRootDir(storePath);
         storeConfig.setTieredStoreFilePath(storePath + File.separator);
@@ -54,16 +53,16 @@ public class TieredCommitLogTest {
         storeConfig.setCommitLogRollingInterval(0);
         storeConfig.setTieredStoreCommitLogMaxSize(1000);
 
-        metadataStore = new TieredMetadataManager(storeConfig);
+        metadataStore = new MetadataManager(storeConfig);
         fileAllocator = new TieredFileAllocator(metadataStore, storeConfig);
         mq = new MessageQueue("CommitLogTest", storeConfig.getBrokerName(), 0);
-        TieredStoreExecutor.init();
+        MessageStoreExecutor.init();
     }
 
     @After
     public void tearDown() throws IOException {
         MessageStoreTest.deleteStoreDirectory(storePath);
-        TieredStoreExecutor.shutdown();
+        MessageStoreExecutor.shutdown();
     }
 
     @Test
