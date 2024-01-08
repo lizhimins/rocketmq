@@ -14,7 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.rocketmq.tieredstore;
+package org.apache.rocketmq.tieredstore.core;
 
 import io.opentelemetry.api.common.Attributes;
 import java.nio.ByteBuffer;
@@ -31,6 +31,7 @@ import org.apache.rocketmq.store.GetMessageStatus;
 import org.apache.rocketmq.store.MessageFilter;
 import org.apache.rocketmq.store.QueryMessageResult;
 import org.apache.rocketmq.store.SelectMappedBufferResult;
+import org.apache.rocketmq.tieredstore.MessageStoreConfig;
 import org.apache.rocketmq.tieredstore.common.GetMessageResultExt;
 import org.apache.rocketmq.tieredstore.common.SelectBufferResult;
 import org.apache.rocketmq.tieredstore.exception.MessageStoreException;

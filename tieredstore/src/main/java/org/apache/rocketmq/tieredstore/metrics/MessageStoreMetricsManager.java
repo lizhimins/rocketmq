@@ -16,7 +16,6 @@
  */
 package org.apache.rocketmq.tieredstore.metrics;
 
-import com.github.benmanes.caffeine.cache.Policy;
 import io.opentelemetry.api.common.Attributes;
 import io.opentelemetry.api.common.AttributesBuilder;
 import io.opentelemetry.api.metrics.LongCounter;
@@ -33,7 +32,6 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.function.Supplier;
 import org.apache.rocketmq.common.Pair;
 import org.apache.rocketmq.common.message.MessageQueue;
@@ -44,7 +42,7 @@ import org.apache.rocketmq.logging.org.slf4j.Logger;
 import org.apache.rocketmq.logging.org.slf4j.LoggerFactory;
 import org.apache.rocketmq.store.MessageStore;
 import org.apache.rocketmq.tieredstore.MessageStoreConfig;
-import org.apache.rocketmq.tieredstore.MessageStoreFetcherImpl;
+import org.apache.rocketmq.tieredstore.core.MessageStoreFetcherImpl;
 import org.apache.rocketmq.tieredstore.common.FileSegmentType;
 import org.apache.rocketmq.tieredstore.file.FlatFileStore;
 import org.apache.rocketmq.tieredstore.file.FlatMessageFileExt;
@@ -59,8 +57,6 @@ import static org.apache.rocketmq.tieredstore.metrics.MessageStoreMetricsConstan
 import static org.apache.rocketmq.tieredstore.metrics.MessageStoreMetricsConstant.COUNTER_GET_MESSAGE_FALLBACK_TOTAL;
 import static org.apache.rocketmq.tieredstore.metrics.MessageStoreMetricsConstant.COUNTER_MESSAGES_DISPATCH_TOTAL;
 import static org.apache.rocketmq.tieredstore.metrics.MessageStoreMetricsConstant.COUNTER_MESSAGES_OUT_TOTAL;
-import static org.apache.rocketmq.tieredstore.metrics.MessageStoreMetricsConstant.GAUGE_CACHE_BYTES;
-import static org.apache.rocketmq.tieredstore.metrics.MessageStoreMetricsConstant.GAUGE_CACHE_COUNT;
 import static org.apache.rocketmq.tieredstore.metrics.MessageStoreMetricsConstant.GAUGE_DISPATCH_BEHIND;
 import static org.apache.rocketmq.tieredstore.metrics.MessageStoreMetricsConstant.GAUGE_DISPATCH_LATENCY;
 import static org.apache.rocketmq.tieredstore.metrics.MessageStoreMetricsConstant.GAUGE_STORAGE_MESSAGE_RESERVE_TIME;

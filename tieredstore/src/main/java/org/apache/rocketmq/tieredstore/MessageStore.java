@@ -51,6 +51,9 @@ import org.apache.rocketmq.tieredstore.file.FlatMessageFile;
 import org.apache.rocketmq.tieredstore.metadata.MetadataStore;
 import org.apache.rocketmq.tieredstore.metrics.MessageStoreMetricsConstant;
 import org.apache.rocketmq.tieredstore.metrics.MessageStoreMetricsManager;
+import org.apache.rocketmq.tieredstore.core.MessageStoreDispatcherImpl;
+import org.apache.rocketmq.tieredstore.core.MessageStoreFetcherImpl;
+import org.apache.rocketmq.tieredstore.core.MessageStoreFilter;
 import org.apache.rocketmq.tieredstore.util.TieredStoreUtil;
 
 public class MessageStore extends AbstractPluginMessageStore {

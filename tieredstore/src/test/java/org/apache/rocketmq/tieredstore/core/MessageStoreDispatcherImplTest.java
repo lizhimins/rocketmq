@@ -14,10 +14,12 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.rocketmq.tieredstore;
+package org.apache.rocketmq.tieredstore.core;
 
 import java.io.IOException;
 import org.apache.rocketmq.common.message.MessageQueue;
+import org.apache.rocketmq.tieredstore.MessageStoreConfig;
+import org.apache.rocketmq.tieredstore.MessageStoreTest;
 import org.apache.rocketmq.tieredstore.metadata.DefaultMetadataStore;
 import org.apache.rocketmq.tieredstore.metadata.MetadataStore;
 import org.junit.After;

@@ -15,14 +15,11 @@
  * limitations under the License.
  */
 
-package org.apache.rocketmq.tieredstore;
+package org.apache.rocketmq.tieredstore.core;
 
-import org.apache.rocketmq.store.CommitLogDispatcher;
-import org.apache.rocketmq.tieredstore.file.FlatMessageFileExt;
+public interface MessageStoreFilter {
 
-public interface MessageStoreDispatcher extends CommitLogDispatcher {
+    boolean filterTopic(String topicName);
 
-    boolean dispatchFlatFile(FlatMessageFileExt flatFile) throws Exception;
-
-    void deleteExpiredFile(FlatMessageFileExt flatFile);
+    void addTopicToBlackList(String topicName);
 }

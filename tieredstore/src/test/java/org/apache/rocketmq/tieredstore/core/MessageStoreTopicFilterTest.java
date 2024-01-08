@@ -14,7 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.rocketmq.tieredstore;
+package org.apache.rocketmq.tieredstore.core;
 
 import org.apache.rocketmq.common.topic.TopicValidator;
 import org.junit.Assert;

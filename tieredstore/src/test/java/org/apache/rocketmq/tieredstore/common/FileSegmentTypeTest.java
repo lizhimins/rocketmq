@@ -23,14 +23,14 @@ import static org.junit.Assert.*;
 public class FileSegmentTypeTest {
 
     @Test
-    public void testGetType() {
+    public void getTypeCodeTest() {
         assertEquals(0, FileSegmentType.COMMIT_LOG.getCode());
         assertEquals(1, FileSegmentType.CONSUME_QUEUE.getCode());
         assertEquals(2, FileSegmentType.INDEX.getCode());
     }
 
     @Test
-    public void testFromType() {
+    public void getTypeFromValueTest() {
         assertEquals(FileSegmentType.COMMIT_LOG, FileSegmentType.valueOf(0));
         assertEquals(FileSegmentType.CONSUME_QUEUE, FileSegmentType.valueOf(1));
         assertEquals(FileSegmentType.INDEX, FileSegmentType.valueOf(2));

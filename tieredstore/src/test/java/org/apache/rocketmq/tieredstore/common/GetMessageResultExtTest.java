@@ -34,19 +34,23 @@ public class GetMessageResultExtTest {
     @Test
     public void doFilterTest() {
         GetMessageResultExt resultExt = new GetMessageResultExt();
+        Assert.assertNull(resultExt.getStatus());
         Assert.assertEquals(0, resultExt.doFilterMessage(null).getMessageCount());
+
         resultExt.setStatus(GetMessageStatus.OFFSET_OVERFLOW_ONE);
         Assert.assertEquals(0, resultExt.doFilterMessage(null).getMessageCount());
+
         resultExt.setStatus(GetMessageStatus.OFFSET_OVERFLOW_BADLY);
         Assert.assertEquals(0, resultExt.doFilterMessage(null).getMessageCount());
 
-        resultExt.addMessageExt(new SelectMappedBufferResult(
-                1000L, MessageFormatUtilTest.buildMockedMessageBuffer(), 100, null),
-            0, "TagA".hashCode());
-        resultExt.addMessageExt(new SelectMappedBufferResult(
-                2000L, MessageFormatUtilTest.buildMockedMessageBuffer(), 100, null),
-            0, "TagB".hashCode());
-        assertEquals(2, resultExt.getMessageCount());
+        int total = 3;
+        for (int i = 0; i < total; i++) {
+            resultExt.addMessageExt(new SelectMappedBufferResult(i * 1000L,
+                    MessageFormatUtilTest.buildMockedMessageBuffer(), 1000, null),
+                0, ("Tag" + i).hashCode());
+        }
+        Assert.assertEquals(total, resultExt.getMessageCount());
+        Assert.assertEquals(total, resultExt.getTagCodeList().size());
 
         resultExt.setStatus(GetMessageStatus.FOUND);
         GetMessageResult getMessageResult = resultExt.doFilterMessage(new MessageFilter() {
@@ -61,5 +65,31 @@ public class GetMessageResultExtTest {
             }
         });
         Assert.assertEquals(0, getMessageResult.getMessageCount());
+
+        getMessageResult = resultExt.doFilterMessage(new MessageFilter() {
+            @Override
+            public boolean isMatchedByConsumeQueue(Long tagsCode, ConsumeQueueExt.CqExtUnit cqExtUnit) {
+                return "Tag1".hashCode() == tagsCode;
+            }
+
+            @Override
+            public boolean isMatchedByCommitLog(ByteBuffer msgBuffer, Map<String, String> properties) {
+                return false;
+            }
+        });
+        Assert.assertEquals(0, getMessageResult.getMessageCount());
+
+        getMessageResult = resultExt.doFilterMessage(new MessageFilter() {
+            @Override
+            public boolean isMatchedByConsumeQueue(Long tagsCode, ConsumeQueueExt.CqExtUnit cqExtUnit) {
+                return "Tag1".hashCode() == tagsCode;
+            }
+
+            @Override
+            public boolean isMatchedByCommitLog(ByteBuffer msgBuffer, Map<String, String> properties) {
+                return true;
+            }
+        });
+        Assert.assertEquals(1, getMessageResult.getMessageCount());
     }
 }

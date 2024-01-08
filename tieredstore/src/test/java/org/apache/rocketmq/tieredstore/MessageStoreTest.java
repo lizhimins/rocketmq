@@ -40,6 +40,7 @@ import org.apache.rocketmq.store.SelectMappedBufferResult;
 import org.apache.rocketmq.store.config.MessageStoreConfig;
 import org.apache.rocketmq.tieredstore.file.FlatMessageFileExt;
 import org.apache.rocketmq.tieredstore.file.FlatFileStore;
+import org.apache.rocketmq.tieredstore.core.MessageStoreFetcherImpl;
 import org.apache.rocketmq.tieredstore.util.TieredStoreUtil;
 import org.junit.Assert;
 import org.junit.Test;

@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.rocketmq.tieredstore;
+package org.apache.rocketmq.tieredstore.core;
 
 import java.util.concurrent.CompletableFuture;
 import org.apache.rocketmq.common.BoundaryType;
