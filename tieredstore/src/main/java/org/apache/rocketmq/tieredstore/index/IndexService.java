@@ -20,6 +20,7 @@ package org.apache.rocketmq.tieredstore.index;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import org.apache.rocketmq.tieredstore.common.AppendResult;
 
 public interface IndexService {
 

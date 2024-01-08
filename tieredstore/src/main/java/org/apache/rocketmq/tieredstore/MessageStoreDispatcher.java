@@ -18,11 +18,11 @@
 package org.apache.rocketmq.tieredstore;
 
 import org.apache.rocketmq.store.CommitLogDispatcher;
-import org.apache.rocketmq.tieredstore.file.CompositeFlatFileExt;
+import org.apache.rocketmq.tieredstore.file.FlatMessageFileExt;
 
 public interface MessageStoreDispatcher extends CommitLogDispatcher {
 
-    boolean dispatchFlatFile(CompositeFlatFileExt flatFile) throws Exception;
+    boolean dispatchFlatFile(FlatMessageFileExt flatFile) throws Exception;
 
-    void deleteExpiredFile(CompositeFlatFileExt flatFile);
+    void deleteExpiredFile(FlatMessageFileExt flatFile);
 }

@@ -18,7 +18,7 @@ package org.apache.rocketmq.tieredstore;
 
 import java.io.IOException;
 import org.apache.rocketmq.common.message.MessageQueue;
-import org.apache.rocketmq.tieredstore.metadata.MetadataManager;
+import org.apache.rocketmq.tieredstore.metadata.DefaultMetadataStore;
 import org.apache.rocketmq.tieredstore.metadata.MetadataStore;
 import org.junit.After;
 import org.junit.Before;
@@ -34,17 +34,17 @@ public class MessageStoreDispatcherImplTest {
     public void setUp() {
         storeConfig = new MessageStoreConfig();
         storeConfig.setStorePathRootDir(storePath);
-        storeConfig.setTieredBackendServiceProvider("org.apache.rocketmq.tieredstore.provider.memory.MemoryFileSegmentWithoutCheck");
+        storeConfig.setTieredBackendServiceProvider("org.apache.rocketmq.tieredstore.provider.MemoryFileSegmentWithoutCheck");
         storeConfig.setBrokerName(storeConfig.getBrokerName());
         mq = new MessageQueue("CompositeQueueFlatFileTest", storeConfig.getBrokerName(), 0);
-        metadataStore = new MetadataManager(storeConfig);
-        MessageStoreExecutor.init();
+        metadataStore = new DefaultMetadataStore(storeConfig);
+//        MessageStoreExecutor.init();
     }
 
     @After
     public void tearDown() throws IOException {
         MessageStoreTest.deleteStoreDirectory(storePath);
-        MessageStoreExecutor.shutdown();
+//        MessageStoreExecutor.shutdown();
     }
 
     //@Test

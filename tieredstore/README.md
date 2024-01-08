@@ -23,8 +23,8 @@ The following are some core configurations, for more details, see [TieredMessage
 | Configuration                   | Default value                                                   | Unit        | Function                                                                        |
 | ------------------------------- | --------------------------------------------------------------- | ----------- | ------------------------------------------------------------------------------- |
 | messageStorePlugIn              |                                                                 |             | Set to org.apache.rocketmq.tieredstore.MessageStoreExtend to use tiered storage |
-| tieredMetadataServiceProvider   | org.apache.rocketmq.tieredstore.metadata.MetadataManager  |             | Select your metadata provider                                                   |
-| tieredBackendServiceProvider    | org.apache.rocketmq.tieredstore.provider.posix.PosixFileSegment |             | Select your backend service provider                                            |
+| tieredMetadataServiceProvider   | org.apache.rocketmq.tieredstore.metadata.DefaultMetadataStore  |             | Select your metadata provider                                                   |
+| tieredBackendServiceProvider    | org.apache.rocketmq.tieredstore.provider.PosixFileSegment |             | Select your backend service provider                                            |
 | tieredStoreFilepath             |                                                                 |             | Select the directory using for tiered storage, only for POSIX provider.         |
 | tieredStorageLevel              | NOT_IN_DISK                                                     |             | The options are DISABLE, NOT_IN_DISK, NOT_IN_MEM, FORCE                         |
 | tieredStoreFileReservedTime     | 72                                                              | hour        | Default topic TTL in tiered storage                                             |

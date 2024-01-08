@@ -43,9 +43,10 @@ import org.apache.rocketmq.logging.org.slf4j.LoggerFactory;
 import org.apache.rocketmq.store.logfile.DefaultMappedFile;
 import org.apache.rocketmq.store.logfile.MappedFile;
 import org.apache.rocketmq.tieredstore.MessageStoreConfig;
-import org.apache.rocketmq.tieredstore.file.TieredFileAllocator;
-import org.apache.rocketmq.tieredstore.file.TieredFlatFile;
-import org.apache.rocketmq.tieredstore.provider.TieredFileSegment;
+import org.apache.rocketmq.tieredstore.common.AppendResult;
+import org.apache.rocketmq.tieredstore.file.FlatCompositeFile;
+import org.apache.rocketmq.tieredstore.file.FlatFileFactory;
+import org.apache.rocketmq.tieredstore.provider.FileSegment;
 import org.apache.rocketmq.tieredstore.util.TieredStoreUtil;
 
 public class IndexStoreService extends ServiceThread implements IndexService {
@@ -64,12 +65,12 @@ public class IndexStoreService extends ServiceThread implements IndexService {
     private final ReadWriteLock readWriteLock;
     private final AtomicLong compactTimestamp;
     private final String filePath;
-    private final TieredFileAllocator fileAllocator;
+    private final FlatFileFactory fileAllocator;
 
     private IndexFile currentWriteFile;
-    private TieredFlatFile flatFile;
+    private FlatCompositeFile flatCompositeFile;
 
-    public IndexStoreService(TieredFileAllocator fileAllocator, String filePath) {
+    public IndexStoreService(FlatFileFactory fileAllocator, String filePath) {
         this.storeConfig = fileAllocator.getStoreConfig();
         this.filePath = filePath;
         this.fileAllocator = fileAllocator;
@@ -138,20 +139,20 @@ public class IndexStoreService extends ServiceThread implements IndexService {
         this.setCompactTimestamp(this.timeStoreTable.firstKey() - 1);
 
         // recover remote
-        this.flatFile = fileAllocator.createFlatFileForIndexFile(filePath);
-        if (this.flatFile.getBaseOffset() == -1) {
-            this.flatFile.setBaseOffset(0);
-        }
+        this.flatCompositeFile = fileAllocator.createFlatFileForIndexFile(filePath);
+//        if (this.flatCompositeFile.getBaseOffset() == -1) {
+//            this.flatCompositeFile.setBaseOffset(0);
+//        }
 
-        for (TieredFileSegment fileSegment : flatFile.getFileSegmentList()) {
-            IndexFile indexFile = new IndexStoreFile(storeConfig, fileSegment);
-            IndexFile localFile = timeStoreTable.get(indexFile.getTimestamp());
-            if (localFile != null) {
-                localFile.destroy();
-            }
-            timeStoreTable.put(indexFile.getTimestamp(), indexFile);
-            log.info("IndexStoreService recover load remote file, timestamp: {}", indexFile.getTimestamp());
-        }
+//        for (FileSegment fileSegment : flatCompositeFile.getFileSegmentList()) {
+//            IndexFile indexFile = new IndexStoreFile(storeConfig, fileSegment);
+//            IndexFile localFile = timeStoreTable.get(indexFile.getTimestamp());
+//            if (localFile != null) {
+//                localFile.destroy();
+//            }
+//            timeStoreTable.put(indexFile.getTimestamp(), indexFile);
+//            log.info("IndexStoreService recover load remote file, timestamp: {}", indexFile.getTimestamp());
+//        }
 
         log.info("IndexStoreService recover finished, entrySize: {}, cost: {}ms, directory: {}",
             timeStoreTable.size(), stopwatch.elapsed(TimeUnit.MILLISECONDS), dir.getAbsolutePath());
@@ -266,10 +267,11 @@ public class IndexStoreService extends ServiceThread implements IndexService {
             log.error("IndexStoreService found compaction buffer is null, timestamp: {}", indexFile.getTimestamp());
             return;
         }
-        flatFile.append(byteBuffer);
-        flatFile.commit(true);
+        flatCompositeFile.append(byteBuffer);
+        flatCompositeFile.commit(true);
 
-        TieredFileSegment fileSegment = flatFile.getFileByIndex(flatFile.getFileSegmentCount() - 1);
+        FileSegment fileSegment = null;
+//        FileSegment fileSegment = flatCompositeFile.getFileByIndex(flatCompositeFile.getFileSegmentCount() - 1);
         if (fileSegment == null || fileSegment.getMinTimestamp() != indexFile.getTimestamp()) {
             log.warn("IndexStoreService submit compacted file to server failed, timestamp: {}", indexFile.getTimestamp());
             return;
@@ -289,8 +291,8 @@ public class IndexStoreService extends ServiceThread implements IndexService {
     }
 
     public void destroyExpiredFile(long expireTimestamp) {
-        flatFile.cleanExpiredFile(expireTimestamp);
-        flatFile.destroyExpiredFile();
+        flatCompositeFile.cleanExpiredFile(expireTimestamp);
+        flatCompositeFile.destroyExpiredFile();
     }
 
     public void destroy() {
@@ -307,8 +309,8 @@ public class IndexStoreService extends ServiceThread implements IndexService {
             }
 
             // delete remote
-            if (flatFile != null) {
-                flatFile.destroy();
+            if (flatCompositeFile != null) {
+                flatCompositeFile.destroy();
             }
         } catch (Exception e) {
             log.error("IndexStoreService destroy all file error", e);

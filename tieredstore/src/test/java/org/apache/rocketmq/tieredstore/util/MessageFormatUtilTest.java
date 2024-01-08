@@ -26,8 +26,8 @@ import org.apache.rocketmq.common.message.MessageConst;
 import org.apache.rocketmq.common.message.MessageDecoder;
 import org.apache.rocketmq.store.ConsumeQueue;
 import org.apache.rocketmq.tieredstore.common.SelectBufferResult;
-import org.apache.rocketmq.tieredstore.file.TieredCommitLog;
-import org.apache.rocketmq.tieredstore.file.TieredConsumeQueue;
+import org.apache.rocketmq.tieredstore.file.FlatCommitLogFile;
+import org.apache.rocketmq.tieredstore.file.FlatConsumeQueueFile;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -130,7 +130,7 @@ public class MessageFormatUtilTest {
     }
 
     public static ByteBuffer buildMockedConsumeQueueBuffer() {
-        ByteBuffer byteBuffer = ByteBuffer.allocate(TieredConsumeQueue.CONSUME_QUEUE_STORE_UNIT_SIZE);
+        ByteBuffer byteBuffer = ByteBuffer.allocate(FlatConsumeQueueFile.CONSUME_QUEUE_STORE_UNIT_SIZE);
         // 1 COMMIT_LOG_OFFSET
         byteBuffer.putLong(1);
         // 2 MESSAGE_SIZE
@@ -184,9 +184,9 @@ public class MessageFormatUtilTest {
         ByteBuffer msgBuffer1 = buildMockedMessageBuffer();
         msgBuffer1.putLong(MessageFormatUtil.QUEUE_OFFSET_POSITION, 10);
 
-        ByteBuffer msgBuffer2 = ByteBuffer.allocate(TieredCommitLog.CODA_SIZE);
-        msgBuffer2.putInt(TieredCommitLog.CODA_SIZE);
-        msgBuffer2.putInt(TieredCommitLog.BLANK_MAGIC_CODE);
+        ByteBuffer msgBuffer2 = ByteBuffer.allocate(FlatCommitLogFile.CODA_SIZE);
+        msgBuffer2.putInt(FlatCommitLogFile.CODA_SIZE);
+        msgBuffer2.putInt(FlatCommitLogFile.BLANK_MAGIC_CODE);
         msgBuffer2.putLong(System.currentTimeMillis());
         msgBuffer2.flip();
 
@@ -200,37 +200,37 @@ public class MessageFormatUtilTest {
         msgBuffer.put(msgBuffer3);
         msgBuffer.flip();
 
-        ByteBuffer cqBuffer1 = ByteBuffer.allocate(TieredConsumeQueue.CONSUME_QUEUE_STORE_UNIT_SIZE);
+        ByteBuffer cqBuffer1 = ByteBuffer.allocate(FlatConsumeQueueFile.CONSUME_QUEUE_STORE_UNIT_SIZE);
         cqBuffer1.putLong(1000);
         cqBuffer1.putInt(MSG_LEN);
         cqBuffer1.putLong(0);
         cqBuffer1.flip();
 
-        ByteBuffer cqBuffer2 = ByteBuffer.allocate(TieredConsumeQueue.CONSUME_QUEUE_STORE_UNIT_SIZE);
-        cqBuffer2.putLong(1000 + TieredCommitLog.CODA_SIZE + MSG_LEN);
+        ByteBuffer cqBuffer2 = ByteBuffer.allocate(FlatConsumeQueueFile.CONSUME_QUEUE_STORE_UNIT_SIZE);
+        cqBuffer2.putLong(1000 + FlatCommitLogFile.CODA_SIZE + MSG_LEN);
         cqBuffer2.putInt(MSG_LEN);
         cqBuffer2.putLong(0);
         cqBuffer2.flip();
 
-        ByteBuffer cqBuffer3 = ByteBuffer.allocate(TieredConsumeQueue.CONSUME_QUEUE_STORE_UNIT_SIZE);
+        ByteBuffer cqBuffer3 = ByteBuffer.allocate(FlatConsumeQueueFile.CONSUME_QUEUE_STORE_UNIT_SIZE);
         cqBuffer3.putLong(1000 + MSG_LEN);
         cqBuffer3.putInt(MSG_LEN);
         cqBuffer3.putLong(0);
         cqBuffer3.flip();
 
-        ByteBuffer cqBuffer4 = ByteBuffer.allocate(TieredConsumeQueue.CONSUME_QUEUE_STORE_UNIT_SIZE);
-        cqBuffer4.putLong(1000 + TieredCommitLog.CODA_SIZE + MSG_LEN);
+        ByteBuffer cqBuffer4 = ByteBuffer.allocate(FlatConsumeQueueFile.CONSUME_QUEUE_STORE_UNIT_SIZE);
+        cqBuffer4.putLong(1000 + FlatCommitLogFile.CODA_SIZE + MSG_LEN);
         cqBuffer4.putInt(MSG_LEN - 10);
         cqBuffer4.putLong(0);
         cqBuffer4.flip();
 
-        ByteBuffer cqBuffer5 = ByteBuffer.allocate(TieredConsumeQueue.CONSUME_QUEUE_STORE_UNIT_SIZE);
-        cqBuffer5.putLong(1000 + TieredCommitLog.CODA_SIZE + MSG_LEN);
+        ByteBuffer cqBuffer5 = ByteBuffer.allocate(FlatConsumeQueueFile.CONSUME_QUEUE_STORE_UNIT_SIZE);
+        cqBuffer5.putLong(1000 + FlatCommitLogFile.CODA_SIZE + MSG_LEN);
         cqBuffer5.putInt(MSG_LEN * 10);
         cqBuffer5.putLong(0);
         cqBuffer5.flip();
 
-        ByteBuffer cqBuffer = ByteBuffer.allocate(TieredConsumeQueue.CONSUME_QUEUE_STORE_UNIT_SIZE * 2);
+        ByteBuffer cqBuffer = ByteBuffer.allocate(FlatConsumeQueueFile.CONSUME_QUEUE_STORE_UNIT_SIZE * 2);
         cqBuffer.put(cqBuffer1);
         cqBuffer.put(cqBuffer2);
         cqBuffer.flip();
@@ -240,10 +240,10 @@ public class MessageFormatUtilTest {
         Assert.assertEquals(2, msgList.size());
         Assert.assertEquals(0, msgList.get(0).getStartOffset());
         Assert.assertEquals(MSG_LEN, msgList.get(0).getSize());
-        Assert.assertEquals(MSG_LEN + TieredCommitLog.CODA_SIZE, msgList.get(1).getStartOffset());
+        Assert.assertEquals(MSG_LEN + FlatCommitLogFile.CODA_SIZE, msgList.get(1).getStartOffset());
         Assert.assertEquals(MSG_LEN, msgList.get(1).getSize());
 
-        cqBuffer = ByteBuffer.allocate(TieredConsumeQueue.CONSUME_QUEUE_STORE_UNIT_SIZE * 2);
+        cqBuffer = ByteBuffer.allocate(FlatConsumeQueueFile.CONSUME_QUEUE_STORE_UNIT_SIZE * 2);
         cqBuffer.put(cqBuffer1);
         cqBuffer.put(cqBuffer4);
         cqBuffer.flip();
@@ -254,7 +254,7 @@ public class MessageFormatUtilTest {
         Assert.assertEquals(0, msgList.get(0).getStartOffset());
         Assert.assertEquals(MSG_LEN, msgList.get(0).getSize());
 
-        cqBuffer = ByteBuffer.allocate(TieredConsumeQueue.CONSUME_QUEUE_STORE_UNIT_SIZE * 3);
+        cqBuffer = ByteBuffer.allocate(FlatConsumeQueueFile.CONSUME_QUEUE_STORE_UNIT_SIZE * 3);
         cqBuffer.put(cqBuffer1);
         cqBuffer.put(cqBuffer3);
         cqBuffer.flip();
@@ -262,10 +262,10 @@ public class MessageFormatUtilTest {
         Assert.assertEquals(2, msgList.size());
         Assert.assertEquals(0, msgList.get(0).getStartOffset());
         Assert.assertEquals(MSG_LEN, msgList.get(0).getSize());
-        Assert.assertEquals(MSG_LEN + TieredCommitLog.CODA_SIZE, msgList.get(1).getStartOffset());
+        Assert.assertEquals(MSG_LEN + FlatCommitLogFile.CODA_SIZE, msgList.get(1).getStartOffset());
         Assert.assertEquals(MSG_LEN, msgList.get(1).getSize());
 
-        cqBuffer = ByteBuffer.allocate(TieredConsumeQueue.CONSUME_QUEUE_STORE_UNIT_SIZE);
+        cqBuffer = ByteBuffer.allocate(FlatConsumeQueueFile.CONSUME_QUEUE_STORE_UNIT_SIZE);
         cqBuffer.put(cqBuffer5);
         cqBuffer.flip();
         msgList = MessageFormatUtil.splitMessageBuffer(cqBuffer, msgBuffer);
@@ -297,7 +297,7 @@ public class MessageFormatUtilTest {
         for (int i = 0; i < addr.remaining(); i++) {
             buffer.put(MessageFormatUtil.STORE_HOST_POSITION + i, addr.get(i));
         }
-        String excepted = MessageDecoder.createMessageId(ByteBuffer.allocate(TieredStoreUtil.MSG_ID_LENGTH), addr, 7);
+        String excepted = MessageDecoder.createMessageId(ByteBuffer.allocate(MessageFormatUtil.MSG_ID_LENGTH), addr, 7);
         String offsetId = MessageFormatUtil.getOffsetId(buffer);
         Assert.assertEquals(excepted, offsetId);
     }

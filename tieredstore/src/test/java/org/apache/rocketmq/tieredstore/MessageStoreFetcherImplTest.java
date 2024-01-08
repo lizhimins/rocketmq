@@ -29,7 +29,7 @@ public class MessageStoreFetcherImplTest {
     //    storeConfig.setStorePathRootDir(storePath);
     //    storeConfig.setBrokerName(storeConfig.getBrokerName());
     //    storeConfig.setReadAheadCacheExpireDuration(Long.MAX_VALUE);
-    //    storeConfig.setTieredBackendServiceProvider("org.apache.rocketmq.tieredstore.provider.memory.MemoryFileSegmentWithoutCheck");
+    //    storeConfig.setTieredBackendServiceProvider("org.apache.rocketmq.tieredstore.provider.MemoryFileSegmentWithoutCheck");
     //    storeConfig.setTieredStoreIndexFileMaxHashSlotNum(2);
     //    storeConfig.setTieredStoreIndexFileMaxIndexNum(3);
     //    mq = new MessageQueue("MessageStoreFetcherImplTest", storeConfig.getBrokerName(), 0);

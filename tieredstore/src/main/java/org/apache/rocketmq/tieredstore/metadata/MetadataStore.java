@@ -19,6 +19,10 @@ package org.apache.rocketmq.tieredstore.metadata;
 import java.util.function.Consumer;
 import org.apache.rocketmq.common.message.MessageQueue;
 import org.apache.rocketmq.tieredstore.common.FileSegmentType;
+import org.apache.rocketmq.tieredstore.metadata.entity.FileSegmentMetadata;
+import org.apache.rocketmq.tieredstore.metadata.entity.QueueMetadata;
+import org.apache.rocketmq.tieredstore.metadata.entity.TimerMetadata;
+import org.apache.rocketmq.tieredstore.metadata.entity.TopicMetadata;
 
 public interface MetadataStore {
 
@@ -53,6 +57,32 @@ public interface MetadataStore {
     void deleteFileSegment(String basePath, FileSegmentType fileType);
 
     void deleteFileSegment(String basePath, FileSegmentType fileType, long baseOffset);
+
+    /**
+     * Get the metadata information of specified Topic.
+     *
+     * @return The metadata information of specified timestamp.
+     */
+    TimerMetadata getTimerMetadata(long timestamp);
+
+    /**
+     * Add a new metadata information of Topic.
+     *
+     * @param timestamp time
+     * @return The newly added metadata information of Topic.
+     */
+    TimerMetadata addTimerMetadata(long timestamp);
+
+    /**
+     * Add or update a new metadata information of Timer chunk.
+     *
+     * @param timerMetadata The metadata info.
+     */
+    void updateTimerMetadata(TimerMetadata timerMetadata);
+
+    void iterateTimerMetadata(Consumer<TimerMetadata> callback);
+
+    void deleteTimerMetadata(long timestamp);
 
     void destroy();
 }

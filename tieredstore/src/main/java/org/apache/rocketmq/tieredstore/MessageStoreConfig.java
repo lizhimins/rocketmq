@@ -94,7 +94,7 @@ public class MessageStoreConfig {
     // index file will force rolling to next file after idle specified time, default is 3h
     private int tieredStoreIndexFileRollingIdleInterval = 3 * 60 * 60 * 1000;
     private String tieredMetadataServiceProvider = "org.apache.rocketmq.tieredstore.metadata.TieredMetadataManager";
-    private String tieredBackendServiceProvider = "org.apache.rocketmq.tieredstore.provider.memory.MemoryFileSegment";
+    private String tieredBackendServiceProvider = "org.apache.rocketmq.tieredstore.provider.MemoryFileSegment";
     // file reserved time, default is 72 hour
     private int tieredStoreFileReservedTime = 72;
     // time of forcing commitLog to roll to next file, default is 24 hour

@@ -25,8 +25,8 @@ import org.apache.rocketmq.common.message.MessageDecoder;
 import org.apache.rocketmq.logging.org.slf4j.Logger;
 import org.apache.rocketmq.logging.org.slf4j.LoggerFactory;
 import org.apache.rocketmq.tieredstore.common.SelectBufferResult;
-import org.apache.rocketmq.tieredstore.file.TieredCommitLog;
-import org.apache.rocketmq.tieredstore.file.TieredConsumeQueue;
+import org.apache.rocketmq.tieredstore.file.FlatCommitLogFile;
+import org.apache.rocketmq.tieredstore.file.FlatConsumeQueueFile;
 
 public class MessageFormatUtil {
 
@@ -94,14 +94,14 @@ public class MessageFormatUtil {
         msgBuffer.rewind();
 
         List<SelectBufferResult> bufferResultList = new ArrayList<>(
-            cqBuffer.remaining() / TieredConsumeQueue.CONSUME_QUEUE_STORE_UNIT_SIZE);
+            cqBuffer.remaining() / FlatConsumeQueueFile.CONSUME_QUEUE_STORE_UNIT_SIZE);
 
         if (msgBuffer.remaining() == 0) {
             log.error("MessageFormatUtil split buffer error, msg buffer length is 0");
             return bufferResultList;
         }
 
-        if (cqBuffer.remaining() % TieredConsumeQueue.CONSUME_QUEUE_STORE_UNIT_SIZE != 0) {
+        if (cqBuffer.remaining() % FlatConsumeQueueFile.CONSUME_QUEUE_STORE_UNIT_SIZE != 0) {
             log.error("MessageFormatUtil split buffer error, cq buffer size is {}", cqBuffer.remaining());
             return bufferResultList;
         }
@@ -110,7 +110,7 @@ public class MessageFormatUtil {
             long firstCommitLogOffset = MessageFormatUtil.getCommitLogOffset(cqBuffer);
 
             for (int position = cqBuffer.position(); position < cqBuffer.limit();
-                position += TieredConsumeQueue.CONSUME_QUEUE_STORE_UNIT_SIZE) {
+                position += FlatConsumeQueueFile.CONSUME_QUEUE_STORE_UNIT_SIZE) {
 
                 cqBuffer.position(position);
                 long logOffset = MessageFormatUtil.getCommitLogOffsetFromItem(cqBuffer);
@@ -126,8 +126,8 @@ public class MessageFormatUtil {
 
                 msgBuffer.position(offset);
                 int magicCode = getMagicCode(msgBuffer);
-                if (magicCode == TieredCommitLog.BLANK_MAGIC_CODE) {
-                    offset += TieredCommitLog.CODA_SIZE;
+                if (magicCode == FlatCommitLogFile.BLANK_MAGIC_CODE) {
+                    offset += FlatCommitLogFile.CODA_SIZE;
                     msgBuffer.position(offset);
                     magicCode = getMagicCode(msgBuffer);
                 }

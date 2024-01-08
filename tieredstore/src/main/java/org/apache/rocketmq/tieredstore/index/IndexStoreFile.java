@@ -40,8 +40,8 @@ import org.apache.rocketmq.logging.org.slf4j.LoggerFactory;
 import org.apache.rocketmq.store.logfile.DefaultMappedFile;
 import org.apache.rocketmq.store.logfile.MappedFile;
 import org.apache.rocketmq.tieredstore.MessageStoreConfig;
-import org.apache.rocketmq.tieredstore.MessageStoreExecutor;
-import org.apache.rocketmq.tieredstore.provider.TieredFileSegment;
+import org.apache.rocketmq.tieredstore.common.AppendResult;
+import org.apache.rocketmq.tieredstore.provider.FileSegment;
 import org.apache.rocketmq.tieredstore.util.TieredStoreUtil;
 
 import static org.apache.rocketmq.tieredstore.index.IndexFile.IndexStatusEnum.SEALED;
@@ -92,7 +92,7 @@ public class IndexStoreFile implements IndexFile {
     private MappedFile mappedFile;
     private ByteBuffer byteBuffer;
     private MappedFile compactMappedFile;
-    private TieredFileSegment fileSegment;
+    private FileSegment fileSegment;
 
     public IndexStoreFile(MessageStoreConfig storeConfig, long timestamp) throws IOException {
         this.hashSlotMaxCount = storeConfig.getTieredStoreIndexFileMaxHashSlotNum();
@@ -111,7 +111,7 @@ public class IndexStoreFile implements IndexFile {
         this.flushNewMetadata(byteBuffer, indexItemMaxCount == this.indexItemCount.get() + 1);
     }
 
-    public IndexStoreFile(MessageStoreConfig storeConfig, TieredFileSegment fileSegment) {
+    public IndexStoreFile(MessageStoreConfig storeConfig, FileSegment fileSegment) {
         this.fileSegment = fileSegment;
         this.fileStatus = new AtomicReference<>(UPLOAD);
         this.fileReadWriteLock = new ReentrantReadWriteLock();
@@ -300,7 +300,8 @@ public class IndexStoreFile implements IndexFile {
                 mappedFile.release();
             }
             return result;
-        }, MessageStoreExecutor.fetchDataExecutor);
+//        }, MessageStoreExecutor.fetchDataExecutor);
+        }, null);
     }
 
     protected CompletableFuture<List<IndexItem>> queryAsyncFromSegmentFile(

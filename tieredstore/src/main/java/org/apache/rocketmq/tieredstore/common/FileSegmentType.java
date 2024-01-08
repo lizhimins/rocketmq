@@ -16,6 +16,8 @@
  */
 package org.apache.rocketmq.tieredstore.common;
 
+import java.util.Arrays;
+
 public enum FileSegmentType {
 
     COMMIT_LOG(0),
@@ -24,22 +26,20 @@ public enum FileSegmentType {
 
     INDEX(2);
 
-    private final int fileType;
+    private final int code;
 
-    FileSegmentType(int fileType) {
-        this.fileType = fileType;
+    FileSegmentType(int code) {
+        this.code = code;
     }
 
-    public int getFileType() {
-        return fileType;
+    public int getCode() {
+        return code;
     }
 
     public static FileSegmentType valueOf(int fileType) {
-        for (FileSegmentType fileSegmentType : FileSegmentType.values()) {
-            if (fileSegmentType.getFileType() == fileType) {
-                return fileSegmentType;
-            }
-        }
-        return COMMIT_LOG;
+        return Arrays.stream(FileSegmentType.values())
+            .filter(segmentType -> segmentType.getCode() == fileType)
+            .findFirst()
+            .orElse(COMMIT_LOG);
     }
 }

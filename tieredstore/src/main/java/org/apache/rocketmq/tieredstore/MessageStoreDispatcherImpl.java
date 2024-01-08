@@ -40,13 +40,12 @@ import org.apache.rocketmq.store.DispatchRequest;
 import org.apache.rocketmq.store.SelectMappedBufferResult;
 import org.apache.rocketmq.store.queue.ConsumeQueueInterface;
 import org.apache.rocketmq.store.queue.CqUnit;
+import org.apache.rocketmq.tieredstore.common.AppendResult;
 import org.apache.rocketmq.tieredstore.common.FileSegmentType;
-import org.apache.rocketmq.tieredstore.file.CompositeFlatFileExt;
-import org.apache.rocketmq.tieredstore.file.TieredFlatFileManager;
-import org.apache.rocketmq.tieredstore.metrics.TieredStoreMetricsConstant;
-import org.apache.rocketmq.tieredstore.metrics.TieredStoreMetricsManager;
-import org.apache.rocketmq.tieredstore.provider.TieredStoreTopicBlackListFilter;
-import org.apache.rocketmq.tieredstore.provider.TieredStoreTopicFilter;
+import org.apache.rocketmq.tieredstore.file.FlatFileStore;
+import org.apache.rocketmq.tieredstore.file.FlatMessageFileExt;
+import org.apache.rocketmq.tieredstore.metrics.MessageStoreMetricsConstant;
+import org.apache.rocketmq.tieredstore.metrics.MessageStoreMetricsManager;
 import org.apache.rocketmq.tieredstore.util.MessageFormatUtil;
 import org.apache.rocketmq.tieredstore.util.TieredStoreUtil;
 
@@ -56,17 +55,17 @@ public class MessageStoreDispatcherImpl extends ServiceThread implements Message
 
     protected static final long OFFSET_NOT_EXIST = -1L;
     protected volatile boolean stopped = true;
-    protected TieredStoreTopicFilter topicFilter;
+    protected MessageStoreFilter topicFilter;
     protected final String brokerName;
     protected final Semaphore semaphore;
     protected final org.apache.rocketmq.store.MessageStore defaultStore;
     protected final MessageStore messageStoreExt;
     protected final MessageStoreConfig storeConfig;
-    protected final TieredFlatFileManager flatFileManager;
-
+    protected final FlatFileStore flatFileManager;
+    protected final MessageStoreExecutor storeExecutor;
     protected final ReentrantLock dispatchLock;
-    protected ConcurrentMap<CompositeFlatFileExt, List<DispatchRequest>> dispatchRequestReadMap;
-    protected ConcurrentMap<CompositeFlatFileExt, List<DispatchRequest>> dispatchRequestWriteMap;
+    protected ConcurrentMap<FlatMessageFileExt, List<DispatchRequest>> dispatchRequestReadMap;
+    protected ConcurrentMap<FlatMessageFileExt, List<DispatchRequest>> dispatchRequestWriteMap;
 
     public MessageStoreDispatcherImpl(MessageStore messageStoreExt) {
         this.messageStoreExt = messageStoreExt;
@@ -77,8 +76,9 @@ public class MessageStoreDispatcherImpl extends ServiceThread implements Message
         this.dispatchRequestReadMap = new ConcurrentHashMap<>();
         this.dispatchRequestWriteMap = new ConcurrentHashMap<>();
         this.semaphore = new Semaphore(10000 / 4);
-        this.topicFilter = new TieredStoreTopicBlackListFilter();
+        this.topicFilter = new MessageStoreTopicFilter();
         this.flatFileManager = messageStoreExt.getFlatFileManager();
+        this.storeExecutor = messageStoreExt.getStoreExecutor();
         this.initScheduledTasks();
     }
 
@@ -93,11 +93,11 @@ public class MessageStoreDispatcherImpl extends ServiceThread implements Message
     }
 
     public void initScheduledTasks() {
-        MessageStoreExecutor.commonScheduledExecutor.scheduleWithFixedDelay(
-            this::submitAll, 0, 30, TimeUnit.MILLISECONDS);
-
-        MessageStoreExecutor.commonScheduledExecutor.scheduleWithFixedDelay(
-            this::cleanExpiredFile, 0, 30, TimeUnit.MILLISECONDS);
+//        this.storeExecutor.scheduleWithFixedDelay(
+//            this::submitAll, 0, 30, TimeUnit.MILLISECONDS);
+//
+//        this.storeExecutor.scheduleWithFixedDelay(
+//            this::cleanExpiredFile, 0, 30, TimeUnit.MILLISECONDS);
     }
 
     public void submitAll() {
@@ -105,22 +105,22 @@ public class MessageStoreDispatcherImpl extends ServiceThread implements Message
             return;
         }
         try {
-            for (CompositeFlatFileExt flatFile : flatFileManager.deepCopyFlatFileToList()) {
+            for (FlatMessageFileExt flatFile : flatFileManager.deepCopyFlatFileToList()) {
                 semaphore.acquire();
-                MessageStoreExecutor.commitExecutor.submit(() -> {
-                    try {
-                        while (true) {
-                            if (!dispatchFlatFile(flatFile)) {
-                                TimeUnit.MILLISECONDS.sleep(1);
-                                break;
-                            }
-                        }
-                    } catch (InterruptedException e) {
-                        throw new RuntimeException(e);
-                    } finally {
-                        semaphore.release();
-                    }
-                });
+//                MessageStoreExecutor.commitExecutor.submit(() -> {
+//                    try {
+//                        while (true) {
+//                            if (!dispatchFlatFile(flatFile)) {
+//                                TimeUnit.MILLISECONDS.sleep(1);
+//                                break;
+//                            }
+//                        }
+//                    } catch (InterruptedException e) {
+//                        throw new RuntimeException(e);
+//                    } finally {
+//                        semaphore.release();
+//                    }
+//                });
             }
         } catch (Throwable e) {
             log.error("StoreDispatcher, failed to record submit task", e);
@@ -132,26 +132,26 @@ public class MessageStoreDispatcherImpl extends ServiceThread implements Message
             return;
         }
         try {
-            for (CompositeFlatFileExt flatFile : flatFileManager.deepCopyFlatFileToList()) {
+            for (FlatMessageFileExt flatFile : flatFileManager.deepCopyFlatFileToList()) {
                 semaphore.acquire();
-                MessageStoreExecutor.commitExecutor.submit(() -> {
-                    try {
-                        // dispatchFlatFile(flatFile);
-                    } finally {
-                        semaphore.release();
-                    }
-                });
+//                MessageStoreExecutor.commitExecutor.submit(() -> {
+//                    try {
+//                        // dispatchFlatFile(flatFile);
+//                    } finally {
+//                        semaphore.release();
+//                    }
+//                });
             }
         } catch (Throwable e) {
             log.error("StoreDispatcher, failed to record submit task", e);
         }
     }
 
-    public TieredStoreTopicFilter getTopicFilter() {
+    public MessageStoreFilter getTopicFilter() {
         return topicFilter;
     }
 
-    public void setTopicFilter(TieredStoreTopicFilter topicFilter) {
+    public void setTopicFilter(MessageStoreFilter topicFilter) {
         this.topicFilter = topicFilter;
     }
 
@@ -165,7 +165,7 @@ public class MessageStoreDispatcherImpl extends ServiceThread implements Message
     }
 
     @Override
-    public boolean dispatchFlatFile(CompositeFlatFileExt flatFile) {
+    public boolean dispatchFlatFile(FlatMessageFileExt flatFile) {
         if (stopped) {
             return false;
         }
@@ -188,7 +188,7 @@ public class MessageStoreDispatcherImpl extends ServiceThread implements Message
         }
     }
 
-    public boolean dispatch(CompositeFlatFileExt flatFile, String topic, int queueId) {
+    public boolean dispatch(FlatMessageFileExt flatFile, String topic, int queueId) {
 
         long currentOffset = flatFile.getDispatchOffset();
         long minOffsetInQueue = defaultStore.getMinOffsetInQueue(topic, queueId);
@@ -290,17 +290,17 @@ public class MessageStoreDispatcherImpl extends ServiceThread implements Message
 
         this.buildIndex(flatFile, requestList);
 
-        Attributes attributes = TieredStoreMetricsManager.newAttributesBuilder()
-            .put(TieredStoreMetricsConstant.LABEL_TOPIC, topic)
-            .put(TieredStoreMetricsConstant.LABEL_QUEUE_ID, queueId)
-            .put(TieredStoreMetricsConstant.LABEL_FILE_TYPE, FileSegmentType.COMMIT_LOG.name().toLowerCase())
+        Attributes attributes = MessageStoreMetricsManager.newAttributesBuilder()
+            .put(MessageStoreMetricsConstant.LABEL_TOPIC, topic)
+            .put(MessageStoreMetricsConstant.LABEL_QUEUE_ID, queueId)
+            .put(MessageStoreMetricsConstant.LABEL_FILE_TYPE, FileSegmentType.COMMIT_LOG.name().toLowerCase())
             .build();
-        TieredStoreMetricsManager.messagesDispatchTotal.add(dispatchOffset - currentOffset, attributes);
+        MessageStoreMetricsManager.messagesDispatchTotal.add(dispatchOffset - currentOffset, attributes);
 
         return false;
     }
 
-    public void buildIndex(CompositeFlatFileExt flatFile, List<DispatchRequest> requestList) {
+    public void buildIndex(FlatMessageFileExt flatFile, List<DispatchRequest> requestList) {
         dispatchLock.lock();
         try {
             dispatchRequestWriteMap.computeIfAbsent(flatFile, k -> new ArrayList<>()).addAll(requestList);
@@ -320,11 +320,11 @@ public class MessageStoreDispatcherImpl extends ServiceThread implements Message
     }
 
     @Override
-    public void deleteExpiredFile(CompositeFlatFileExt flatFile) {
+    public void deleteExpiredFile(FlatMessageFileExt flatFile) {
 
     }
 
-    public AppendResult appendIndexFile(CompositeFlatFileExt flatFile, DispatchRequest request) {
+    public AppendResult appendIndexFile(FlatMessageFileExt flatFile, DispatchRequest request) {
         if (stopped) {
             return AppendResult.FILE_CLOSED;
         }
@@ -348,8 +348,8 @@ public class MessageStoreDispatcherImpl extends ServiceThread implements Message
             return;
         }
 
-        for (Map.Entry<CompositeFlatFileExt, List<DispatchRequest>> entry : dispatchRequestReadMap.entrySet()) {
-            CompositeFlatFileExt flatFile = entry.getKey();
+        for (Map.Entry<FlatMessageFileExt, List<DispatchRequest>> entry : dispatchRequestReadMap.entrySet()) {
+            FlatMessageFileExt flatFile = entry.getKey();
             List<DispatchRequest> requestList = entry.getValue();
             if (flatFile.isClosed()) {
                 requestList.clear();

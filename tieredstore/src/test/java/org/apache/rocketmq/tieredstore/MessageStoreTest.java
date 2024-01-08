@@ -38,8 +38,8 @@ import org.apache.rocketmq.store.GetMessageStatus;
 import org.apache.rocketmq.store.QueryMessageResult;
 import org.apache.rocketmq.store.SelectMappedBufferResult;
 import org.apache.rocketmq.store.config.MessageStoreConfig;
-import org.apache.rocketmq.tieredstore.file.CompositeFlatFileExt;
-import org.apache.rocketmq.tieredstore.file.TieredFlatFileManager;
+import org.apache.rocketmq.tieredstore.file.FlatMessageFileExt;
+import org.apache.rocketmq.tieredstore.file.FlatFileStore;
 import org.apache.rocketmq.tieredstore.util.TieredStoreUtil;
 import org.junit.Assert;
 import org.junit.Test;
@@ -78,7 +78,7 @@ public class MessageStoreTest {
     private MessageStore store;
     private MessageStoreFetcherImpl fetcher;
     private Configuration configuration;
-    private TieredFlatFileManager flatFileManager;
+    private FlatFileStore flatFileManager;
 
     //@Before
     //public void setUp() throws Exception {
@@ -95,7 +95,7 @@ public class MessageStoreTest {
     //    brokerConfig.setBrokerName("broker");
     //    configuration = new Configuration(LoggerFactory.getLogger(TieredStoreUtil.TIERED_STORE_LOGGER_NAME), "/tmp/rmqut/config", storeConfig, brokerConfig);
     //    Properties properties = new Properties();
-    //    properties.setProperty("tieredBackendServiceProvider", "org.apache.rocketmq.tieredstore.provider.memory.MemoryFileSegment");
+    //    properties.setProperty("tieredBackendServiceProvider", "org.apache.rocketmq.tieredstore.provider.MemoryFileSegment");
     //    configuration.registerConfig(properties);
     //    MessageStorePluginContext context = new MessageStorePluginContext(new MessageStoreConfig(), null, null, brokerConfig, configuration);
     //
@@ -122,8 +122,8 @@ public class MessageStoreTest {
     //}
 
     private void mockCompositeFlatFile() {
-        flatFileManager = Mockito.mock(TieredFlatFileManager.class);
-        CompositeFlatFileExt flatFile = Mockito.mock(CompositeFlatFileExt.class);
+        flatFileManager = Mockito.mock(FlatFileStore.class);
+        FlatMessageFileExt flatFile = Mockito.mock(FlatMessageFileExt.class);
         when(flatFile.getConsumeQueueCommitOffset()).thenReturn(Long.MAX_VALUE);
         when(flatFileManager.getFlatFile(mq)).thenReturn(flatFile);
         try {
@@ -265,7 +265,7 @@ public class MessageStoreTest {
     @Test
     public void testGetMinOffsetInQueue() {
         mockCompositeFlatFile();
-        CompositeFlatFileExt flatFile = flatFileManager.getFlatFile(mq);
+        FlatMessageFileExt flatFile = flatFileManager.getFlatFile(mq);
         when(nextStore.getMinOffsetInQueue(anyString(), anyInt())).thenReturn(100L);
         when(flatFileManager.getFlatFile(mq)).thenReturn(null);
         Assert.assertEquals(100L, store.getMinOffsetInQueue(mq.getTopic(), mq.getQueueId()));

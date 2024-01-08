@@ -28,11 +28,12 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import org.apache.rocketmq.common.ThreadFactoryImpl;
+import org.apache.rocketmq.tieredstore.common.AppendResult;
 import org.apache.rocketmq.tieredstore.common.FileSegmentType;
 import org.apache.rocketmq.tieredstore.MessageStoreConfig;
 import org.apache.rocketmq.tieredstore.MessageStoreExecutor;
-import org.apache.rocketmq.tieredstore.provider.TieredFileSegment;
-import org.apache.rocketmq.tieredstore.provider.posix.PosixFileSegment;
+import org.apache.rocketmq.tieredstore.provider.FileSegment;
+import org.apache.rocketmq.tieredstore.provider.PosixFileSegment;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
@@ -54,7 +55,7 @@ public class IndexStoreFileTest {
 
     @Before
     public void init() throws IOException {
-        MessageStoreExecutor.init();
+//        MessageStoreExecutor.init();
         filePath = UUID.randomUUID().toString().replace("-", "").substring(0, 8);
         String directory = Paths.get(System.getProperty("user.home"), "store_test", filePath).toString();
         storeConfig = new MessageStoreConfig();
@@ -62,7 +63,7 @@ public class IndexStoreFileTest {
         storeConfig.setTieredStoreFilePath(directory);
         storeConfig.setTieredStoreIndexFileMaxHashSlotNum(5);
         storeConfig.setTieredStoreIndexFileMaxIndexNum(20);
-        storeConfig.setTieredBackendServiceProvider("org.apache.rocketmq.tieredstore.provider.posix.PosixFileSegment");
+        storeConfig.setTieredBackendServiceProvider("org.apache.rocketmq.tieredstore.provider.PosixFileSegment");
         indexStoreFile = new IndexStoreFile(storeConfig, System.currentTimeMillis());
     }
 
@@ -72,8 +73,8 @@ public class IndexStoreFileTest {
             this.indexStoreFile.shutdown();
             this.indexStoreFile.destroy();
         }
-        MessageStoreTest.deleteStoreDirectory(storeConfig.getTieredStoreFilePath());
-        MessageStoreExecutor.shutdown();
+//        MessageStoreTest.deleteStoreDirectory(storeConfig.getTieredStoreFilePath());
+//        MessageStoreExecutor.shutdown();
     }
 
     @Test
@@ -219,7 +220,7 @@ public class IndexStoreFileTest {
         }
 
         ByteBuffer byteBuffer = indexStoreFile.doCompaction();
-        TieredFileSegment fileSegment = new PosixFileSegment(
+        FileSegment fileSegment = new PosixFileSegment(
             storeConfig, FileSegmentType.INDEX, filePath, 0L);
         fileSegment.append(byteBuffer, timestamp);
         fileSegment.commit();
@@ -252,7 +253,7 @@ public class IndexStoreFileTest {
         }
 
         ByteBuffer byteBuffer = indexStoreFile.doCompaction();
-        TieredFileSegment fileSegment = new PosixFileSegment(
+        FileSegment fileSegment = new PosixFileSegment(
             storeConfig, FileSegmentType.INDEX, filePath, 0L);
         fileSegment.append(byteBuffer, timestamp);
         fileSegment.commit();

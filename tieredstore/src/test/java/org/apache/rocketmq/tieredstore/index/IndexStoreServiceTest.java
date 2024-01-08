@@ -39,8 +39,10 @@ import org.apache.rocketmq.logging.org.slf4j.LoggerFactory;
 import org.apache.rocketmq.store.logfile.DefaultMappedFile;
 import org.apache.rocketmq.tieredstore.MessageStoreConfig;
 import org.apache.rocketmq.tieredstore.MessageStoreExecutor;
-import org.apache.rocketmq.tieredstore.file.TieredFileAllocator;
-import org.apache.rocketmq.tieredstore.metadata.MetadataManager;
+import org.apache.rocketmq.tieredstore.MessageStoreTest;
+import org.apache.rocketmq.tieredstore.common.AppendResult;
+import org.apache.rocketmq.tieredstore.file.FlatFileFactory;
+import org.apache.rocketmq.tieredstore.metadata.DefaultMetadataStore;
 import org.apache.rocketmq.tieredstore.metadata.MetadataStore;
 import org.apache.rocketmq.tieredstore.util.TieredStoreUtil;
 import org.junit.After;
@@ -63,12 +65,12 @@ public class IndexStoreServiceTest {
 
     private String filePath;
     private MessageStoreConfig storeConfig;
-    private TieredFileAllocator fileAllocator;
+    private FlatFileFactory fileAllocator;
     private IndexStoreService indexService;
 
     @Before
     public void init() throws IOException, ClassNotFoundException, NoSuchMethodException {
-        MessageStoreExecutor.init();
+//        MessageStoreExecutor.init();
         filePath = UUID.randomUUID().toString().replace("-", "").substring(0, 8);
         String directory = Paths.get(System.getProperty("user.home"), "store_test", filePath).toString();
         storeConfig = new MessageStoreConfig();
@@ -76,9 +78,9 @@ public class IndexStoreServiceTest {
         storeConfig.setTieredStoreFilePath(directory);
         storeConfig.setTieredStoreIndexFileMaxHashSlotNum(5);
         storeConfig.setTieredStoreIndexFileMaxIndexNum(20);
-        storeConfig.setTieredBackendServiceProvider("org.apache.rocketmq.tieredstore.provider.posix.PosixFileSegment");
-        MetadataStore metadataStore = new MetadataManager(storeConfig);
-        fileAllocator = new TieredFileAllocator(metadataStore, storeConfig);
+        storeConfig.setTieredBackendServiceProvider("org.apache.rocketmq.tieredstore.provider.PosixFileSegment");
+        MetadataStore metadataStore = new DefaultMetadataStore(storeConfig);
+        fileAllocator = new FlatFileFactory(metadataStore, storeConfig);
     }
 
     @After
@@ -88,7 +90,7 @@ public class IndexStoreServiceTest {
             indexService.destroy();
         }
         MessageStoreTest.deleteStoreDirectory(storeConfig.getTieredStoreFilePath());
-        MessageStoreExecutor.shutdown();
+//        MessageStoreExecutor.shutdown();
     }
 
     @Test
