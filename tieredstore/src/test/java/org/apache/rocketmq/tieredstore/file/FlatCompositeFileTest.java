@@ -69,8 +69,8 @@ public class FlatCompositeFileTest {
 
     @Test
     public void testFileSegment() {
-        MemoryFileSegment fileSegment = new MemoryFileSegment(
-            FileSegmentType.COMMIT_LOG, queue, 100, storeConfig);
+        MemoryFileSegment fileSegment = new MemoryFileSegment(storeConfig,
+            FileSegmentType.COMMIT_LOG, MessageStoreUtil.toFilePath(queue), 100);
         fileSegment.initPosition(fileSegment.getSize());
 
         String filePath = MessageStoreUtil.toFilePath(queue);
@@ -97,8 +97,8 @@ public class FlatCompositeFileTest {
         Assert.assertEquals(1000 + MessageFormatUtil.COMMIT_LOG_CODA_SIZE, metadata.getSize());
         Assert.assertTrue(metadata.getSealTimestamp() > 0);
 
-        MemoryFileSegment fileSegment2 = new MemoryFileSegment(FileSegmentType.COMMIT_LOG,
-            queue, 1100, storeConfig);
+        MemoryFileSegment fileSegment2 = new MemoryFileSegment(storeConfig, FileSegmentType.COMMIT_LOG,
+            MessageStoreUtil.toFilePath(queue), 1100);
         fileQueue.updateFileSegment(fileSegment2);
         List<FileSegmentMetadata> list = getSegmentMetadataList(metadataStore);
         Assert.assertEquals(2, list.size());

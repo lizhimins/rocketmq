@@ -18,42 +18,35 @@ package org.apache.rocketmq.tieredstore.provider;
 
 import java.nio.ByteBuffer;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 import java.util.concurrent.ExecutionException;
 import org.apache.rocketmq.common.message.MessageQueue;
 import org.apache.rocketmq.tieredstore.MessageStoreConfig;
 import org.apache.rocketmq.tieredstore.common.FileSegmentType;
 import org.apache.rocketmq.tieredstore.stream.FileSegmentInputStream;
 import org.apache.rocketmq.tieredstore.util.MessageStoreUtil;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class MemoryFileSegment extends FileSegment {
 
+    private static final Logger log = LoggerFactory.getLogger(MessageStoreUtil.TIERED_STORE_LOGGER_NAME);
+
     protected final ByteBuffer memStore;
-
-    public CompletableFuture<Boolean> blocker;
-
+    protected CompletableFuture<Boolean> blocker;
     protected int size = 0;
-
     protected boolean checkSize = true;
-
-    public MemoryFileSegment(FileSegmentType fileType, MessageQueue messageQueue, long baseOffset,
-        MessageStoreConfig storeConfig) {
-        this(storeConfig, fileType, MessageStoreUtil.toFilePath(messageQueue), baseOffset);
-    }
 
     public MemoryFileSegment(MessageStoreConfig storeConfig,
         FileSegmentType fileType, String filePath, long baseOffset) {
+
         super(storeConfig, fileType, filePath, baseOffset);
-        switch (fileType) {
-            case COMMIT_LOG:
-            case INDEX:
-            case CONSUME_QUEUE:
-                memStore = ByteBuffer.allocate(10000);
-                break;
-            default:
-                memStore = null;
-                break;
-        }
+        memStore = ByteBuffer.allocate(10000);
         memStore.position((int) getSize());
+    }
+
+    public ByteBuffer getMemStore() {
+        return memStore;
     }
 
     public boolean isCheckSize() {
@@ -64,8 +57,12 @@ public class MemoryFileSegment extends FileSegment {
         this.checkSize = checkSize;
     }
 
-    public ByteBuffer getMemStore() {
-        return memStore;
+    public CompletableFuture<Boolean> getBlocker() {
+        return blocker;
+    }
+
+    public void setBlocker(CompletableFuture<Boolean> blocker) {
+        this.blocker = blocker;
     }
 
     @Override
@@ -105,13 +102,17 @@ public class MemoryFileSegment extends FileSegment {
 
         try {
             if (blocker != null && !blocker.get()) {
-                throw new IllegalStateException("Commit Exception for Memory Test");
+                log.info("Commit Blocker Exception for Memory Test");
+                return CompletableFuture.completedFuture(false);
             }
         } catch (InterruptedException | ExecutionException e) {
-//            Assert.fail(e.getMessage());
+            log.error("Commit Exception for Memory Test", e);
         }
 
-//        Assert.assertTrue(!checkSize || position >= getSize());
+        if (checkSize && position >= getSize()) {
+            log.info("Commit Position Exception for Memory Test");
+            return CompletableFuture.completedFuture(false);
+        }
 
         byte[] buffer = new byte[1024];
         int startPos = memStore.position();
@@ -120,9 +121,10 @@ public class MemoryFileSegment extends FileSegment {
             while ((len = inputStream.read(buffer)) > 0) {
                 memStore.put(buffer, 0, len);
             }
-//            Assert.assertEquals(length, memStore.position() - startPos);
+            if (length != memStore.position() - startPos) {
+                throw new CompletionException(new IllegalStateException());
+            }
         } catch (Exception e) {
-//            Assert.fail(e.getMessage());
             return CompletableFuture.completedFuture(false);
         }
         return CompletableFuture.completedFuture(true);

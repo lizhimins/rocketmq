@@ -60,8 +60,8 @@ public class MessageStoreTest {
     private static final String TIERED_STORE_PATH = "tiered_store_test";
 
     public static String getRandomStorePath() {
-        return Paths.get(FileUtils.getTempDirectoryPath(),
-            TIERED_STORE_PATH, UUID.randomUUID().toString()).toString();
+        return Paths.get(FileUtils.getTempDirectoryPath(), TIERED_STORE_PATH,
+            UUID.randomUUID().toString().replace("-", "").toUpperCase().substring(0, 16)).toString();
     }
 
     public static void deleteStoreDirectory(String storePath) {

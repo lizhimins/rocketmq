@@ -48,7 +48,7 @@ import static org.apache.rocketmq.tieredstore.metrics.MessageStoreMetricsConstan
  */
 public class PosixFileSegment extends FileSegment {
 
-    private static final Logger logger = LoggerFactory.getLogger(MessageStoreUtil.TIERED_STORE_LOGGER_NAME);
+    private static final Logger log = LoggerFactory.getLogger(MessageStoreUtil.TIERED_STORE_LOGGER_NAME);
 
     private static final String UNDERLINE = "_";
     private static final String OPERATION_POSIX_READ = "read";
@@ -60,7 +60,7 @@ public class PosixFileSegment extends FileSegment {
     private volatile FileChannel writeFileChannel;
 
     public PosixFileSegment(MessageStoreConfig storeConfig,
-                            FileSegmentType fileType, String filePath, long baseOffset) {
+        FileSegmentType fileType, String filePath, long baseOffset) {
 
         super(storeConfig, fileType, filePath, baseOffset);
 
@@ -73,7 +73,7 @@ public class PosixFileSegment extends FileSegment {
         String clusterBasePath = MessageStoreUtil.getHash(brokerClusterName) + UNDERLINE + brokerClusterName;
         this.fullPath = Paths.get(basePath, clusterBasePath, filePath,
             fileType.toString(), MessageStoreUtil.offset2FileName(baseOffset)).toString();
-        logger.info("Constructing Posix FileSegment, filePath: {}", fullPath);
+        log.info("Constructing Posix FileSegment, filePath: {}", fullPath);
 
         createFile();
     }
@@ -104,23 +104,24 @@ public class PosixFileSegment extends FileSegment {
 
     @Override
     public void createFile() {
-        if (file == null) {
+        if (this.file == null) {
             synchronized (this) {
-                if (file == null) {
-                    File file = new File(fullPath);
+                if (this.file == null) {
                     try {
+                        File file = new File(fullPath);
                         File dir = file.getParentFile();
                         if (!dir.exists()) {
-                            dir.mkdirs();
+                            if (!dir.mkdirs()) {
+                                return;
+                            }
                         }
-
-                        // TODO use direct IO to avoid polluting the page cache
-                        file.createNewFile();
-                        this.readFileChannel = new RandomAccessFile(file, "r").getChannel();
-                        this.writeFileChannel = new RandomAccessFile(file, "rwd").getChannel();
-                        this.file = file;
+                        if (file.createNewFile()) {
+                            this.readFileChannel = new RandomAccessFile(file, "r").getChannel();
+                            this.writeFileChannel = new RandomAccessFile(file, "rwd").getChannel();
+                            this.file = file;
+                        }
                     } catch (Exception e) {
-                        logger.error("PosixFileSegment#createFile: create file {} failed: ", filePath, e);
+                        log.error("PosixFileSegment#createFile: create file {} failed: ", filePath, e);
                     }
                 }
             }
@@ -136,9 +137,9 @@ public class PosixFileSegment extends FileSegment {
             if (writeFileChannel != null && writeFileChannel.isOpen()) {
                 writeFileChannel.close();
             }
-            logger.info("Destroy Posix FileSegment, filePath: {}", fullPath);
+            log.info("Destroy Posix FileSegment, filePath: {}", fullPath);
         } catch (IOException e) {
-            logger.error("Destroy Posix FileSegment failed, filePath: {}", fullPath, e);
+            log.error("Destroy Posix FileSegment failed, filePath: {}", fullPath, e);
         }
 
         if (file.exists()) {
@@ -175,7 +176,7 @@ public class PosixFileSegment extends FileSegment {
             long costTime = stopwatch.stop().elapsed(TimeUnit.MILLISECONDS);
             attributesBuilder.put(LABEL_SUCCESS, false);
             MessageStoreMetricsManager.providerRpcLatency.record(costTime, attributesBuilder.build());
-            logger.error("PosixFileSegment#read0: read file {} failed: position: {}, length: {}",
+            log.error("PosixFileSegment#read0: read file {} failed: position: {}, length: {}",
                 filePath, position, length, e);
             future.completeExceptionally(e);
         }
@@ -197,7 +198,7 @@ public class PosixFileSegment extends FileSegment {
                 try {
                     byte[] byteArray = ByteStreams.toByteArray(inputStream);
                     if (byteArray.length != length) {
-                        logger.error("PosixFileSegment#commit0: append file {} failed: real data size: {}, is not equal to length: {}",
+                        log.error("PosixFileSegment#commit0: append file {} failed: real data size: {}, is not equal to length: {}",
                             filePath, byteArray.length, length);
                         future.complete(false);
                         return;
@@ -223,7 +224,7 @@ public class PosixFileSegment extends FileSegment {
                     attributesBuilder.put(LABEL_SUCCESS, false);
                     MessageStoreMetricsManager.providerRpcLatency.record(costTime, attributesBuilder.build());
 
-                    logger.error("PosixFileSegment#commit0: append file {} failed: position: {}, length: {}",
+                    log.error("PosixFileSegment#commit0: append file {} failed: position: {}, length: {}",
                         filePath, position, length, e);
                     future.completeExceptionally(e);
                 }

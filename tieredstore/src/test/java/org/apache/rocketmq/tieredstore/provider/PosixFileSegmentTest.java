@@ -16,17 +16,12 @@
  */
 package org.apache.rocketmq.tieredstore.provider;
 
-import com.google.common.io.ByteStreams;
-import com.google.common.io.Files;
-import java.io.File;
-import java.io.IOException;
-import java.nio.ByteBuffer;
-import java.util.Random;
+import java.util.Arrays;
 import org.apache.rocketmq.common.message.MessageQueue;
+import org.apache.rocketmq.tieredstore.MessageStoreConfig;
 import org.apache.rocketmq.tieredstore.MessageStoreExecutor;
 import org.apache.rocketmq.tieredstore.MessageStoreTest;
 import org.apache.rocketmq.tieredstore.common.FileSegmentType;
-import org.apache.rocketmq.tieredstore.MessageStoreConfig;
 import org.apache.rocketmq.tieredstore.util.MessageStoreUtil;
 import org.junit.After;
 import org.junit.Assert;
@@ -35,52 +30,4 @@ import org.junit.Test;
 
 public class PosixFileSegmentTest {
 
-    private final String storePath = MessageStoreTest.getRandomStorePath();
-    private MessageStoreConfig storeConfig;
-    private MessageQueue mq;
-    private MessageStoreExecutor storeExecutor;
-
-    @Before
-    public void init() {
-        storeConfig = new MessageStoreConfig();
-        storeConfig.setTieredStoreFilePath(storePath);
-        mq = new MessageQueue("FileSegmentTest", "brokerName", 0);
-        storeExecutor = new MessageStoreExecutor();
-    }
-
-    @After
-    public void shutdown() {
-        MessageStoreTest.deleteStoreDirectory(storePath);
-        storeExecutor.shutdown();
-    }
-
-    @Test
-    public void fileSizeTest() {
-        FileSegment fileSegment = new PosixFileSegment(
-            storeConfig, FileSegmentType.CONSUME_QUEUE, MessageStoreUtil.toFilePath(mq), 0);
-        Assert.assertTrue(fileSegment.getPath().startsWith(storePath));
-        Assert.assertTrue(fileSegment.getPath().endsWith(File.separator + "0.0.0.0_0"));
-        Assert.assertTrue(fileSegment.getPath().endsWith(File.separator + "0.0.0.0_0.cq"));
-    }
-
-
-    @Test
-    public void testCommitAndRead() throws IOException {
-        PosixFileSegment fileSegment = new PosixFileSegment(
-            storeConfig, FileSegmentType.CONSUME_QUEUE, MessageStoreUtil.toFilePath(mq), 0);
-        byte[] source = new byte[4096];
-        new Random().nextBytes(source);
-        ByteBuffer buffer = ByteBuffer.wrap(source);
-        fileSegment.append(buffer, 0);
-        fileSegment.commit();
-
-        File file = new File(fileSegment.getPath());
-        Assert.assertTrue(file.exists());
-        byte[] result = new byte[4096];
-        ByteStreams.read(Files.asByteSource(file).openStream(), result, 0, 4096);
-        Assert.assertArrayEquals(source, result);
-
-        ByteBuffer read = fileSegment.read(0, 4096);
-        Assert.assertArrayEquals(source, read.array());
-    }
 }

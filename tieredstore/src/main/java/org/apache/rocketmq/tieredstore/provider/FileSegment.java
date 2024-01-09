@@ -22,6 +22,7 @@ import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.locks.ReentrantLock;
+import org.apache.rocketmq.tieredstore.MessageStore;
 import org.apache.rocketmq.tieredstore.MessageStoreConfig;
 import org.apache.rocketmq.tieredstore.common.AppendResult;
 import org.apache.rocketmq.tieredstore.common.FileSegmentType;
@@ -50,7 +51,7 @@ public abstract class FileSegment implements Comparable<FileSegment>, FileSegmen
     private final ReentrantLock fileLock = new ReentrantLock();
     private final Semaphore commitLock = new Semaphore(1);
 
-    private volatile boolean closed = true;
+    private volatile boolean closed = false;
     private volatile boolean deleted = false;
 
     private volatile long minTimestamp = Long.MAX_VALUE;
@@ -58,11 +59,13 @@ public abstract class FileSegment implements Comparable<FileSegment>, FileSegmen
     private volatile long commitPosition = 0L;
     private volatile long appendPosition = 0L;
 
-    private volatile List<ByteBuffer> bufferList = new ArrayList<>();
-    private volatile FileSegmentInputStream fileSegmentInputStream;
-    private volatile CompletableFuture<Boolean> flightCommitRequest;
+    protected volatile List<ByteBuffer> bufferList = new ArrayList<>();
+    protected volatile FileSegmentInputStream fileSegmentInputStream;
+    protected volatile CompletableFuture<Boolean> flightCommitRequest;
 
-    public FileSegment(MessageStoreConfig storeConfig, FileSegmentType fileType, String filePath, long baseOffset) {
+    public FileSegment(MessageStoreConfig storeConfig,
+        FileSegmentType fileType, String filePath, long baseOffset) {
+
         this.storeConfig = storeConfig;
         this.fileType = fileType;
         this.filePath = filePath;
@@ -167,15 +170,26 @@ public abstract class FileSegment implements Comparable<FileSegment>, FileSegmen
         }
     }
 
-    private List<ByteBuffer> borrowBuffer() {
+    protected List<ByteBuffer> borrowBuffer() {
+        List<ByteBuffer> tmp;
         fileLock.lock();
         try {
-            List<ByteBuffer> tmp = bufferList;
+            tmp = bufferList;
             bufferList = new ArrayList<>();
-            return tmp;
         } finally {
             fileLock.unlock();
         }
+        return tmp;
+    }
+
+    protected void updateTimestamp(long timestamp) {
+        if (maxTimestamp == Long.MAX_VALUE && minTimestamp == Long.MAX_VALUE) {
+            maxTimestamp = timestamp;
+            minTimestamp = timestamp;
+            return;
+        }
+        maxTimestamp = Math.max(maxTimestamp, timestamp);
+        minTimestamp = Math.min(minTimestamp, timestamp);
     }
 
     public AppendResult append(ByteBuffer buffer, long timestamp) {
@@ -184,90 +198,19 @@ public abstract class FileSegment implements Comparable<FileSegment>, FileSegmen
             if (closed) {
                 return AppendResult.FILE_CLOSED;
             }
-
-            // IndexFile is large and not change after compaction, no need deep copy
-            if (fileType == FileSegmentType.INDEX) {
-                minTimestamp = buffer.getLong(INDEX_BEGIN_TIME_STAMP);
-                maxTimestamp = buffer.getLong(INDEX_END_TIME_STAMP);
-                appendPosition += buffer.remaining();
-                bufferList.add(buffer);
-                return AppendResult.SUCCESS;
-            }
-
             if (appendPosition + buffer.remaining() > maxSize) {
                 return AppendResult.FILE_FULL;
             }
-
-            // The number of messages exceeds the low watermark, or the size of cached buffers is too large.
-            if (bufferList.size() > storeConfig.getTieredStoreGroupCommitCount() ||
-                appendPosition - commitPosition > storeConfig.getTieredStoreGroupCommitSize()) {
-                commitAsync();
-            }
-
-            if (bufferList.size() > storeConfig.getTieredStoreMaxGroupCommitCount()) {
+            if (bufferList.size() >= storeConfig.getTieredStoreMaxGroupCommitCount()) {
                 return AppendResult.BUFFER_FULL;
             }
-
-            if (timestamp != Long.MAX_VALUE) {
-                maxTimestamp = timestamp;
-                if (minTimestamp == Long.MAX_VALUE) {
-                    minTimestamp = timestamp;
-                }
-            }
-
-            appendPosition += buffer.remaining();
-
-            // deep copy buffer
-            ByteBuffer byteBuffer = ByteBuffer.allocateDirect(buffer.remaining());
-            byteBuffer.put(buffer);
-            byteBuffer.flip();
-            buffer.rewind();
-
-            bufferList.add(byteBuffer);
-            return AppendResult.SUCCESS;
+            this.updateTimestamp(timestamp);
+            this.appendPosition += buffer.remaining();
+            this.bufferList.add(buffer);
         } finally {
             fileLock.unlock();
         }
-    }
-
-    public ByteBuffer read(long position, int length) {
-        return readAsync(position, length).join();
-    }
-
-    public CompletableFuture<ByteBuffer> readAsync(long position, int length) {
-        CompletableFuture<ByteBuffer> future = new CompletableFuture<>();
-        if (position < 0 || length < 0) {
-            future.completeExceptionally(
-                new MessageStoreException(MessageStoreErrorCode.ILLEGAL_PARAM, "position or length is negative"));
-            return future;
-        }
-        if (length == 0) {
-            future.completeExceptionally(
-                new MessageStoreException(MessageStoreErrorCode.ILLEGAL_PARAM, "length is zero"));
-            return future;
-        }
-        if (position >= commitPosition) {
-            future.completeExceptionally(
-                new MessageStoreException(MessageStoreErrorCode.ILLEGAL_PARAM, "position is illegal"));
-            return future;
-        }
-        if (position + length > commitPosition) {
-            log.debug("TieredFileSegment#readAsync request position + length is greater than commit position," +
-                    " correct length using commit position, file: {}, request position: {}, commit position:{}, change length from {} to {}",
-                getPath(), position, commitPosition, length, commitPosition - position);
-            length = (int) (commitPosition - position);
-            if (length == 0) {
-                future.completeExceptionally(
-                    new MessageStoreException(MessageStoreErrorCode.NO_NEW_DATA, "request position is equal to commit position"));
-                return future;
-            }
-            if (fileType == FileSegmentType.CONSUME_QUEUE && length % MessageFormatUtil.CONSUME_QUEUE_UNIT_SIZE != 0) {
-                future.completeExceptionally(
-                    new MessageStoreException(MessageStoreErrorCode.ILLEGAL_PARAM, "position and length is illegal"));
-                return future;
-            }
-        }
-        return read0(position, length);
+        return AppendResult.SUCCESS;
     }
 
     public boolean needCommit() {
@@ -275,11 +218,6 @@ public abstract class FileSegment implements Comparable<FileSegment>, FileSegmen
     }
 
     public boolean commit() {
-        if (closed) {
-            return false;
-        }
-        // result is false when we send real commit request
-        // use join for wait flight request done
         Boolean result = commitAsync().join();
         if (!result) {
             result = flightCommitRequest.join();
@@ -296,9 +234,6 @@ public abstract class FileSegment implements Comparable<FileSegment>, FileSegmen
         }
     }
 
-    /**
-     * @return false: commit, true: no commit operation
-     */
     @SuppressWarnings("NonAtomicOperationOnVolatileField")
     public CompletableFuture<Boolean> commitAsync() {
         if (closed) {
@@ -342,20 +277,21 @@ public abstract class FileSegment implements Comparable<FileSegment>, FileSegmen
                     fileType, baseOffset + commitPosition, bufferList, null, bufferSize);
             }
 
-            return flightCommitRequest = this
-                .commit0(fileSegmentInputStream, commitPosition, bufferSize, fileType != FileSegmentType.INDEX)
-                .thenApply(result -> {
-                    if (result) {
-                        commitPosition += bufferSize;
-                        fileSegmentInputStream = null;
-                        return true;
-                    } else {
-                        fileSegmentInputStream.rewind();
-                        return false;
-                    }
-                })
-                .exceptionally(this::handleCommitException)
-                .whenComplete((result, e) -> releaseCommitLock());
+            boolean append = fileType != FileSegmentType.INDEX;
+            return flightCommitRequest =
+                this.commit0(fileSegmentInputStream, commitPosition, bufferSize, append)
+                    .thenApply(result -> {
+                        if (result) {
+                            commitPosition += bufferSize;
+                            fileSegmentInputStream = null;
+                            return true;
+                        } else {
+                            fileSegmentInputStream.rewind();
+                            return false;
+                        }
+                    })
+                    .exceptionally(this::handleCommitException)
+                    .whenComplete((result, e) -> releaseCommitLock());
 
         } catch (Exception e) {
             handleCommitException(e);
@@ -380,7 +316,7 @@ public abstract class FileSegment implements Comparable<FileSegment>, FileSegmen
         long fileSize = this.getCorrectFileSize(cause);
 
         if (fileSize == -1L) {
-            log.error("Get commit position error, Commit: %d, Expect: %d, Current Max: %d, FileName: %s",
+            log.error("Get commit position error, Commit: {}, Expect: {}, Current Max: {}, FileName: {}",
                 commitPosition, commitPosition + fileSegmentInputStream.getContentLength(), appendPosition, getPath());
             fileSegmentInputStream.rewind();
             return false;
@@ -428,5 +364,33 @@ public abstract class FileSegment implements Comparable<FileSegment>, FileSegmen
         }
         commitPosition = fileSize;
         return false;
+    }
+
+    public ByteBuffer read(long position, int length) {
+        return readAsync(position, length).join();
+    }
+
+    public CompletableFuture<ByteBuffer> readAsync(long position, int length) {
+        CompletableFuture<ByteBuffer> future = new CompletableFuture<>();
+        if (position < 0 || position >= commitPosition) {
+            future.completeExceptionally(new MessageStoreException(
+                MessageStoreErrorCode.ILLEGAL_PARAM, "FileSegment read position is illegal position"));
+            return future;
+        }
+
+        if (length <= 0) {
+            future.completeExceptionally(new MessageStoreException(
+                MessageStoreErrorCode.ILLEGAL_PARAM, "FileSegment read length illegal"));
+            return future;
+        }
+
+        int readableBytes = (int) (commitPosition - position);
+        if (readableBytes < length) {
+            length = readableBytes;
+            log.debug("FileSegment#readAsync, expect request position is greater than commit position, " +
+                    "file: {}, request position: {}, commit position:{}, change length from {} to {}",
+                getPath(), position, commitPosition, length, readableBytes);
+        }
+        return this.read0(position, length);
     }
 }

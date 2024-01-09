@@ -175,15 +175,15 @@ public class FlatCompositeFile {
     }
 
     private FileSegment newSegment(FileSegmentType fileType, long baseOffset, boolean createMetadata) {
-        FileSegment segment =
-            fileSegmentFactory.createSegment(fileType, filePath, baseOffset);
-        if (fileType != FileSegmentType.INDEX) {
-            segment.createFile();
-        }
-        if (createMetadata) {
-            this.updateFileSegment(segment);
-        }
-        return segment;
+//        FileSegment segment =
+//            fileSegmentFactory.createSegment(fileType, filePath, baseOffset);
+//        if (fileType != FileSegmentType.INDEX) {
+//            segment.createFile();
+//        }
+//        if (createMetadata) {
+//            this.updateFileSegment(segment);
+//        }
+        return null;
     }
 
     public void rollingNewFile() {

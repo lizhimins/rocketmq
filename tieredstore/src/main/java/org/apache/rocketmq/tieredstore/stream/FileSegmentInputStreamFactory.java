@@ -32,8 +32,7 @@ public class FileSegmentInputStreamFactory {
 
         switch (fileType) {
             case COMMIT_LOG:
-//                return new CommitLogInputStream(
-//                    fileType, offset, bufferList, byteBuffer, length);
+                return new CommitLogInputStream(fileType, offset, bufferList, byteBuffer, length);
             case CONSUME_QUEUE:
                 return new FileSegmentInputStream(fileType, bufferList, length);
             case INDEX:
@@ -42,7 +41,7 @@ public class FileSegmentInputStreamFactory {
                 }
                 return new FileSegmentInputStream(fileType, bufferList, length);
             default:
-                throw new IllegalArgumentException("file type is not supported");
+                throw new IllegalArgumentException("file type not supported");
         }
     }
 }

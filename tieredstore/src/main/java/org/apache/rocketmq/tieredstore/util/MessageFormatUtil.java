@@ -34,6 +34,7 @@ public class MessageFormatUtil {
     public static final int MAGIC_CODE_POSITION = 4;
     public static final int QUEUE_OFFSET_POSITION = 20;
     public static final int PHYSICAL_OFFSET_POSITION = 28;
+    public static final int SYS_FLAG_OFFSET_POSITION = 36;
     public static final int STORE_TIMESTAMP_POSITION = 56;
     public static final int STORE_HOST_POSITION = 64;
 
