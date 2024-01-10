@@ -37,7 +37,7 @@ import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
 
-public class FlatCompositeFileTest {
+public class FlatFlatFileTest {
 
     private final String storePath = MessageStoreTest.getRandomStorePath();
     private MessageQueue queue;
@@ -74,8 +74,8 @@ public class FlatCompositeFileTest {
         fileSegment.initPosition(fileSegment.getSize());
 
         String filePath = MessageStoreUtil.toFilePath(queue);
-        FlatCompositeFile fileQueue = fileQueueFactory.createFlatFileForCommitLog(filePath);
-        fileQueue.updateFileSegment(fileSegment);
+        FlatAppendFile fileQueue = fileQueueFactory.createFlatFileForCommitLog(filePath);
+        fileQueue.flushFileSegmentMeta(fileSegment);
 
         MetadataStore metadataStore = new DefaultMetadataStore(storeConfig);
         FileSegmentMetadata metadata =
@@ -86,20 +86,20 @@ public class FlatCompositeFileTest {
         Assert.assertEquals(0, metadata.getSealTimestamp());
 
 //        fileSegment.setFull();
-        fileQueue.updateFileSegment(fileSegment);
+        fileQueue.flushFileSegmentMeta(fileSegment);
         metadata = metadataStore.getFileSegment(fileSegment.getPath(), FileSegmentType.COMMIT_LOG, 100);
         Assert.assertEquals(1000, metadata.getSize());
         Assert.assertEquals(0, metadata.getSealTimestamp());
 
         fileSegment.commit();
-        fileQueue.updateFileSegment(fileSegment);
+        fileQueue.flushFileSegmentMeta(fileSegment);
         metadata = metadataStore.getFileSegment(fileSegment.getPath(), FileSegmentType.COMMIT_LOG, 100);
         Assert.assertEquals(1000 + MessageFormatUtil.COMMIT_LOG_CODA_SIZE, metadata.getSize());
         Assert.assertTrue(metadata.getSealTimestamp() > 0);
 
         MemoryFileSegment fileSegment2 = new MemoryFileSegment(storeConfig, FileSegmentType.COMMIT_LOG,
             MessageStoreUtil.toFilePath(queue), 1100);
-        fileQueue.updateFileSegment(fileSegment2);
+        fileQueue.flushFileSegmentMeta(fileSegment2);
         List<FileSegmentMetadata> list = getSegmentMetadataList(metadataStore);
         Assert.assertEquals(2, list.size());
         Assert.assertEquals(100, list.get(0).getBaseOffset());
@@ -116,7 +116,7 @@ public class FlatCompositeFileTest {
      */
     @Test
     public void testGetFileSegment() {
-        FlatCompositeFile fileQueue = fileQueueFactory.createFlatFileForCommitLog(MessageStoreUtil.toFilePath(queue));
+        FlatAppendFile fileQueue = fileQueueFactory.createFlatFileForCommitLog(MessageStoreUtil.toFilePath(queue));
 //        fileQueue.setBaseOffset(0);
         FileSegment segment1 = fileQueue.getFileToWrite();
         segment1.initPosition(1000);
@@ -137,7 +137,7 @@ public class FlatCompositeFileTest {
 
     @Test
     public void testAppendAndRead() {
-        FlatCompositeFile fileQueue = fileQueueFactory.createFlatFileForConsumeQueue(MessageStoreUtil.toFilePath(queue));
+        FlatAppendFile fileQueue = fileQueueFactory.createFlatFileForConsumeQueue(MessageStoreUtil.toFilePath(queue));
 //        fileQueue.setBaseOffset(0);
         Assert.assertEquals(0, fileQueue.getMinOffset());
 //        Assert.assertEquals(0, fileQueue.getDispatchCommitOffset());

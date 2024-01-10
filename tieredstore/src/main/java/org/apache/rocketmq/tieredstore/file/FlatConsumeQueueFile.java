@@ -26,56 +26,56 @@ import org.apache.rocketmq.tieredstore.util.MessageFormatUtil;
 
 public class FlatConsumeQueueFile {
 
-    private final FlatCompositeFile flatCompositeFile;
+    private final FlatAppendFile flatAppendFile;
 
     public FlatConsumeQueueFile(FlatFileFactory fileQueueFactory, String filePath) {
-        this.flatCompositeFile = fileQueueFactory.createFlatFileForConsumeQueue(filePath);
+        this.flatAppendFile = fileQueueFactory.createFlatFileForConsumeQueue(filePath);
     }
 
     public boolean isInitialized() {
-        return flatCompositeFile.getMinOffset() != -1L;
+        return flatAppendFile.getMinOffset() != -1L;
     }
 
-    public FlatCompositeFile getFlatFile() {
-        return flatCompositeFile;
+    public FlatAppendFile getFlatFile() {
+        return flatAppendFile;
     }
 
     public long getMinOffset() {
-        return flatCompositeFile.getMinOffset();
+        return flatAppendFile.getMinOffset();
     }
 
     public long getCommitOffset() {
-        return flatCompositeFile.getCommitOffset();
+        return flatAppendFile.getCommitOffset();
     }
 
     public long getMaxOffset() {
-        return flatCompositeFile.getMaxOffset();
+        return flatAppendFile.getMaxOffset();
     }
 
     public AppendResult append(final long offset, final int size, final long tagsCode, long timeStamp) {
         ByteBuffer cqItem = ByteBuffer.allocate(MessageFormatUtil.CONSUME_QUEUE_UNIT_SIZE);
         cqItem.putLong(offset).putInt(size).putLong(tagsCode).flip();
-        return flatCompositeFile.append(cqItem, timeStamp, true);
+        return flatAppendFile.append(cqItem, timeStamp, true);
     }
 
     public void commit(boolean sync) {
-        flatCompositeFile.commit(sync);
+        flatAppendFile.commit(sync);
     }
 
     public CompletableFuture<ByteBuffer> readAsync(long offset, int length) {
-        return flatCompositeFile.readAsync(offset, length);
+        return flatAppendFile.readAsync(offset, length);
     }
 
     public void cleanExpiredFile(long expireTimestamp) {
-        flatCompositeFile.cleanExpiredFile(expireTimestamp);
+        flatAppendFile.cleanExpiredFile(expireTimestamp);
     }
 
     public void destroyExpiredFile() {
-        flatCompositeFile.destroyExpiredFile();
+        flatAppendFile.destroyExpiredFile();
     }
 
     protected Pair<Long, Long> getQueueOffsetInFileByTime(long timestamp, BoundaryType boundaryType) {
-        FileSegment fileSegment = flatCompositeFile.getFileByTime(timestamp, boundaryType);
+        FileSegment fileSegment = flatAppendFile.getFileByTime(timestamp, boundaryType);
         if (fileSegment == null) {
             return Pair.of(-1L, -1L);
         }
@@ -84,6 +84,6 @@ public class FlatConsumeQueueFile {
     }
 
     public void destroy() {
-        flatCompositeFile.destroy();
+        flatAppendFile.destroy();
     }
 }

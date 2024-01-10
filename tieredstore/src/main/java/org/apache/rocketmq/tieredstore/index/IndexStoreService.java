@@ -44,7 +44,7 @@ import org.apache.rocketmq.store.logfile.DefaultMappedFile;
 import org.apache.rocketmq.store.logfile.MappedFile;
 import org.apache.rocketmq.tieredstore.MessageStoreConfig;
 import org.apache.rocketmq.tieredstore.common.AppendResult;
-import org.apache.rocketmq.tieredstore.file.FlatCompositeFile;
+import org.apache.rocketmq.tieredstore.file.FlatAppendFile;
 import org.apache.rocketmq.tieredstore.file.FlatFileFactory;
 import org.apache.rocketmq.tieredstore.provider.FileSegment;
 import org.apache.rocketmq.tieredstore.util.MessageStoreUtil;
@@ -68,7 +68,7 @@ public class IndexStoreService extends ServiceThread implements IndexService {
     private final FlatFileFactory fileAllocator;
 
     private IndexFile currentWriteFile;
-    private FlatCompositeFile flatCompositeFile;
+    private FlatAppendFile flatAppendFile;
 
     public IndexStoreService(FlatFileFactory fileAllocator, String filePath) {
         this.storeConfig = fileAllocator.getStoreConfig();
@@ -139,7 +139,7 @@ public class IndexStoreService extends ServiceThread implements IndexService {
         this.setCompactTimestamp(this.timeStoreTable.firstKey() - 1);
 
         // recover remote
-        this.flatCompositeFile = fileAllocator.createFlatFileForIndexFile(filePath);
+        this.flatAppendFile = fileAllocator.createFlatFileForIndexFile(filePath);
 //        if (this.flatCompositeFile.getBaseOffset() == -1) {
 //            this.flatCompositeFile.setBaseOffset(0);
 //        }
@@ -267,8 +267,8 @@ public class IndexStoreService extends ServiceThread implements IndexService {
             log.error("IndexStoreService found compaction buffer is null, timestamp: {}", indexFile.getTimestamp());
             return;
         }
-        flatCompositeFile.append(byteBuffer);
-        flatCompositeFile.commit(true);
+        flatAppendFile.append(byteBuffer);
+        flatAppendFile.commit(true);
 
         FileSegment fileSegment = null;
 //        FileSegment fileSegment = flatCompositeFile.getFileByIndex(flatCompositeFile.getFileSegmentCount() - 1);
@@ -291,8 +291,8 @@ public class IndexStoreService extends ServiceThread implements IndexService {
     }
 
     public void destroyExpiredFile(long expireTimestamp) {
-        flatCompositeFile.cleanExpiredFile(expireTimestamp);
-        flatCompositeFile.destroyExpiredFile();
+        flatAppendFile.cleanExpiredFile(expireTimestamp);
+        flatAppendFile.destroyExpiredFile();
     }
 
     public void destroy() {
@@ -309,8 +309,8 @@ public class IndexStoreService extends ServiceThread implements IndexService {
             }
 
             // delete remote
-            if (flatCompositeFile != null) {
-                flatCompositeFile.destroy();
+            if (flatAppendFile != null) {
+                flatAppendFile.destroy();
             }
         } catch (Exception e) {
             log.error("IndexStoreService destroy all file error", e);

@@ -19,11 +19,12 @@ package org.apache.rocketmq.tieredstore.file;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ConcurrentNavigableMap;
-import java.util.concurrent.ConcurrentSkipListMap;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
+import java.util.stream.Collectors;
 import javax.annotation.Nullable;
 import org.apache.rocketmq.common.BoundaryType;
 import org.apache.rocketmq.logging.org.slf4j.Logger;
@@ -36,7 +37,7 @@ import org.apache.rocketmq.tieredstore.provider.FileSegment;
 import org.apache.rocketmq.tieredstore.provider.FileSegmentFactory;
 import org.apache.rocketmq.tieredstore.util.MessageStoreUtil;
 
-public class FlatCompositeFile {
+public class FlatAppendFile {
 
     private static final Logger log = LoggerFactory.getLogger(MessageStoreUtil.TIERED_STORE_LOGGER_NAME);
     private static final long OFFSET_NOT_EXIST = -1L;
@@ -46,92 +47,30 @@ public class FlatCompositeFile {
     private final MetadataStore metadataStore;
     private final FileSegmentFactory fileSegmentFactory;
     private final ReentrantReadWriteLock fileSegmentLock;
-    private final ConcurrentNavigableMap<Long, FileSegment> fileSegmentTable;
+    private final CopyOnWriteArrayList<FileSegment> fileSegmentTable;
 
-    public FlatCompositeFile(FileSegmentFactory fileSegmentFactory, FileSegmentType fileType, String filePath) {
+    public FlatAppendFile(FileSegmentFactory fileSegmentFactory, FileSegmentType fileType, String filePath) {
         this.fileType = fileType;
         this.filePath = filePath;
         this.metadataStore = fileSegmentFactory.getMetadataStore();
         this.fileSegmentFactory = fileSegmentFactory;
         this.fileSegmentLock = new ReentrantReadWriteLock();
-        this.fileSegmentTable = new ConcurrentSkipListMap<>();
-        this.recoverMetadata();
+        this.fileSegmentTable = new CopyOnWriteArrayList<>();
+        this.recover();
     }
 
-    public String getFilePath() {
-        return filePath;
-    }
-
-    public FileSegmentType getFileType() {
-        return fileType;
-    }
-
-    public long getMinOffset() {
-        fileSegmentLock.readLock().lock();
-        try {
-            if (fileSegmentTable.isEmpty()) {
-                return OFFSET_NOT_EXIST;
-            }
-            return fileSegmentTable.firstKey();
-        } finally {
-            fileSegmentLock.readLock().unlock();
-        }
-    }
-
-    public long getCommitOffset() {
-        fileSegmentLock.readLock().lock();
-        try {
-            if (fileSegmentTable.isEmpty()) {
-                return OFFSET_NOT_EXIST;
-            }
-            return fileSegmentTable.lastEntry().getValue().getCommitOffset();
-        } finally {
-            fileSegmentLock.readLock().unlock();
-        }
-    }
-
-    public long getMaxOffset() {
-        fileSegmentLock.readLock().lock();
-        try {
-            if (fileSegmentTable.isEmpty()) {
-                return OFFSET_NOT_EXIST;
-            }
-            return fileSegmentTable.lastEntry().getValue().getAppendOffset();
-        } finally {
-            fileSegmentLock.readLock().unlock();
-        }
-    }
-
-    protected void recoverMetadata() {
-        metadataStore.iterateFileSegment(filePath, fileType, metadata -> {
-            FileSegment segment =
-                this.newSegment(fileType, metadata.getBaseOffset(), false);
-            segment.initPosition(metadata.getSize());
-            segment.setMinTimestamp(metadata.getBeginTimestamp());
-            segment.setMaxTimestamp(metadata.getEndTimestamp());
-            fileSegmentTable.put(metadata.getBaseOffset(), segment);
+    public void recover() {
+        List<FileSegment> fileSegmentList = new ArrayList<>();
+        this.metadataStore.iterateFileSegment(this.filePath, this.fileType, metadata -> {
+            FileSegment fileSegment = this.fileSegmentFactory.createSegment(
+                this.fileType, metadata.getPath(), metadata.getBaseOffset());
+            fileSegment.initPosition(metadata.getSize());
+            fileSegment.setMinTimestamp(metadata.getBeginTimestamp());
+            fileSegment.setMaxTimestamp(metadata.getEndTimestamp());
+            fileSegmentList.add(fileSegment);
         });
-
-        if (fileType != FileSegmentType.INDEX) {
-            correctFileSize();
-        }
-    }
-
-    /**
-     * FileQueue Status: Sealed | Sealed | Sealed | Not sealed, Allow appended && Not Full
-     */
-    public void updateFileSegment(FileSegment fileSegment) {
-        FileSegmentMetadata metadata = metadataStore.getFileSegment(
-            this.filePath, fileSegment.getFileType(), fileSegment.getBaseOffset());
-        if (metadata == null) {
-            metadata = new FileSegmentMetadata(
-                this.filePath, fileSegment.getBaseOffset(), fileSegment.getFileType().getCode());
-            metadata.setCreateTimestamp(System.currentTimeMillis());
-        }
-        metadata.setSize(fileSegment.getCommitPosition());
-        metadata.setBeginTimestamp(fileSegment.getMinTimestamp());
-        metadata.setEndTimestamp(fileSegment.getMaxTimestamp());
-        this.metadataStore.updateFileSegment(metadata);
+        this.fileSegmentTable.addAll(fileSegmentList.stream().sorted().collect(Collectors.toList()));
+        this.correctFileSize();
     }
 
     private void correctFileSize() {
@@ -174,71 +113,99 @@ public class FlatCompositeFile {
         //}
     }
 
-    private FileSegment newSegment(FileSegmentType fileType, long baseOffset, boolean createMetadata) {
-//        FileSegment segment =
-//            fileSegmentFactory.createSegment(fileType, filePath, baseOffset);
-//        if (fileType != FileSegmentType.INDEX) {
-//            segment.createFile();
-//        }
-//        if (createMetadata) {
-//            this.updateFileSegment(segment);
-//        }
-        return null;
+    public String getFilePath() {
+        return filePath;
+    }
+
+    public FileSegmentType getFileType() {
+        return fileType;
+    }
+
+    public long getMinOffset() {
+        List<FileSegment> list = fileSegmentTable;
+        return list.isEmpty() ? OFFSET_NOT_EXIST : list.get(0).getBaseOffset();
+    }
+
+    public long getCommitOffset() {
+        List<FileSegment> list = fileSegmentTable;
+        return list.isEmpty() ? OFFSET_NOT_EXIST : list.get(list.size() - 1).getCommitOffset();
+    }
+
+    public long getAppendOffset() {
+        List<FileSegment> list = fileSegmentTable;
+        return list.isEmpty() ? OFFSET_NOT_EXIST : list.get(list.size() - 1).getAppendOffset();
+    }
+
+    public long getMinTimestamp() {
+        List<FileSegment> list = fileSegmentTable;
+        return list.isEmpty() ? OFFSET_NOT_EXIST : list.get(0).getMinTimestamp();
+    }
+
+    public long getMaxTimestamp() {
+        List<FileSegment> list = fileSegmentTable;
+        return list.isEmpty() ? OFFSET_NOT_EXIST : list.get(list.size() - 1).getMaxTimestamp();
+    }
+
+    public void flushFileSegmentMeta(FileSegment fileSegment) {
+        FileSegmentMetadata metadata = metadataStore.getFileSegment(
+            this.filePath, fileSegment.getFileType(), fileSegment.getBaseOffset());
+        if (metadata == null) {
+            metadata = new FileSegmentMetadata(
+                this.filePath, fileSegment.getBaseOffset(), fileSegment.getFileType().getCode());
+            metadata.setCreateTimestamp(System.currentTimeMillis());
+        }
+        metadata.setSize(fileSegment.getCommitPosition());
+        metadata.setBeginTimestamp(fileSegment.getMinTimestamp());
+        metadata.setEndTimestamp(fileSegment.getMaxTimestamp());
+        this.metadataStore.updateFileSegment(metadata);
     }
 
     public void rollingNewFile() {
         fileSegmentLock.writeLock().lock();
         try {
-            // this.getFileToWrite().markSealed();
+            // todo:
+            // this.getFileToWrite().commit();
             this.getFileToWrite();
         } finally {
             fileSegmentLock.writeLock().unlock();
         }
     }
 
-    protected long getMinTimestamp() {
-        return 0;
-    }
-
-    protected long getMaxTimestamp() {
-        return 0;
-    }
-
     protected FileSegment getFileToWrite() {
-//        if (baseOffset == -1) {
-//            throw new IllegalStateException("need to set base offset before create file segment");
-//        }
+        if (fileSegmentTable.isEmpty()) {
+            throw new IllegalStateException("Need to set base offset before create file segment");
+        }
 
         FileSegment fileSegment;
         fileSegmentLock.readLock().lock();
         try {
-//            if (!fileSegmentList.isEmpty()) {
-//                fileSegment = fileSegmentList.get(fileSegmentList.size() - 1);
-//                if (!fileSegment.isFull()) {
-//                    return fileSegment;
-//                }
-//            }
+            if (!fileSegmentList.isEmpty()) {
+                fileSegment = fileSegmentList.get(fileSegmentList.size() - 1);
+                if (!fileSegment.isFull()) {
+                    return fileSegment;
+                }
+            }
         } finally {
             fileSegmentLock.readLock().unlock();
         }
 
         fileSegmentLock.writeLock().lock();
         try {
-//            long offset = baseOffset;
-//            if (!fileSegmentList.isEmpty()) {
-//                fileSegment = fileSegmentList.get(fileSegmentList.size() - 1);
-//                if (fileSegment.isFull()) {
-//                    if (fileSegment.commit()) {
-//                        this.updateFileSegment(fileSegment);
-//                    }
-//                } else {
-//                    return fileSegment;
-//                }
-//                offset = fileSegment.getMaxOffset();
-//            }
-//            fileSegment = this.newSegment(fileType, offset, true);
-//            fileSegmentList.add(fileSegment);
-//            needCommitFileSegmentList.add(fileSegment);
+            long offset = baseOffset;
+            if (!fileSegmentList.isEmpty()) {
+                fileSegment = fileSegmentList.get(fileSegmentList.size() - 1);
+                if (fileSegment.isFull()) {
+                    if (fileSegment.commit()) {
+                        this.updateFileSegment(fileSegment);
+                    }
+                } else {
+                    return fileSegment;
+                }
+                offset = fileSegment.getMaxOffset();
+            }
+            fileSegment = this.newSegment(fileType, offset, true);
+            fileSegmentList.add(fileSegment);
+            needCommitFileSegmentList.add(fileSegment);
         } finally {
             fileSegmentLock.writeLock().unlock();
         }
@@ -431,7 +398,8 @@ public class FlatCompositeFile {
         fileSegmentLock.writeLock().lock();
         try {
             while (!fileSegmentTable.isEmpty()) {
-                FileSegment fileSegment = fileSegmentTable.firstEntry().getValue();
+                FileSegment fileSegment = null;
+//                FileSegment fileSegment = fileSegmentTable.firstEntry().getValue();
                 try {
                     fileSegment.markDeleted();
                     fileSegment.destroyFile();

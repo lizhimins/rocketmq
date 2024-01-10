@@ -35,29 +35,29 @@ public class FlatCommitLogFile {
     private static final Logger log = LoggerFactory.getLogger(MessageStoreUtil.TIERED_STORE_LOGGER_NAME);
 
     private final MessageStoreConfig storeConfig;
-    private final FlatCompositeFile flatCompositeFile;
+    private final FlatAppendFile flatAppendFile;
     private final AtomicLong consumeQueueMinOffset;
 
     public FlatCommitLogFile(FlatFileFactory fileQueueFactory, String filePath) {
         this.storeConfig = fileQueueFactory.getStoreConfig();
-        this.flatCompositeFile = fileQueueFactory.createFlatFileForCommitLog(filePath);
+        this.flatAppendFile = fileQueueFactory.createFlatFileForCommitLog(filePath);
         this.consumeQueueMinOffset = new AtomicLong(OFFSET_NOT_EXIST);
     }
 
-    public FlatCompositeFile getFlatFile() {
-        return flatCompositeFile;
+    public FlatAppendFile getFlatFile() {
+        return flatAppendFile;
     }
 
     public long getMinOffset() {
-        return flatCompositeFile.getMinOffset();
+        return flatAppendFile.getMinOffset();
     }
 
     public long getCommitOffset() {
-        return flatCompositeFile.getCommitOffset();
+        return flatAppendFile.getCommitOffset();
     }
 
     public long getMaxOffset() {
-        return flatCompositeFile.getMaxOffset();
+        return flatAppendFile.getMaxOffset();
     }
 
     public long getMinConsumeQueueOffset() {
@@ -74,11 +74,11 @@ public class FlatCommitLogFile {
     }
 
     public long getMinTimestamp() {
-        return flatCompositeFile.getMinTimestamp();
+        return flatAppendFile.getMinTimestamp();
     }
 
     public long getMaxTimestamp() {
-        return flatCompositeFile.getMaxTimestamp();
+        return flatAppendFile.getMaxTimestamp();
     }
 
     public synchronized CompletableFuture<Long> correctMinOffsetAsync() {
@@ -89,64 +89,64 @@ public class FlatCommitLogFile {
 
         // queue offset field length is 8
         int length = MessageFormatUtil.QUEUE_OFFSET_POSITION + 8;
-        if (flatCompositeFile.getCommitOffset() - flatCompositeFile.getMinOffset() < length) {
+        if (flatAppendFile.getCommitOffset() - flatAppendFile.getMinOffset() < length) {
             this.consumeQueueMinOffset.set(OFFSET_NOT_EXIST);
             return CompletableFuture.completedFuture(OFFSET_NOT_EXIST);
         }
 
         try {
-            return this.flatCompositeFile.readAsync(this.flatCompositeFile.getMinOffset(), length)
+            return this.flatAppendFile.readAsync(this.flatAppendFile.getMinOffset(), length)
                     .thenApply(buffer -> {
                         long offset = MessageFormatUtil.getQueueOffset(buffer);
                         consumeQueueMinOffset.set(offset);
                         log.debug("Correct commitlog min cq offset success, " +
                                         "filePath={}, min cq offset={}, commitlog range={}-{}",
-                                flatCompositeFile.getFilePath(), offset, flatCompositeFile.getMinOffset(), flatCompositeFile.getCommitOffset());
+                                flatAppendFile.getFilePath(), offset, flatAppendFile.getMinOffset(), flatAppendFile.getCommitOffset());
                         return offset;
                     })
                     .exceptionally(throwable -> {
                         log.warn("Correct commitlog min cq offset error, filePath={}, range={}-{}",
-                                flatCompositeFile.getFilePath(), flatCompositeFile.getMinOffset(), flatCompositeFile.getCommitOffset(), throwable);
+                                flatAppendFile.getFilePath(), flatAppendFile.getMinOffset(), flatAppendFile.getCommitOffset(), throwable);
                         return consumeQueueMinOffset.get();
                     });
         } catch (Exception e) {
-            log.error("Correct commitlog min cq offset error, filePath={}", flatCompositeFile.getFilePath(), e);
+            log.error("Correct commitlog min cq offset error, filePath={}", flatAppendFile.getFilePath(), e);
         }
         return CompletableFuture.completedFuture(consumeQueueMinOffset.get());
     }
 
     public AppendResult append(ByteBuffer byteBuf) {
-        return flatCompositeFile.append(byteBuf, MessageFormatUtil.getStoreTimeStamp(byteBuf));
+        return flatAppendFile.append(byteBuf, MessageFormatUtil.getStoreTimeStamp(byteBuf));
     }
 
     public void commit(boolean sync) {
-        flatCompositeFile.commit(sync);
+        flatAppendFile.commit(sync);
     }
 
     public CompletableFuture<ByteBuffer> readAsync(long offset, int length) {
-        return flatCompositeFile.readAsync(offset, length);
+        return flatAppendFile.readAsync(offset, length);
     }
 
     public void rollingNewFile() {
-        FileSegment fileSegment = flatCompositeFile.getFileToWrite();
+        FileSegment fileSegment = flatAppendFile.getFileToWrite();
         if (System.currentTimeMillis() - fileSegment.getMaxTimestamp() >
                 TimeUnit.HOURS.toMillis(storeConfig.getCommitLogRollingInterval())
                 && fileSegment.getAppendPosition() > storeConfig.getCommitLogRollingMinimumSize()) {
-            flatCompositeFile.rollingNewFile();
+            flatAppendFile.rollingNewFile();
         }
     }
 
     public void cleanExpiredFile(long expireTimestamp) {
-        if (flatCompositeFile.cleanExpiredFile(expireTimestamp) > 0) {
+        if (flatAppendFile.cleanExpiredFile(expireTimestamp) > 0) {
             correctMinOffset();
         }
     }
 
     public void destroyExpiredFile() {
-        flatCompositeFile.destroyExpiredFile();
+        flatAppendFile.destroyExpiredFile();
     }
 
     public void destroy() {
-        flatCompositeFile.destroy();
+        flatAppendFile.destroy();
     }
 }

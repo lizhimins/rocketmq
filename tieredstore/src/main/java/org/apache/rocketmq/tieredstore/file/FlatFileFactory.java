@@ -43,7 +43,7 @@ public class FlatFileFactory {
         return metadataStore;
     }
 
-    public FlatCompositeFile createFlatFileForCommitLog(String filePath) {
+    public FlatAppendFile createFlatFileForCommitLog(String filePath) {
 //        FlatCompositeFile flatCompositeFile =
 //            new FlatCompositeFile(metadataStore, fileSegmentFactory, FileSegmentType.COMMIT_LOG, filePath);
 //        if (flatCompositeFile.getBaseOffset() == -1L) {
@@ -54,12 +54,12 @@ public class FlatFileFactory {
         return null;
     }
 
-    public FlatCompositeFile createFlatFileForConsumeQueue(String filePath) {
+    public FlatAppendFile createFlatFileForConsumeQueue(String filePath) {
         // return new FlatCompositeFile(metadataStore, fileSegmentFactory, FileSegmentType.CONSUME_QUEUE, filePath);
         return null;
     }
 
-    public FlatCompositeFile createFlatFileForIndexFile(String filePath) {
+    public FlatAppendFile createFlatFileForIndexFile(String filePath) {
         // return new FlatCompositeFile(metadataStore, fileSegmentFactory, FileSegmentType.INDEX, filePath);
         return null;
     }

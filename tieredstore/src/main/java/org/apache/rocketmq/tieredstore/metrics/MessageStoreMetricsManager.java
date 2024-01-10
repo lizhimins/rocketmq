@@ -71,7 +71,7 @@ import static org.apache.rocketmq.tieredstore.metrics.MessageStoreMetricsConstan
 
 public class MessageStoreMetricsManager {
 
-    private static final Logger logger = LoggerFactory.getLogger(MessageStoreUtil.TIERED_STORE_LOGGER_NAME);
+    private static final Logger log = LoggerFactory.getLogger(MessageStoreUtil.TIERED_STORE_LOGGER_NAME);
     public static Supplier<AttributesBuilder> attributesBuilderSupplier;
     private static String storageMedium = STORAGE_MEDIUM_BLOB;
 
@@ -288,7 +288,7 @@ public class MessageStoreMetricsManager {
                         subMap.put(fileSegmentType, size + fileSegment.getSize());
                     });
                 } catch (Exception e) {
-                    logger.error("Failed to get storage size", e);
+                    log.error("Failed to get storage size", e);
                 }
                 topicFileSizeMap.forEach((topic, subMap) -> {
                     subMap.forEach((fileSegmentType, size) -> {

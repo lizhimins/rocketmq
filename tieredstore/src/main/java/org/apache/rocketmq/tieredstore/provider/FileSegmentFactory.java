@@ -51,7 +51,7 @@ public class FileSegmentFactory {
         return storeConfig;
     }
 
-    protected FileSegment createSegment(FileSegmentType fileType, String filePath, long baseOffset) {
+    public FileSegment createSegment(FileSegmentType fileType, String filePath, long baseOffset) {
         try {
             return fileSegmentConstructor.newInstance(this.storeConfig, fileType, filePath, baseOffset);
         } catch (InvocationTargetException | InstantiationException | IllegalAccessException e) {
