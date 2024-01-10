@@ -19,6 +19,7 @@ package org.apache.rocketmq.tieredstore;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import org.apache.rocketmq.common.ThreadFactoryImpl;
 import org.apache.rocketmq.common.utils.ThreadUtils;
@@ -29,7 +30,7 @@ public class MessageStoreExecutor {
     public final BlockingQueue<Runnable> bufferFetchThreadPoolQueue;
     public final BlockingQueue<Runnable> fileRecyclingThreadPoolQueue;
 
-    public final ExecutorService commonExecutor;
+    public final ScheduledExecutorService commonExecutor;
     public final ExecutorService bufferCommitExecutor;
     public final ExecutorService bufferFetchExecutor;
     public final ExecutorService fileRecyclingExecutor;

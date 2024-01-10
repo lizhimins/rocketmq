@@ -16,23 +16,16 @@
  */
 package org.apache.rocketmq.tieredstore.core;
 
-import java.util.Arrays;
-import java.util.HashSet;
-import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Semaphore;
-import org.apache.commons.lang3.StringUtils;
+import java.util.concurrent.TimeUnit;
 import org.apache.rocketmq.common.ServiceThread;
-import org.apache.rocketmq.common.message.MessageConst;
-import org.apache.rocketmq.common.message.MessageQueue;
 import org.apache.rocketmq.logging.org.slf4j.Logger;
 import org.apache.rocketmq.logging.org.slf4j.LoggerFactory;
-import org.apache.rocketmq.store.DispatchRequest;
 import org.apache.rocketmq.store.MessageStore;
-import org.apache.rocketmq.tieredstore.RemoteMessageStore;
 import org.apache.rocketmq.tieredstore.MessageStoreConfig;
 import org.apache.rocketmq.tieredstore.MessageStoreExecutor;
-import org.apache.rocketmq.tieredstore.common.AppendResult;
+import org.apache.rocketmq.tieredstore.RemoteMessageStore;
 import org.apache.rocketmq.tieredstore.file.FlatFileStore;
 import org.apache.rocketmq.tieredstore.file.FlatMessageFileExt;
 import org.apache.rocketmq.tieredstore.util.MessageStoreUtil;
@@ -41,27 +34,25 @@ public class MessageStoreDispatcherImpl extends ServiceThread implements Message
 
     protected static final Logger log = LoggerFactory.getLogger(MessageStoreUtil.TIERED_STORE_LOGGER_NAME);
 
-    protected volatile boolean closed = true;
-
     protected final String brokerName;
-    protected final Semaphore semaphore;
     protected final MessageStore defaultStore;
-    protected final RemoteMessageStore remoteMessageStore;
     protected final MessageStoreConfig storeConfig;
+    protected final RemoteMessageStore messageStore;
     protected final FlatFileStore flatFileStore;
     protected final MessageStoreExecutor storeExecutor;
     protected final MessageStoreFilter topicFilter;
+    protected final Semaphore semaphore;
 
     public MessageStoreDispatcherImpl(RemoteMessageStore messageStore) {
-        this.remoteMessageStore = messageStore;
-        this.defaultStore = messageStore.getDefaultStore();
+        this.messageStore = messageStore;
         this.storeConfig = messageStore.getStoreConfig();
+        this.defaultStore = messageStore.getDefaultStore();
         this.brokerName = storeConfig.getBrokerName();
-        this.semaphore = new Semaphore(10000 / 4);
+        this.semaphore = new Semaphore(
+            this.storeConfig.getTieredStoreMaxPendingLimit() / 4);
         this.topicFilter = messageStore.getTopicFilter();
         this.flatFileStore = messageStore.getFlatFileStore();
         this.storeExecutor = messageStore.getStoreExecutor();
-        this.initScheduledTasks();
     }
 
     @Override
@@ -71,79 +62,68 @@ public class MessageStoreDispatcherImpl extends ServiceThread implements Message
 
     @Override
     public void start() {
-        this.closed = false;
+        super.start();
+        this.initScheduledTasks();
         log.info("MessageStoreDispatcherImpl#start success");
+    }
+
+    public void initScheduledTasks() {
+        this.storeExecutor.commonExecutor.scheduleWithFixedDelay(
+            this::dispatchAll, 0, 30, TimeUnit.SECONDS);
+
+        this.storeExecutor.commonExecutor.scheduleWithFixedDelay(
+            this::deleteExpiredFile, 0, 1, TimeUnit.MINUTES);
+    }
+
+    public void dispatchAll() {
+        if (stopped) {
+            return;
+        }
+
+        for (FlatMessageFileExt flatFile : flatFileStore.deepCopyFlatFileToList()) {
+            try {
+                semaphore.acquire();
+                storeExecutor.bufferCommitExecutor.submit(() -> {
+                    try {
+                        this.dispatch(flatFile);
+                    } finally {
+                        semaphore.release();
+                    }
+                });
+            } catch (InterruptedException e) {
+                throw new RuntimeException(e);
+            }
+        }
+    }
+
+    public void deleteExpiredFile() {
+        if (stopped) {
+            return;
+        }
+
+        for (FlatMessageFileExt flatFile : flatFileStore.deepCopyFlatFileToList()) {
+            try {
+                semaphore.acquire();
+                storeExecutor.bufferCommitExecutor.submit(() -> {
+                    try {
+                        this.deleteExpiredFile(flatFile);
+                    } finally {
+                        semaphore.release();
+                    }
+                });
+            } catch (InterruptedException e) {
+                throw new RuntimeException(e);
+            }
+        }
     }
 
     @Override
     public CompletableFuture<Boolean> dispatch(FlatMessageFileExt flatFile) {
-        return null;
-    }
-
-    public void initScheduledTasks() {
-//        this.storeExecutor.scheduleWithFixedDelay(
-//            this::submitAll, 0, 30, TimeUnit.MILLISECONDS);
-//
-//        this.storeExecutor.scheduleWithFixedDelay(
-//            this::cleanExpiredFile, 0, 30, TimeUnit.MILLISECONDS);
-    }
-
-    public void submitAll() {
-        if (closed) {
-            return;
-        }
-        try {
-            for (FlatMessageFileExt flatFile : flatFileStore.deepCopyFlatFileToList()) {
-                semaphore.acquire();
-//                MessageStoreExecutor.commitExecutor.submit(() -> {
-//                    try {
-//                        while (true) {
-//                            if (!dispatchFlatFile(flatFile)) {
-//                                TimeUnit.MILLISECONDS.sleep(1);
-//                                break;
-//                            }
-//                        }
-//                    } catch (InterruptedException e) {
-//                        throw new RuntimeException(e);
-//                    } finally {
-//                        semaphore.release();
-//                    }
-//                });
-            }
-        } catch (Throwable e) {
-            log.error("StoreDispatcher, failed to record submit task", e);
-        }
-    }
-
-    public void cleanExpiredFile() {
-        if (closed) {
-            return;
-        }
-        try {
-            for (FlatMessageFileExt flatFile : flatFileStore.deepCopyFlatFileToList()) {
-                semaphore.acquire();
-//                MessageStoreExecutor.commitExecutor.submit(() -> {
-//                    try {
-//                        // dispatchFlatFile(flatFile);
-//                    } finally {
-//                        semaphore.release();
-//                    }
-//                });
-            }
-        } catch (Throwable e) {
-            log.error("StoreDispatcher, failed to record submit task", e);
-        }
-    }
-
-    public void dispatch(DispatchRequest request) {
-        if (closed || topicFilter != null && topicFilter.filterTopic(request.getTopic())) {
-            return;
-        }
-        flatFileStore.getOrCreateFlatFileIfAbsent(
-            new MessageQueue(request.getTopic(), brokerName, request.getQueueId()));
-    }
-
-    public boolean dispatchFlatFile(FlatMessageFileExt flatFile) {
+//        if (closed || topicFilt/*er != null && topicFilter.filterTopic(request.getTopic())) {
+//            return;
+//        }
+//        flatFileStore.getOrCreateFlatFileIfAbsent(
+//            new MessageQueue*/(request.getTopic(), brokerName, request.getQueueId()));
 //        if (closed) {
 //            return false;
 //        }
@@ -164,7 +144,7 @@ public class MessageStoreDispatcherImpl extends ServiceThread implements Message
 //        } finally {
 //            flatFile.getFileLock().unlock();
 //        }
-        return true;
+        return CompletableFuture.completedFuture(true);
     }
 
     public boolean dispatch(FlatMessageFileExt flatFile, String topic, int queueId) {
@@ -279,6 +259,11 @@ public class MessageStoreDispatcherImpl extends ServiceThread implements Message
         return false;
     }
 
+    @Override
+    public CompletableFuture<Boolean> deleteExpiredFile(FlatMessageFileExt flatFile) {
+        return null;
+    }
+
 //    public void buildIndex(FlatMessageFileExt flatFile, List<DispatchRequest> requestList) {
 //        dispatchLock.lock();
 //        try {
@@ -298,26 +283,21 @@ public class MessageStoreDispatcherImpl extends ServiceThread implements Message
 //        }
 //    }
 
-    @Override
-    public CompletableFuture<Boolean> deleteExpiredFile(FlatMessageFileExt flatFile) {
-        return null;
-    }
-
-    public AppendResult appendIndexFile(FlatMessageFileExt flatFile, DispatchRequest request) {
-        if (closed) {
-            return AppendResult.FILE_CLOSED;
-        }
-
-        Set<String> keySet = new HashSet<>(
-            Arrays.asList(request.getKeys().split(MessageConst.KEY_SEPARATOR)));
-        if (StringUtils.isNotBlank(request.getUniqKey())) {
-            keySet.add(request.getUniqKey());
-        }
-
-        return flatFileStore.getIndexService().putKey(
-            request.getTopic(), (int) flatFile.getTopicMetadata().getTopicId(), request.getQueueId(), keySet,
-            request.getCommitLogOffset(), request.getMsgSize(), request.getStoreTimestamp());
-    }
+//    public AppendResult appendIndexFile(FlatMessageFileExt flatFile, DispatchRequest request) {
+//        if (closed) {
+//            return AppendResult.FILE_CLOSED;
+//        }
+//
+//        Set<String> keySet = new HashSet<>(
+//            Arrays.asList(request.getKeys().split(MessageConst.KEY_SEPARATOR)));
+//        if (StringUtils.isNotBlank(request.getUniqKey())) {
+//            keySet.add(request.getUniqKey());
+//        }
+//
+//        return flatFileStore.getIndexService().putKey(
+//            request.getTopic(), (int) flatFile.getTopicMetadata().getTopicId(), request.getQueueId(), keySet,
+//            request.getCommitLogOffset(), request.getMsgSize(), request.getStoreTimestamp());
+//    }
 
     protected void buildIndexFile() {
 //        this.swapDispatchRequestList();
@@ -342,7 +322,7 @@ public class MessageStoreDispatcherImpl extends ServiceThread implements Message
 
     @Override
     public void run() {
-        while (!closed) {
+        while (!stopped) {
             waitForRunning(1000);
             buildIndexFile();
         }

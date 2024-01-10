@@ -17,6 +17,7 @@
 package org.apache.rocketmq.tieredstore.core;
 
 import org.apache.rocketmq.common.topic.TopicValidator;
+import org.apache.rocketmq.tieredstore.MessageStoreConfig;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -24,7 +25,7 @@ public class MessageStoreTopicFilterTest {
 
     @Test
     public void filterTopicTest() {
-        MessageStoreFilter topicFilter = new MessageStoreTopicFilter();
+        MessageStoreFilter topicFilter = new MessageStoreTopicFilter(new MessageStoreConfig());
         Assert.assertTrue(topicFilter.filterTopic(""));
         Assert.assertTrue(topicFilter.filterTopic(TopicValidator.SYSTEM_TOPIC_PREFIX + "_Topic"));
 

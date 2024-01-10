@@ -267,7 +267,7 @@ public class IndexStoreService extends ServiceThread implements IndexService {
             log.error("IndexStoreService found compaction buffer is null, timestamp: {}", indexFile.getTimestamp());
             return;
         }
-        flatAppendFile.append(byteBuffer);
+        flatAppendFile.append(byteBuffer, 0);
         flatAppendFile.commit(true);
 
         FileSegment fileSegment = null;
@@ -291,8 +291,7 @@ public class IndexStoreService extends ServiceThread implements IndexService {
     }
 
     public void destroyExpiredFile(long expireTimestamp) {
-        flatAppendFile.cleanExpiredFile(expireTimestamp);
-        flatAppendFile.destroyExpiredFile();
+        flatAppendFile.destroyExpiredFile(expireTimestamp);
     }
 
     public void destroy() {
