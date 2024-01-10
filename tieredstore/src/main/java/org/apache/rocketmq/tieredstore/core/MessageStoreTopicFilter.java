@@ -20,6 +20,8 @@ package org.apache.rocketmq.tieredstore.core;
 import java.util.HashSet;
 import java.util.Set;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.rocketmq.common.MixAll;
+import org.apache.rocketmq.common.PopAckConstants;
 import org.apache.rocketmq.common.topic.TopicValidator;
 import org.apache.rocketmq.tieredstore.MessageStoreConfig;
 
@@ -38,7 +40,10 @@ public class MessageStoreTopicFilter implements MessageStoreFilter {
         if (StringUtils.isBlank(topicName)) {
             return true;
         }
-        return TopicValidator.isSystemTopic(topicName) || this.topicBlackSet.contains(topicName);
+        return TopicValidator.isSystemTopic(topicName) ||
+            PopAckConstants.isStartWithRevivePrefix(topicName) ||
+            this.topicBlackSet.contains(topicName) ||
+            MixAll.isLmq(topicName);
     }
 
     @Override

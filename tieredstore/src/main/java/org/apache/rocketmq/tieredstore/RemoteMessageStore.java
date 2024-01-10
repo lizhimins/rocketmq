@@ -17,6 +17,7 @@
 package org.apache.rocketmq.tieredstore;
 
 import com.google.common.base.Stopwatch;
+import com.google.common.collect.Sets;
 import io.opentelemetry.api.common.Attributes;
 import io.opentelemetry.api.common.AttributesBuilder;
 import io.opentelemetry.api.metrics.Meter;
@@ -47,6 +48,8 @@ import org.apache.rocketmq.store.QueryMessageResult;
 import org.apache.rocketmq.store.SelectMappedBufferResult;
 import org.apache.rocketmq.store.plugin.AbstractPluginMessageStore;
 import org.apache.rocketmq.store.plugin.MessageStorePluginContext;
+import org.apache.rocketmq.tieredstore.core.MessageStoreDispatcher;
+import org.apache.rocketmq.tieredstore.core.MessageStoreFetcher;
 import org.apache.rocketmq.tieredstore.core.MessageStoreTopicFilter;
 import org.apache.rocketmq.tieredstore.file.FlatFileStore;
 import org.apache.rocketmq.tieredstore.file.FlatMessageFile;
@@ -71,8 +74,8 @@ public class RemoteMessageStore extends AbstractPluginMessageStore {
     protected final MessageStoreExecutor storeExecutor;
     protected final FlatFileStore flatFileStore;
     protected final MessageStoreFilter topicFilter;
-    protected final MessageStoreFetcherImpl fetcher;
-    protected final MessageStoreDispatcherImpl dispatcher;
+    protected final MessageStoreFetcher fetcher;
+    protected final MessageStoreDispatcher dispatcher;
 
     public RemoteMessageStore(MessageStorePluginContext context, MessageStore next) {
         super(context, next);
@@ -83,35 +86,28 @@ public class RemoteMessageStore extends AbstractPluginMessageStore {
         this.brokerName = this.storeConfig.getBrokerName();
         this.defaultStore = next;
 
-        this.metadataStore = this.getMetadataStore(this.storeConfig);
+        this.metadataStore = this.buildMetadataStore(this.storeConfig);
         this.topicFilter = new MessageStoreTopicFilter(this.storeConfig);
         this.storeExecutor = new MessageStoreExecutor(this.storeConfig.getTieredStoreMaxPendingLimit());
         this.flatFileStore = new FlatFileStore(this.metadataStore, this.storeConfig);
-        this.fetcher = new MessageStoreFetcherImpl(this.flatFileStore);
+        this.fetcher = new MessageStoreFetcherImpl(this);
         this.dispatcher = new MessageStoreDispatcherImpl(this);
     }
 
-    public MessageStoreFilter getTopicFilter() {
-        return topicFilter;
-    }
-
-    public MessageStoreExecutor getStoreExecutor() {
-        return storeExecutor;
-    }
-
-    public MessageStore getDefaultMessageStore() {
-        return defaultStore;
-    }
-
-    public MetadataStore getMetadataStore(MessageStoreConfig storeConfig) {
-        try {
-            Class<? extends MetadataStore> clazz =
-                Class.forName(storeConfig.getTieredMetadataServiceProvider()).asSubclass(MetadataStore.class);
-            Constructor<? extends MetadataStore> constructor = clazz.getConstructor(MessageStoreConfig.class);
-            return constructor.newInstance(storeConfig);
-        } catch (Exception e) {
-            throw new RuntimeException(e);
+    @Override
+    public boolean load() {
+        boolean loadFlatFile = flatFileStore.load();
+        boolean loadNextStore = next.load();
+        boolean result = loadFlatFile && loadNextStore;
+        if (result) {
+            fetcher.start();
+            dispatcher.start();
         }
+        return result;
+    }
+
+    public MessageStoreConfig getStoreConfig() {
+        return storeConfig;
     }
 
     public String getBrokerName() {
@@ -122,35 +118,31 @@ public class RemoteMessageStore extends AbstractPluginMessageStore {
         return defaultStore;
     }
 
+    public MetadataStore buildMetadataStore(MessageStoreConfig storeConfig) {
+        try {
+            Class<? extends MetadataStore> clazz =
+                Class.forName(storeConfig.getTieredMetadataServiceProvider()).asSubclass(MetadataStore.class);
+            Constructor<? extends MetadataStore> constructor = clazz.getConstructor(MessageStoreConfig.class);
+            return constructor.newInstance(storeConfig);
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+    }
+
     public MetadataStore getMetadataStore() {
         return metadataStore;
     }
 
-    public MessageStoreFetcherImpl getFetcher() {
-        return fetcher;
+    public MessageStoreFilter getTopicFilter() {
+        return topicFilter;
     }
 
-    public MessageStoreDispatcherImpl getDispatcher() {
-        return dispatcher;
+    public MessageStoreExecutor getStoreExecutor() {
+        return storeExecutor;
     }
 
     public FlatFileStore getFlatFileStore() {
         return flatFileStore;
-    }
-
-    @Override
-    public boolean load() {
-        boolean loadFlatFile = flatFileStore.load();
-        boolean loadNextStore = next.load();
-        boolean result = loadFlatFile && loadNextStore;
-        if (result) {
-            dispatcher.start();
-        }
-        return result;
-    }
-
-    public MessageStoreConfig getStoreConfig() {
-        return storeConfig;
     }
 
     public boolean fetchFromCurrentStore(String topic, int queueId, long offset) {
@@ -200,15 +192,17 @@ public class RemoteMessageStore extends AbstractPluginMessageStore {
     public CompletableFuture<GetMessageResult> getMessageAsync(String group, String topic,
         int queueId, long offset, int maxMsgNums, MessageFilter messageFilter) {
 
-        // For system topic, force reading from local store
-        if (TopicValidator.isSystemTopic(topic) || PopAckConstants.isStartWithRevivePrefix(topic)) {
+        // for system topic, force reading from local store
+        if (topicFilter.filterTopic(topic)) {
             return next.getMessageAsync(group, topic, queueId, offset, maxMsgNums, messageFilter);
         }
 
         if (fetchFromCurrentStore(topic, queueId, offset, maxMsgNums)) {
-            logger.trace("GetMessageAsync from current store, topic: {}, queue: {}, offset: {}", topic, queueId, offset);
+            logger.trace("GetMessageAsync from current store, " +
+                "topic: {}, queue: {}, offset: {}, maxCount: {}", topic, queueId, offset, maxMsgNums);
         } else {
-            logger.trace("GetMessageAsync from next store, topic: {}, queue: {}, offset: {}", topic, queueId, offset);
+            logger.trace("GetMessageAsync from remote store, " +
+                "topic: {}, queue: {}, offset: {}, maxCount: {}", topic, queueId, offset, maxMsgNums);
             return next.getMessageAsync(group, topic, queueId, offset, maxMsgNums, messageFilter);
         }
 
@@ -426,6 +420,32 @@ public class RemoteMessageStore extends AbstractPluginMessageStore {
     }
 
     @Override
+    public int cleanUnusedTopic(Set<String> retainTopics) {
+        metadataStore.iterateTopic(topicMetadata -> {
+            String topic = topicMetadata.getTopic();
+            if (retainTopics.contains(topic) ||
+                TopicValidator.isSystemTopic(topic) ||
+                MixAll.isLmq(topic)) {
+                return;
+            }
+            this.deleteTopics(Sets.newHashSet(topicMetadata.getTopic()));
+        });
+        return next.cleanUnusedTopic(retainTopics);
+    }
+
+    @Override
+    public int deleteTopics(Set<String> deleteTopics) {
+        for (String topic : deleteTopics) {
+            metadataStore.iterateQueue(topic, queueMetadata -> {
+                flatFileStore.destroyFile(queueMetadata.getQueue());
+            });
+            metadataStore.deleteTopic(topic);
+            logger.info("MessageStore delete topic success, topicName={}", topic);
+        }
+        return next.deleteTopics(deleteTopics);
+    }
+
+    @Override
     public void shutdown() {
         if (next != null) {
             next.shutdown();
@@ -439,8 +459,8 @@ public class RemoteMessageStore extends AbstractPluginMessageStore {
         if (flatFileStore != null) {
             flatFileStore.shutdown();
         }
-        if (this.storeExecutor != null) {
-            this.storeExecutor.shutdown();
+        if (storeExecutor != null) {
+            storeExecutor.shutdown();
         }
     }
 
@@ -454,48 +474,6 @@ public class RemoteMessageStore extends AbstractPluginMessageStore {
         }
         if (metadataStore != null) {
             metadataStore.destroy();
-        }
-    }
-
-    @Override
-    public int cleanUnusedTopic(Set<String> retainTopics) {
-        try {
-            metadataStore.iterateTopic(topicMetadata -> {
-                String topic = topicMetadata.getTopic();
-                if (retainTopics.contains(topic) ||
-                    TopicValidator.isSystemTopic(topic) ||
-                    MixAll.isLmq(topic)) {
-                    return;
-                }
-                this.destroyCompositeFlatFile(topicMetadata.getTopic());
-            });
-        } catch (Exception e) {
-            logger.error("TieredMessageStore#cleanUnusedTopic: iterate topic metadata failed", e);
-        }
-        return next.cleanUnusedTopic(retainTopics);
-    }
-
-    @Override
-    public int deleteTopics(Set<String> deleteTopics) {
-        for (String topic : deleteTopics) {
-            this.destroyCompositeFlatFile(topic);
-        }
-        return next.deleteTopics(deleteTopics);
-    }
-
-    public void destroyCompositeFlatFile(String topic) {
-        try {
-            if (StringUtils.isBlank(topic)) {
-                return;
-            }
-            metadataStore.iterateQueue(topic, queueMetadata -> {
-                flatFileStore.destroyFile(queueMetadata.getQueue());
-            });
-            // delete topic metadata
-            metadataStore.deleteTopic(topic);
-            logger.info("Destroy composite flat file in message store, topic={}", topic);
-        } catch (Exception e) {
-            logger.error("Destroy composite flat file in message store failed, topic={}", topic, e);
         }
     }
 }

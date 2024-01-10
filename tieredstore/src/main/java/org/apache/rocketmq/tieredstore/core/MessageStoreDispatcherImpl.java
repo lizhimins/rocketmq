@@ -19,6 +19,7 @@ package org.apache.rocketmq.tieredstore.core;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Semaphore;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.rocketmq.common.ServiceThread;
@@ -53,7 +54,7 @@ public class MessageStoreDispatcherImpl extends ServiceThread implements Message
 
     public MessageStoreDispatcherImpl(RemoteMessageStore messageStore) {
         this.remoteMessageStore = messageStore;
-        this.defaultStore = messageStore.getDefaultMessageStore();
+        this.defaultStore = messageStore.getDefaultStore();
         this.storeConfig = messageStore.getStoreConfig();
         this.brokerName = storeConfig.getBrokerName();
         this.semaphore = new Semaphore(10000 / 4);
@@ -68,9 +69,15 @@ public class MessageStoreDispatcherImpl extends ServiceThread implements Message
         return "MessageStoreDispatcher";
     }
 
+    @Override
     public void start() {
         this.closed = false;
         log.info("MessageStoreDispatcherImpl#start success");
+    }
+
+    @Override
+    public CompletableFuture<Boolean> dispatch(FlatMessageFileExt flatFile) {
+        return null;
     }
 
     public void initScheduledTasks() {
@@ -128,7 +135,6 @@ public class MessageStoreDispatcherImpl extends ServiceThread implements Message
         }
     }
 
-    @Override
     public void dispatch(DispatchRequest request) {
         if (closed || topicFilter != null && topicFilter.filterTopic(request.getTopic())) {
             return;
@@ -137,7 +143,6 @@ public class MessageStoreDispatcherImpl extends ServiceThread implements Message
             new MessageQueue(request.getTopic(), brokerName, request.getQueueId()));
     }
 
-    @Override
     public boolean dispatchFlatFile(FlatMessageFileExt flatFile) {
 //        if (closed) {
 //            return false;
@@ -294,8 +299,8 @@ public class MessageStoreDispatcherImpl extends ServiceThread implements Message
 //    }
 
     @Override
-    public void deleteExpiredFile(FlatMessageFileExt flatFile) {
-
+    public CompletableFuture<Boolean> deleteExpiredFile(FlatMessageFileExt flatFile) {
+        return null;
     }
 
     public AppendResult appendIndexFile(FlatMessageFileExt flatFile, DispatchRequest request) {

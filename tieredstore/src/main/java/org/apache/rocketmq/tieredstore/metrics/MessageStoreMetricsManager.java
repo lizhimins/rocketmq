@@ -42,6 +42,7 @@ import org.apache.rocketmq.logging.org.slf4j.Logger;
 import org.apache.rocketmq.logging.org.slf4j.LoggerFactory;
 import org.apache.rocketmq.store.MessageStore;
 import org.apache.rocketmq.tieredstore.MessageStoreConfig;
+import org.apache.rocketmq.tieredstore.core.MessageStoreFetcher;
 import org.apache.rocketmq.tieredstore.core.MessageStoreFetcherImpl;
 import org.apache.rocketmq.tieredstore.common.FileSegmentType;
 import org.apache.rocketmq.tieredstore.file.FlatFileStore;
@@ -139,8 +140,8 @@ public class MessageStoreMetricsManager {
     }
 
     public static void init(Meter meter, Supplier<AttributesBuilder> attributesBuilderSupplier,
-                            MessageStoreConfig storeConfig, MessageStoreFetcherImpl fetcher,
-                            FlatFileStore flatFileManager, MessageStore next) {
+        MessageStoreConfig storeConfig, MessageStoreFetcher fetcher,
+        FlatFileStore flatFileManager, MessageStore next) {
 
         MessageStoreMetricsManager.attributesBuilderSupplier = attributesBuilderSupplier;
 

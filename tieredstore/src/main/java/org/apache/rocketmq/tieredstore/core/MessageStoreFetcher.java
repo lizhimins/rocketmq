@@ -25,6 +25,10 @@ import org.apache.rocketmq.store.QueryMessageResult;
 
 public interface MessageStoreFetcher {
 
+    void start();
+
+    void shutdown();
+
     /**
      * Asynchronous get the store time of the earliest message in this store.
      *

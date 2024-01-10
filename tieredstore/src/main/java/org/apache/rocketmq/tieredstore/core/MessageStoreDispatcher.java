@@ -17,12 +17,16 @@
 
 package org.apache.rocketmq.tieredstore.core;
 
-import org.apache.rocketmq.store.CommitLogDispatcher;
+import java.util.concurrent.CompletableFuture;
 import org.apache.rocketmq.tieredstore.file.FlatMessageFileExt;
 
-public interface MessageStoreDispatcher extends CommitLogDispatcher {
+public interface MessageStoreDispatcher {
 
-    boolean dispatchFlatFile(FlatMessageFileExt flatFile) throws Exception;
+    void start();
 
-    void deleteExpiredFile(FlatMessageFileExt flatFile);
+    void shutdown();
+
+    CompletableFuture<Boolean> dispatch(FlatMessageFileExt flatFile);
+
+    CompletableFuture<Boolean> deleteExpiredFile(FlatMessageFileExt flatFile);
 }

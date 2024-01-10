@@ -32,6 +32,7 @@ import org.apache.rocketmq.store.MessageFilter;
 import org.apache.rocketmq.store.QueryMessageResult;
 import org.apache.rocketmq.store.SelectMappedBufferResult;
 import org.apache.rocketmq.tieredstore.MessageStoreConfig;
+import org.apache.rocketmq.tieredstore.RemoteMessageStore;
 import org.apache.rocketmq.tieredstore.common.GetMessageResultExt;
 import org.apache.rocketmq.tieredstore.common.SelectBufferResult;
 import org.apache.rocketmq.tieredstore.exception.MessageStoreException;
@@ -57,10 +58,10 @@ public class MessageStoreFetcherImpl implements MessageStoreFetcher {
     private final FlatFileStore flatFileManager;
 //    private final Cache<MessageCacheKey, SelectBufferResultWrapper> readAheadCache;
 
-    public MessageStoreFetcherImpl(FlatFileStore flatFileManager) {
-        this.storeConfig = flatFileManager.getStoreConfig();
+    public MessageStoreFetcherImpl(RemoteMessageStore messageStore) {
+        this.storeConfig = messageStore.getFlatFileStore().getStoreConfig();
         this.brokerName = storeConfig.getBrokerName();
-        this.flatFileManager = flatFileManager;
+        this.flatFileManager = messageStore.getFlatFileStore();
         this.metadataStore = flatFileManager.getMetadataStore();
 //        this.readAheadCache = this.initCache(storeConfig);
     }
@@ -569,6 +570,11 @@ public class MessageStoreFetcherImpl implements MessageStoreFetcher {
                     result.getMessageBufferList().size(), topic, topicId, key, maxCount, begin, end);
             }
         });
+    }
+
+    @Override
+    public void start() {
+
     }
 
     public void shutdown() {
