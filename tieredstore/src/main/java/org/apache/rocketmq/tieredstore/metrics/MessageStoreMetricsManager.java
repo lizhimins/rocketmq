@@ -186,7 +186,7 @@ public class MessageStoreMetricsManager {
                         .put(LABEL_QUEUE_ID, mq.getQueueId())
                         .put(LABEL_FILE_TYPE, FileSegmentType.COMMIT_LOG.name().toLowerCase())
                         .build();
-                    measurement.record(Math.max(maxOffset - flatFile.getDispatchOffset(), 0), commitLogAttributes);
+//                    measurement.record(Math.max(maxOffset - flatFile.getDispatchOffset(), 0), commitLogAttributes);
                     Attributes consumeQueueAttributes = newAttributesBuilder()
                         .put(LABEL_TOPIC, mq.getTopic())
                         .put(LABEL_QUEUE_ID, mq.getQueueId())
@@ -215,12 +215,12 @@ public class MessageStoreMetricsManager {
                         .put(LABEL_QUEUE_ID, mq.getQueueId())
                         .put(LABEL_FILE_TYPE, FileSegmentType.COMMIT_LOG.name().toLowerCase())
                         .build();
-                    long commitLogDispatchLatency = next.getMessageStoreTimeStamp(mq.getTopic(), mq.getQueueId(), flatFile.getDispatchOffset());
-                    if (maxOffset <= flatFile.getDispatchOffset() || commitLogDispatchLatency < 0) {
-                        measurement.record(0, commitLogAttributes);
-                    } else {
-                        measurement.record(System.currentTimeMillis() - commitLogDispatchLatency, commitLogAttributes);
-                    }
+//                    long commitLogDispatchLatency = next.getMessageStoreTimeStamp(mq.getTopic(), mq.getQueueId(), flatFile.getDispatchOffset());
+//                    if (maxOffset <= flatFile.getDispatchOffset() || commitLogDispatchLatency < 0) {
+//                        measurement.record(0, commitLogAttributes);
+//                    } else {
+//                        measurement.record(System.currentTimeMillis() - commitLogDispatchLatency, commitLogAttributes);
+//                    }
 
                     Attributes consumeQueueAttributes = newAttributesBuilder()
                         .put(LABEL_TOPIC, mq.getTopic())

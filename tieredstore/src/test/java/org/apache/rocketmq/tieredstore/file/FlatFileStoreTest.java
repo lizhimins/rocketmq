@@ -19,7 +19,7 @@ package org.apache.rocketmq.tieredstore.file;
 import java.io.IOException;
 import org.apache.rocketmq.common.message.MessageQueue;
 import org.apache.rocketmq.tieredstore.MessageStoreConfig;
-import org.apache.rocketmq.tieredstore.FlatMessageStoreTest;
+import org.apache.rocketmq.tieredstore.RemoteMessageStoreTest;
 import org.apache.rocketmq.tieredstore.metadata.MetadataStore;
 import org.apache.rocketmq.tieredstore.metadata.DefaultMetadataStore;
 import org.junit.After;
@@ -28,7 +28,7 @@ import org.junit.Test;
 
 public class FlatFileStoreTest {
 
-    private final String storePath = FlatMessageStoreTest.getRandomStorePath();
+    private final String storePath = RemoteMessageStoreTest.getRandomStorePath();
     private MessageStoreConfig storeConfig;
     private MessageQueue mq;
     private MetadataStore metadataStore;

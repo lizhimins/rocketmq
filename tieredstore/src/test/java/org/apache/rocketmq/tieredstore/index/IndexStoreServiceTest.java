@@ -38,7 +38,7 @@ import org.apache.rocketmq.logging.org.slf4j.Logger;
 import org.apache.rocketmq.logging.org.slf4j.LoggerFactory;
 import org.apache.rocketmq.store.logfile.DefaultMappedFile;
 import org.apache.rocketmq.tieredstore.MessageStoreConfig;
-import org.apache.rocketmq.tieredstore.FlatMessageStoreTest;
+import org.apache.rocketmq.tieredstore.RemoteMessageStoreTest;
 import org.apache.rocketmq.tieredstore.common.AppendResult;
 import org.apache.rocketmq.tieredstore.file.FlatFileFactory;
 import org.apache.rocketmq.tieredstore.metadata.DefaultMetadataStore;
@@ -88,7 +88,7 @@ public class IndexStoreServiceTest {
             indexService.shutdown();
             indexService.destroy();
         }
-        FlatMessageStoreTest.deleteStoreDirectory(storeConfig.getTieredStoreFilePath());
+        RemoteMessageStoreTest.deleteStoreDirectory(storeConfig.getTieredStoreFilePath());
 //        MessageStoreExecutor.shutdown();
     }
 

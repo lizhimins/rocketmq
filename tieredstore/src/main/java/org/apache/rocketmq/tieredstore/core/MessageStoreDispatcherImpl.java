@@ -16,16 +16,9 @@
  */
 package org.apache.rocketmq.tieredstore.core;
 
-import io.opentelemetry.api.common.Attributes;
-import java.nio.ByteBuffer;
-import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.HashMap;
 import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Semaphore;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.rocketmq.common.ServiceThread;
@@ -34,19 +27,13 @@ import org.apache.rocketmq.common.message.MessageQueue;
 import org.apache.rocketmq.logging.org.slf4j.Logger;
 import org.apache.rocketmq.logging.org.slf4j.LoggerFactory;
 import org.apache.rocketmq.store.DispatchRequest;
-import org.apache.rocketmq.store.SelectMappedBufferResult;
-import org.apache.rocketmq.store.queue.ConsumeQueueInterface;
-import org.apache.rocketmq.store.queue.CqUnit;
-import org.apache.rocketmq.tieredstore.FlatMessageStore;
+import org.apache.rocketmq.store.MessageStore;
+import org.apache.rocketmq.tieredstore.RemoteMessageStore;
 import org.apache.rocketmq.tieredstore.MessageStoreConfig;
 import org.apache.rocketmq.tieredstore.MessageStoreExecutor;
 import org.apache.rocketmq.tieredstore.common.AppendResult;
-import org.apache.rocketmq.tieredstore.common.FileSegmentType;
 import org.apache.rocketmq.tieredstore.file.FlatFileStore;
 import org.apache.rocketmq.tieredstore.file.FlatMessageFileExt;
-import org.apache.rocketmq.tieredstore.metrics.MessageStoreMetricsConstant;
-import org.apache.rocketmq.tieredstore.metrics.MessageStoreMetricsManager;
-import org.apache.rocketmq.tieredstore.util.MessageFormatUtil;
 import org.apache.rocketmq.tieredstore.util.MessageStoreUtil;
 
 public class MessageStoreDispatcherImpl extends ServiceThread implements MessageStoreDispatcher {
@@ -57,22 +44,22 @@ public class MessageStoreDispatcherImpl extends ServiceThread implements Message
 
     protected final String brokerName;
     protected final Semaphore semaphore;
-    protected final org.apache.rocketmq.store.MessageStore defaultStore;
-    protected final FlatMessageStore flatMessageStore;
+    protected final MessageStore defaultStore;
+    protected final RemoteMessageStore remoteMessageStore;
     protected final MessageStoreConfig storeConfig;
     protected final FlatFileStore flatFileStore;
     protected final MessageStoreExecutor storeExecutor;
     protected final MessageStoreFilter topicFilter;
 
-    public MessageStoreDispatcherImpl(FlatMessageStore currentFlatMessageStore) {
-        this.flatMessageStore = currentFlatMessageStore;
-        this.defaultStore = currentFlatMessageStore.getMessageStore();
-        this.storeConfig = currentFlatMessageStore.getStoreConfig();
+    public MessageStoreDispatcherImpl(RemoteMessageStore messageStore) {
+        this.remoteMessageStore = messageStore;
+        this.defaultStore = messageStore.getDefaultMessageStore();
+        this.storeConfig = messageStore.getStoreConfig();
         this.brokerName = storeConfig.getBrokerName();
         this.semaphore = new Semaphore(10000 / 4);
-        this.topicFilter = new MessageStoreTopicFilter();
-        this.flatFileStore = currentFlatMessageStore.getFlatFileStore();
-        this.storeExecutor = currentFlatMessageStore.getStoreExecutor();
+        this.topicFilter = messageStore.getTopicFilter();
+        this.flatFileStore = messageStore.getFlatFileStore();
+        this.storeExecutor = messageStore.getStoreExecutor();
         this.initScheduledTasks();
     }
 

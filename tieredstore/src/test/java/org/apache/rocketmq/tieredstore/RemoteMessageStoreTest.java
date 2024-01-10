@@ -53,7 +53,7 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
 
-public class FlatMessageStoreTest {
+public class RemoteMessageStoreTest {
 
     private static final Logger log = LoggerFactory.getLogger(MessageStoreUtil.TIERED_STORE_LOGGER_NAME);
 
@@ -72,12 +72,12 @@ public class FlatMessageStoreTest {
         }
     }
 
-    private final String storePath = FlatMessageStoreTest.getRandomStorePath();
+    private final String storePath = RemoteMessageStoreTest.getRandomStorePath();
 
     private MessageStoreConfig storeConfig;
     private MessageQueue mq;
-    private org.apache.rocketmq.store.MessageStore nextStore;
-    private FlatMessageStore store;
+    private MessageStore nextStore;
+    private RemoteMessageStore store;
     private MessageStoreFetcherImpl fetcher;
     private Configuration configuration;
     private FlatFileStore flatFileManager;

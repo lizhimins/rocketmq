@@ -25,7 +25,7 @@ import java.util.concurrent.TimeUnit;
 import org.apache.rocketmq.common.message.MessageQueue;
 import org.apache.rocketmq.tieredstore.MessageStoreConfig;
 import org.apache.rocketmq.tieredstore.MessageStoreExecutor;
-import org.apache.rocketmq.tieredstore.FlatMessageStoreTest;
+import org.apache.rocketmq.tieredstore.RemoteMessageStoreTest;
 import org.apache.rocketmq.tieredstore.common.AppendResult;
 import org.apache.rocketmq.tieredstore.common.FileSegmentType;
 import org.apache.rocketmq.tieredstore.exception.MessageStoreErrorCode;
@@ -43,7 +43,7 @@ import org.junit.Test;
 public class FileSegmentTest {
 
     public int baseOffset = 1000;
-    private final String storePath = FlatMessageStoreTest.getRandomStorePath();
+    private final String storePath = RemoteMessageStoreTest.getRandomStorePath();
     private MessageStoreConfig storeConfig;
     private MessageQueue mq;
     private MessageStoreExecutor storeExecutor;
@@ -60,7 +60,7 @@ public class FileSegmentTest {
 
     @After
     public void shutdown() {
-        FlatMessageStoreTest.deleteStoreDirectory(storePath);
+        RemoteMessageStoreTest.deleteStoreDirectory(storePath);
         storeExecutor.shutdown();
     }
 

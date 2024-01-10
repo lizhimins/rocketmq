@@ -119,7 +119,8 @@ public class MessageStoreConfig {
     private long readAheadCacheExpireDuration = 10 * 1000;
     private double readAheadCacheSizeThresholdRate = 0.3;
 
-    private boolean enableContentCrcCheck = false;
+    private int tieredStoreMaxPendingLimit = 10000;
+    private boolean tieredStoreCrcCheckEnable = false;
 
     private String tieredStoreFilePath = "";
     private String objectStoreEndpoint = "";
@@ -368,12 +369,20 @@ public class MessageStoreConfig {
         this.readAheadCacheSizeThresholdRate = rate;
     }
 
-    public boolean isEnableContentCrcCheck() {
-        return enableContentCrcCheck;
+    public int getTieredStoreMaxPendingLimit() {
+        return tieredStoreMaxPendingLimit;
     }
 
-    public void setEnableContentCrcCheck(boolean enableContentCrcCheck) {
-        this.enableContentCrcCheck = enableContentCrcCheck;
+    public void setTieredStoreMaxPendingLimit(int tieredStoreMaxPendingLimit) {
+        this.tieredStoreMaxPendingLimit = tieredStoreMaxPendingLimit;
+    }
+
+    public boolean isTieredStoreCrcCheckEnable() {
+        return tieredStoreCrcCheckEnable;
+    }
+
+    public void setTieredStoreCrcCheckEnable(boolean tieredStoreCrcCheckEnable) {
+        this.tieredStoreCrcCheckEnable = tieredStoreCrcCheckEnable;
     }
 
     public String getTieredStoreFilePath() {

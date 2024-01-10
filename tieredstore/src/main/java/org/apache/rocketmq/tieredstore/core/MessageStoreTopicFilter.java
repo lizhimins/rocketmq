@@ -21,16 +21,16 @@ import java.util.HashSet;
 import java.util.Set;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.rocketmq.common.topic.TopicValidator;
+import org.apache.rocketmq.tieredstore.MessageStoreConfig;
 
 public class MessageStoreTopicFilter implements MessageStoreFilter {
 
     private final Set<String> topicBlackSet;
 
-    public MessageStoreTopicFilter() {
+    public MessageStoreTopicFilter(MessageStoreConfig storeConfig) {
         this.topicBlackSet = new HashSet<>();
-
-//        TieredStoreUtil.addSystemTopic(storeConfig.getBrokerClusterName());
-//        TieredStoreUtil.addSystemTopic(brokerName);
+        this.topicBlackSet.add(storeConfig.getBrokerClusterName());
+        this.topicBlackSet.add(storeConfig.getBrokerName());
     }
 
     @Override
@@ -38,7 +38,7 @@ public class MessageStoreTopicFilter implements MessageStoreFilter {
         if (StringUtils.isBlank(topicName)) {
             return true;
         }
-        return TopicValidator.isSystemTopic(topicName) || topicBlackSet.contains(topicName);
+        return TopicValidator.isSystemTopic(topicName) || this.topicBlackSet.contains(topicName);
     }
 
     @Override

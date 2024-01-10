@@ -47,6 +47,7 @@ import org.apache.rocketmq.store.QueryMessageResult;
 import org.apache.rocketmq.store.SelectMappedBufferResult;
 import org.apache.rocketmq.store.plugin.AbstractPluginMessageStore;
 import org.apache.rocketmq.store.plugin.MessageStorePluginContext;
+import org.apache.rocketmq.tieredstore.core.MessageStoreTopicFilter;
 import org.apache.rocketmq.tieredstore.file.FlatFileStore;
 import org.apache.rocketmq.tieredstore.file.FlatMessageFile;
 import org.apache.rocketmq.tieredstore.metadata.MetadataStore;
@@ -57,62 +58,48 @@ import org.apache.rocketmq.tieredstore.core.MessageStoreFetcherImpl;
 import org.apache.rocketmq.tieredstore.core.MessageStoreFilter;
 import org.apache.rocketmq.tieredstore.util.MessageStoreUtil;
 
-public class FlatMessageStore extends AbstractPluginMessageStore {
+public class RemoteMessageStore extends AbstractPluginMessageStore {
 
     protected static final Logger logger = LoggerFactory.getLogger(MessageStoreUtil.TIERED_STORE_LOGGER_NAME);
 
     protected final String brokerName;
     protected final MessageStore defaultStore;
     protected final MessageStoreConfig storeConfig;
-    protected final MetadataStore metadataStore;
     protected final MessageStorePluginContext context;
+
+    protected final MetadataStore metadataStore;
     protected final MessageStoreExecutor storeExecutor;
+    protected final FlatFileStore flatFileStore;
     protected final MessageStoreFilter topicFilter;
     protected final MessageStoreFetcherImpl fetcher;
     protected final MessageStoreDispatcherImpl dispatcher;
-    protected final FlatFileStore flatFileStore;
 
-    public FlatMessageStore(MessageStorePluginContext context, MessageStore next, MessageStoreFilter filter) {
+    public RemoteMessageStore(MessageStorePluginContext context, MessageStore next) {
         super(context, next);
 
         this.storeConfig = new MessageStoreConfig();
         this.context = context;
         this.context.registerConfiguration(this.storeConfig);
         this.brokerName = this.storeConfig.getBrokerName();
-
-        this.topicFilter = filter;
         this.defaultStore = next;
-        this.metadataStore = this.getMetadataStore(storeConfig);
-        this.storeExecutor = new MessageStoreExecutor(this.storeConfig.getMaxCommitJitter());
-        this.flatFileStore = new FlatFileStore(metadataStore, storeConfig);
-        this.fetcher = new MessageStoreFetcherImpl(flatFileStore);
+
+        this.metadataStore = this.getMetadataStore(this.storeConfig);
+        this.topicFilter = new MessageStoreTopicFilter(this.storeConfig);
+        this.storeExecutor = new MessageStoreExecutor(this.storeConfig.getTieredStoreMaxPendingLimit());
+        this.flatFileStore = new FlatFileStore(this.metadataStore, this.storeConfig);
+        this.fetcher = new MessageStoreFetcherImpl(this.flatFileStore);
         this.dispatcher = new MessageStoreDispatcherImpl(this);
     }
 
-//    public static void addSystemTopic(final String topic) {
-//        SYSTEM_TOPIC_LIST.add(topic);
-//    }
-//
-//    public static boolean isSystemTopic(final String topic) {
-//        if (StringUtils.isBlank(topic)) {
-//            return false;
-//        }
-//
-//        if (SYSTEM_TOPIC_WHITE_LIST.contains(topic)) {
-//            return false;
-//        }
-//
-//        if (SYSTEM_TOPIC_LIST.contains(topic)) {
-//            return true;
-//        }
-//        return TopicValidator.isSystemTopic(topic);
-//    }
+    public MessageStoreFilter getTopicFilter() {
+        return topicFilter;
+    }
 
     public MessageStoreExecutor getStoreExecutor() {
         return storeExecutor;
     }
 
-    public org.apache.rocketmq.store.MessageStore getMessageStore() {
+    public MessageStore getDefaultMessageStore() {
         return defaultStore;
     }
 
@@ -131,7 +118,7 @@ public class FlatMessageStore extends AbstractPluginMessageStore {
         return brokerName;
     }
 
-    public org.apache.rocketmq.store.MessageStore getDefaultStore() {
+    public MessageStore getDefaultStore() {
         return defaultStore;
     }
 

@@ -17,7 +17,7 @@
 package org.apache.rocketmq.tieredstore.file;
 
 import org.apache.rocketmq.common.message.MessageQueue;
-import org.apache.rocketmq.tieredstore.FlatMessageStoreTest;
+import org.apache.rocketmq.tieredstore.RemoteMessageStoreTest;
 import org.apache.rocketmq.tieredstore.common.FileSegmentType;
 import org.apache.rocketmq.tieredstore.MessageStoreConfig;
 import org.apache.rocketmq.tieredstore.metadata.entity.FileSegmentMetadata;
@@ -39,7 +39,7 @@ import java.util.List;
 
 public class FlatAppendFileTest {
 
-    private final String storePath = FlatMessageStoreTest.getRandomStorePath();
+    private final String storePath = RemoteMessageStoreTest.getRandomStorePath();
     private MessageQueue queue;
     private MessageStoreConfig storeConfig;
     private FlatFileFactory fileQueueFactory;
@@ -57,7 +57,7 @@ public class FlatAppendFileTest {
 
     @After
     public void tearDown() throws IOException {
-        FlatMessageStoreTest.deleteStoreDirectory(storePath);
+        RemoteMessageStoreTest.deleteStoreDirectory(storePath);
         // MessageStoreExecutor.shutdown();
     }
 
