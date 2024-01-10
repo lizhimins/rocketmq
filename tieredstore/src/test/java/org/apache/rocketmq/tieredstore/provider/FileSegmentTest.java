@@ -16,19 +16,16 @@
  */
 package org.apache.rocketmq.tieredstore.provider;
 
-import java.lang.reflect.Field;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.TimeUnit;
-import org.apache.rocketmq.common.message.Message;
 import org.apache.rocketmq.common.message.MessageQueue;
-import org.apache.rocketmq.logging.ch.qos.logback.core.util.TimeUtil;
 import org.apache.rocketmq.tieredstore.MessageStoreConfig;
 import org.apache.rocketmq.tieredstore.MessageStoreExecutor;
-import org.apache.rocketmq.tieredstore.MessageStoreTest;
+import org.apache.rocketmq.tieredstore.FlatMessageStoreTest;
 import org.apache.rocketmq.tieredstore.common.AppendResult;
 import org.apache.rocketmq.tieredstore.common.FileSegmentType;
 import org.apache.rocketmq.tieredstore.exception.MessageStoreErrorCode;
@@ -38,7 +35,6 @@ import org.apache.rocketmq.tieredstore.metadata.MetadataStore;
 import org.apache.rocketmq.tieredstore.util.MessageFormatUtil;
 import org.apache.rocketmq.tieredstore.util.MessageFormatUtilTest;
 import org.apache.rocketmq.tieredstore.util.MessageStoreUtil;
-import org.apache.rocketmq.tieredstore.util.MessageStoreUtilTest;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
@@ -47,7 +43,7 @@ import org.junit.Test;
 public class FileSegmentTest {
 
     public int baseOffset = 1000;
-    private final String storePath = MessageStoreTest.getRandomStorePath();
+    private final String storePath = FlatMessageStoreTest.getRandomStorePath();
     private MessageStoreConfig storeConfig;
     private MessageQueue mq;
     private MessageStoreExecutor storeExecutor;
@@ -64,7 +60,7 @@ public class FileSegmentTest {
 
     @After
     public void shutdown() {
-        MessageStoreTest.deleteStoreDirectory(storePath);
+        FlatMessageStoreTest.deleteStoreDirectory(storePath);
         storeExecutor.shutdown();
     }
 

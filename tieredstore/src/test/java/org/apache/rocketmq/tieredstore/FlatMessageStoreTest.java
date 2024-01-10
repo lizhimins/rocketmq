@@ -53,7 +53,7 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
 
-public class MessageStoreTest {
+public class FlatMessageStoreTest {
 
     private static final Logger log = LoggerFactory.getLogger(MessageStoreUtil.TIERED_STORE_LOGGER_NAME);
 
@@ -72,12 +72,12 @@ public class MessageStoreTest {
         }
     }
 
-    private final String storePath = MessageStoreTest.getRandomStorePath();
+    private final String storePath = FlatMessageStoreTest.getRandomStorePath();
 
     private MessageStoreConfig storeConfig;
     private MessageQueue mq;
     private org.apache.rocketmq.store.MessageStore nextStore;
-    private MessageStore store;
+    private FlatMessageStore store;
     private MessageStoreFetcherImpl fetcher;
     private Configuration configuration;
     private FlatFileStore flatFileManager;
@@ -129,7 +129,7 @@ public class MessageStoreTest {
         when(flatFile.getConsumeQueueCommitOffset()).thenReturn(Long.MAX_VALUE);
         when(flatFileManager.getFlatFile(mq)).thenReturn(flatFile);
         try {
-            Field field = store.getClass().getDeclaredField("flatFileManager");
+            Field field = store.getClass().getDeclaredField("flatFileStore");
             field.setAccessible(true);
             field.set(store, flatFileManager);
         } catch (NoSuchFieldException | IllegalAccessException e) {

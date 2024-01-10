@@ -24,13 +24,11 @@ import org.apache.rocketmq.tieredstore.common.AppendResult;
 
 public interface FlatFileInterface {
 
-    /**
-     * Initializes the offset for the flat file.
-     * Will only affect the distribution site if the file has already been initialized.
-     *
-     * @param offset init offset for consume queue
-     */
-    void initOffset(long offset);
+    long getConsumeQueueMinOffset();
+
+    long getConsumeQueueMaxOffset();
+
+    long getConsumeQueueCommitOffset();
 
     /**
      * Appends a message to the commit log file
@@ -49,40 +47,9 @@ public interface FlatFileInterface {
     AppendResult appendConsumeQueue(DispatchRequest request);
 
     /**
-     * Return the consensus queue site corresponding to the confirmed site in the commitLog
-     *
-     * @return the maximum offset
+     * Persist commit log file and consume queue file
      */
-    long getDispatchOffset();
-
-    /**
-     * Return the consensus queue site corresponding to the confirmed site in the commitLog
-     *
-     * @return the maximum offset
-     */
-    long getDispatchCommitOffset();
-
-    /**
-     * Persist commit log file
-     */
-    void commitCommitLog();
-
-    /**
-     * Persist the consume queue file
-     */
-    void commitConsumeQueue();
-
-    long getCommitLogMinOffset();
-
-    long getCommitLogMaxOffset();
-
-    long getCommitLogCommitOffset();
-
-    long getConsumeQueueMinOffset();
-
-    long getConsumeQueueMaxOffset();
-
-    long getConsumeQueueCommitOffset();
+    CompletableFuture<Void> commitAsync();
 
     /**
      * Asynchronously retrieves the message at the specified consume queue offset
@@ -125,19 +92,7 @@ public interface FlatFileInterface {
      * @param boundaryType lower or upper to decide boundary
      * @return Returns the offset of the message
      */
-    long getOffsetInConsumeQueueByTime(long timestamp, BoundaryType boundaryType);
-
-    /**
-     * Mark some commit log and consume file sealed and expired
-     *
-     * @param expireTimestamp expire timestamp, usually several days before the current time
-     */
-    void cleanExpiredFile(long expireTimestamp);
-
-    /**
-     * Destroys expired files
-     */
-    void destroyExpiredFile();
+    CompletableFuture<Long> getOffsetInQueueByTime(long timestamp, BoundaryType boundaryType);
 
     /**
      * Shutdown process
@@ -145,7 +100,12 @@ public interface FlatFileInterface {
     void shutdown();
 
     /**
+     * Destroys expired files
+     */
+    CompletableFuture<Void> destroyExpiredFile(long timestamp);
+
+    /**
      * Delete file
      */
-    void destroy();
+    CompletableFuture<Void> destroy();
 }

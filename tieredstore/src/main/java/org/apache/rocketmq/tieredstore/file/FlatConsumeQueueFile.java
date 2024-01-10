@@ -16,74 +16,22 @@
  */
 package org.apache.rocketmq.tieredstore.file;
 
-import java.nio.ByteBuffer;
-import java.util.concurrent.CompletableFuture;
 import org.apache.commons.lang3.tuple.Pair;
 import org.apache.rocketmq.common.BoundaryType;
-import org.apache.rocketmq.tieredstore.common.AppendResult;
-import org.apache.rocketmq.tieredstore.provider.FileSegment;
-import org.apache.rocketmq.tieredstore.util.MessageFormatUtil;
+import org.apache.rocketmq.tieredstore.common.FileSegmentType;
+import org.apache.rocketmq.tieredstore.provider.FileSegmentFactory;
 
-public class FlatConsumeQueueFile {
+public class FlatConsumeQueueFile extends FlatAppendFile {
 
-    private final FlatAppendFile flatAppendFile;
-
-    public FlatConsumeQueueFile(FlatFileFactory fileQueueFactory, String filePath) {
-        this.flatAppendFile = fileQueueFactory.createFlatFileForConsumeQueue(filePath);
+    public FlatConsumeQueueFile(FileSegmentFactory fileSegmentFactory, String filePath) {
+        super(fileSegmentFactory, FileSegmentType.CONSUME_QUEUE, filePath);
     }
 
     public boolean isInitialized() {
-        return flatAppendFile.getMinOffset() != -1L;
+        return false;
     }
 
-    public FlatAppendFile getFlatFile() {
-        return flatAppendFile;
-    }
-
-    public long getMinOffset() {
-        return flatAppendFile.getMinOffset();
-    }
-
-    public long getCommitOffset() {
-        return flatAppendFile.getCommitOffset();
-    }
-
-    public long getMaxOffset() {
-        return flatAppendFile.getMaxOffset();
-    }
-
-    public AppendResult append(final long offset, final int size, final long tagsCode, long timeStamp) {
-        ByteBuffer cqItem = ByteBuffer.allocate(MessageFormatUtil.CONSUME_QUEUE_UNIT_SIZE);
-        cqItem.putLong(offset).putInt(size).putLong(tagsCode).flip();
-        return flatAppendFile.append(cqItem, timeStamp, true);
-    }
-
-    public void commit(boolean sync) {
-        flatAppendFile.commit(sync);
-    }
-
-    public CompletableFuture<ByteBuffer> readAsync(long offset, int length) {
-        return flatAppendFile.readAsync(offset, length);
-    }
-
-    public void cleanExpiredFile(long expireTimestamp) {
-        flatAppendFile.cleanExpiredFile(expireTimestamp);
-    }
-
-    public void destroyExpiredFile() {
-        flatAppendFile.destroyExpiredFile();
-    }
-
-    protected Pair<Long, Long> getQueueOffsetInFileByTime(long timestamp, BoundaryType boundaryType) {
-        FileSegment fileSegment = flatAppendFile.getFileByTime(timestamp, boundaryType);
-        if (fileSegment == null) {
-            return Pair.of(-1L, -1L);
-        }
-        return Pair.of(fileSegment.getBaseOffset() / MessageFormatUtil.CONSUME_QUEUE_UNIT_SIZE,
-            fileSegment.getCommitOffset() / MessageFormatUtil.CONSUME_QUEUE_UNIT_SIZE - 1);
-    }
-
-    public void destroy() {
-        flatAppendFile.destroy();
+    public Pair<Long, Long> getQueueOffsetInFileByTime(long timestamp, BoundaryType boundaryType) {
+        return null;
     }
 }

@@ -119,14 +119,12 @@ public class MessageStoreConfig {
     private long readAheadCacheExpireDuration = 10 * 1000;
     private double readAheadCacheSizeThresholdRate = 0.3;
 
+    private boolean enableContentCrcCheck = false;
+
     private String tieredStoreFilePath = "";
-
     private String objectStoreEndpoint = "";
-
     private String objectStoreBucket = "";
-
     private String objectStoreAccessKey = "";
-
     private String objectStoreSecretKey = "";
 
     public static String localHostName() {
@@ -368,6 +366,14 @@ public class MessageStoreConfig {
 
     public void setReadAheadCacheSizeThresholdRate(double rate) {
         this.readAheadCacheSizeThresholdRate = rate;
+    }
+
+    public boolean isEnableContentCrcCheck() {
+        return enableContentCrcCheck;
+    }
+
+    public void setEnableContentCrcCheck(boolean enableContentCrcCheck) {
+        this.enableContentCrcCheck = enableContentCrcCheck;
     }
 
     public String getTieredStoreFilePath() {

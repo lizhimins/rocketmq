@@ -17,6 +17,7 @@
 
 package org.apache.rocketmq.tieredstore.file;
 
+import java.util.concurrent.CompletableFuture;
 import org.apache.rocketmq.common.message.MessageQueue;
 import org.apache.rocketmq.tieredstore.metadata.entity.QueueMetadata;
 import org.apache.rocketmq.tieredstore.metadata.entity.TopicMetadata;
@@ -34,12 +35,6 @@ public class FlatMessageFileExt extends FlatMessageFile {
         this.messageQueue = messageQueue;
         this.topicMetadata = this.recoverTopicMetadata();
         this.queueMetadata = this.recoverQueueMetadata();
-    }
-
-    @Override
-    public void initOffset(long offset) {
-        super.initOffset(offset);
-        this.flushMetadata();
     }
 
     public TopicMetadata recoverTopicMetadata() {
@@ -87,8 +82,9 @@ public class FlatMessageFileExt extends FlatMessageFile {
     }
 
     @Override
-    public void destroy() {
+    public CompletableFuture<Void> destroy() {
         super.destroy();
         metadataStore.deleteQueue(messageQueue);
+        return null;
     }
 }

@@ -106,12 +106,12 @@ public class MessageStoreFetcherImpl implements MessageStoreFetcher {
 //    }
 
     private void prefetchMessage(FlatMessageFileExt flatFile, String group, int maxCount, long nextBeginOffset) {
-        if (maxCount == 1 || flatFile.getReadAheadFactor() == 1) {
-            return;
-        }
-
-        // make sure there is only one request per group and request range
-        int prefetchBatchSize = Math.min(maxCount * flatFile.getReadAheadFactor(), storeConfig.getReadAheadMessageCountThreshold());
+//        if (maxCount == 1 || flatFile.getReadAheadFactor() == 1) {
+//            return;
+//        }
+//
+//        // make sure there is only one request per group and request range
+//        int prefetchBatchSize = Math.min(maxCount * flatFile.getReadAheadFactor(), storeConfig.getReadAheadMessageCountThreshold());
 //        InFlightRequestFuture inflightRequest = flatFile.getInflightRequest(group, nextBeginOffset, prefetchBatchSize);
 //        if (!inflightRequest.isAllDone()) {
 //            return;
@@ -167,7 +167,7 @@ public class MessageStoreFetcherImpl implements MessageStoreFetcher {
     }
 
     private CompletableFuture<Long> prefetchMessageThenPutToCache(
-            FlatMessageFileExt flatFile, long queueOffset, int batchSize) {
+        FlatMessageFileExt flatFile, long queueOffset, int batchSize) {
 
         MessageQueue mq = flatFile.getMessageQueue();
         return getMessageFromTieredStoreAsync(flatFile, queueOffset, batchSize)
@@ -203,7 +203,7 @@ public class MessageStoreFetcherImpl implements MessageStoreFetcher {
     }
 
     public CompletableFuture<GetMessageResultExt> getMessageFromCacheAsync(FlatMessageFileExt flatFile,
-                                                                           String group, long queueOffset, int maxCount, boolean waitInflightRequest) {
+        String group, long queueOffset, int maxCount, boolean waitInflightRequest) {
 
         MessageQueue mq = flatFile.getMessageQueue();
 
@@ -323,7 +323,7 @@ public class MessageStoreFetcherImpl implements MessageStoreFetcher {
     }
 
     public CompletableFuture<GetMessageResultExt> getMessageFromTieredStoreAsync(
-            FlatMessageFileExt flatFile, long queueOffset, int batchSize) {
+        FlatMessageFileExt flatFile, long queueOffset, int batchSize) {
 
         GetMessageResultExt result = new GetMessageResultExt();
         result.setMinOffset(flatFile.getConsumeQueueMinOffset());
@@ -476,8 +476,9 @@ public class MessageStoreFetcherImpl implements MessageStoreFetcher {
 
         // read from timestamp to timestamp + length
         int length = MessageFormatUtil.STORE_TIMESTAMP_POSITION + 8;
-        return flatFile.getCommitLogAsync(flatFile.getCommitLogMinOffset(), length)
-            .thenApply(MessageFormatUtil::getStoreTimeStamp);
+//        return flatFile.getCommitLogAsync(flatFile.getCommitLogMinOffset(), length)
+//            .thenApply(MessageFormatUtil::getStoreTimeStamp);
+        return CompletableFuture.completedFuture(0L);
     }
 
     @Override
@@ -508,13 +509,13 @@ public class MessageStoreFetcherImpl implements MessageStoreFetcher {
             return -1L;
         }
 
-        try {
-            return flatFile.getOffsetInConsumeQueueByTime(timestamp, type);
-        } catch (Exception e) {
-            log.error("MessageStoreFetcherImpl#getOffsetInQueueByTime: " +
-                    "get offset in queue by time failed: topic: {}, queue: {}, timestamp: {}, type: {}",
-                topic, queueId, timestamp, type, e);
-        }
+//        try {
+//            return flatFile.getOffsetInConsumeQueueByTime(timestamp, type);
+//        } catch (Exception e) {
+//            log.error("MessageStoreFetcherImpl#getOffsetInQueueByTime: " +
+//                    "get offset in queue by time failed: topic: {}, queue: {}, timestamp: {}, type: {}",
+//                topic, queueId, timestamp, type, e);
+//        }
         return -1L;
     }
 

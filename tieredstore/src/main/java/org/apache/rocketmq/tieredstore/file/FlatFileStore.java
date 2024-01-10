@@ -47,16 +47,18 @@ public class FlatFileStore {
     private final FlatFileFactory fileAllocator;
     private final ConcurrentMap<MessageQueue, FlatMessageFileExt> flatFileConcurrentMap;
 
-    public FlatFileStore(MetadataStore metadataStore, MessageStoreConfig storeConfig)
-        throws ClassNotFoundException, NoSuchMethodException {
-
-        this.storeConfig = storeConfig;
-        this.metadataStore = metadataStore;
-        this.fileAllocator = new FlatFileFactory(metadataStore, storeConfig);
-        this.indexStoreService = null;
+    public FlatFileStore(MetadataStore metadataStore, MessageStoreConfig storeConfig) {
+        try {
+            this.storeConfig = storeConfig;
+            this.metadataStore = metadataStore;
+            this.fileAllocator = new FlatFileFactory(metadataStore, storeConfig);
+            this.indexStoreService = null;
 //        this.indexStoreService = new IndexStoreService(fileAllocator, MessageStoreUtil.toPath(new MessageQueue(
 //            RMQ_SYS_TIERED_STORE_INDEX_TOPIC, storeConfig.getBrokerName(), 0)));
-        this.flatFileConcurrentMap = new ConcurrentHashMap<>();
+            this.flatFileConcurrentMap = new ConcurrentHashMap<>();
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
     }
 
     public boolean load() {

@@ -24,7 +24,7 @@ import java.util.Objects;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import org.apache.rocketmq.common.message.MessageQueue;
-import org.apache.rocketmq.tieredstore.MessageStoreTest;
+import org.apache.rocketmq.tieredstore.FlatMessageStoreTest;
 import org.apache.rocketmq.tieredstore.common.FileSegmentType;
 import org.apache.rocketmq.tieredstore.MessageStoreConfig;
 import org.apache.rocketmq.tieredstore.metadata.entity.FileSegmentMetadata;
@@ -38,7 +38,7 @@ import org.junit.Test;
 
 public class DefaultMetadataStoreTest {
 
-    private final String storePath = MessageStoreTest.getRandomStorePath();
+    private final String storePath = FlatMessageStoreTest.getRandomStorePath();
     private MessageQueue mq0;
     private MessageQueue mq1;
     private MessageQueue mq2;
@@ -58,7 +58,7 @@ public class DefaultMetadataStoreTest {
 
     @After
     public void tearDown() throws IOException {
-        MessageStoreTest.deleteStoreDirectory(storePath);
+        FlatMessageStoreTest.deleteStoreDirectory(storePath);
     }
 
     @Test

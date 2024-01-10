@@ -23,7 +23,6 @@ import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.locks.ReentrantLock;
-import org.apache.rocketmq.tieredstore.MessageStore;
 import org.apache.rocketmq.tieredstore.MessageStoreConfig;
 import org.apache.rocketmq.tieredstore.common.AppendResult;
 import org.apache.rocketmq.tieredstore.common.FileSegmentType;
@@ -31,13 +30,9 @@ import org.apache.rocketmq.tieredstore.exception.MessageStoreErrorCode;
 import org.apache.rocketmq.tieredstore.exception.MessageStoreException;
 import org.apache.rocketmq.tieredstore.stream.FileSegmentInputStream;
 import org.apache.rocketmq.tieredstore.stream.FileSegmentInputStreamFactory;
-import org.apache.rocketmq.tieredstore.util.MessageFormatUtil;
 import org.apache.rocketmq.tieredstore.util.MessageStoreUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import static org.apache.rocketmq.tieredstore.index.IndexStoreFile.INDEX_BEGIN_TIME_STAMP;
-import static org.apache.rocketmq.tieredstore.index.IndexStoreFile.INDEX_END_TIME_STAMP;
 
 public abstract class FileSegment implements Comparable<FileSegment>, FileSegmentProvider {
 

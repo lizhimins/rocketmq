@@ -18,6 +18,7 @@
 package org.apache.rocketmq.tieredstore.file;
 
 import org.apache.rocketmq.tieredstore.MessageStoreConfig;
+import org.apache.rocketmq.tieredstore.common.FileSegmentType;
 import org.apache.rocketmq.tieredstore.metadata.MetadataStore;
 import org.apache.rocketmq.tieredstore.provider.FileSegmentFactory;
 
@@ -43,24 +44,15 @@ public class FlatFileFactory {
         return metadataStore;
     }
 
-    public FlatAppendFile createFlatFileForCommitLog(String filePath) {
-//        FlatCompositeFile flatCompositeFile =
-//            new FlatCompositeFile(metadataStore, fileSegmentFactory, FileSegmentType.COMMIT_LOG, filePath);
-//        if (flatCompositeFile.getBaseOffset() == -1L) {
-//            flatCompositeFile.setBaseOffset(0L);
-//        }
-//        return flatCompositeFile;
-
-        return null;
+    public FlatCommitLogFile createFlatFileForCommitLog(String filePath) {
+        return new FlatCommitLogFile(this.fileSegmentFactory, filePath);
     }
 
-    public FlatAppendFile createFlatFileForConsumeQueue(String filePath) {
-        // return new FlatCompositeFile(metadataStore, fileSegmentFactory, FileSegmentType.CONSUME_QUEUE, filePath);
-        return null;
+    public FlatConsumeQueueFile createFlatFileForConsumeQueue(String filePath) {
+        return new FlatConsumeQueueFile(this.fileSegmentFactory, filePath);
     }
 
     public FlatAppendFile createFlatFileForIndexFile(String filePath) {
-        // return new FlatCompositeFile(metadataStore, fileSegmentFactory, FileSegmentType.INDEX, filePath);
-        return null;
+        return new FlatAppendFile(this.fileSegmentFactory, FileSegmentType.INDEX, filePath);
     }
 }

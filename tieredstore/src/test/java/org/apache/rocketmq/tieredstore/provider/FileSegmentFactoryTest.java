@@ -17,7 +17,7 @@
 package org.apache.rocketmq.tieredstore.provider;
 
 import org.apache.rocketmq.tieredstore.MessageStoreConfig;
-import org.apache.rocketmq.tieredstore.MessageStoreTest;
+import org.apache.rocketmq.tieredstore.FlatMessageStoreTest;
 import org.apache.rocketmq.tieredstore.common.FileSegmentType;
 import org.apache.rocketmq.tieredstore.metadata.DefaultMetadataStore;
 import org.apache.rocketmq.tieredstore.metadata.MetadataStore;
@@ -30,7 +30,7 @@ public class FileSegmentFactoryTest {
     public void fileSegmentInstanceTest() throws ClassNotFoundException, NoSuchMethodException {
         int baseOffset = 1000;
         String filePath = "FileSegmentFactoryPath";
-        String storePath = MessageStoreTest.getRandomStorePath();
+        String storePath = FlatMessageStoreTest.getRandomStorePath();
         MessageStoreConfig storeConfig = new MessageStoreConfig();
         storeConfig.setTieredStoreCommitLogMaxSize(1024);
         storeConfig.setTieredStoreFilePath(storePath);
@@ -53,6 +53,6 @@ public class FileSegmentFactoryTest {
         Assert.assertEquals(FileSegmentType.INDEX, fileSegment.getFileType());
         fileSegment.destroyFile();
 
-        MessageStoreTest.deleteStoreDirectory(storePath);
+        FlatMessageStoreTest.deleteStoreDirectory(storePath);
     }
 }

@@ -26,9 +26,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.Semaphore;
-import java.util.concurrent.locks.ReentrantLock;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.rocketmq.common.ServiceThread;
 import org.apache.rocketmq.common.message.MessageConst;
@@ -39,7 +37,7 @@ import org.apache.rocketmq.store.DispatchRequest;
 import org.apache.rocketmq.store.SelectMappedBufferResult;
 import org.apache.rocketmq.store.queue.ConsumeQueueInterface;
 import org.apache.rocketmq.store.queue.CqUnit;
-import org.apache.rocketmq.tieredstore.MessageStore;
+import org.apache.rocketmq.tieredstore.FlatMessageStore;
 import org.apache.rocketmq.tieredstore.MessageStoreConfig;
 import org.apache.rocketmq.tieredstore.MessageStoreExecutor;
 import org.apache.rocketmq.tieredstore.common.AppendResult;
@@ -55,32 +53,26 @@ public class MessageStoreDispatcherImpl extends ServiceThread implements Message
 
     protected static final Logger log = LoggerFactory.getLogger(MessageStoreUtil.TIERED_STORE_LOGGER_NAME);
 
-    protected static final long OFFSET_NOT_EXIST = -1L;
-    protected volatile boolean stopped = true;
-    protected MessageStoreFilter topicFilter;
+    protected volatile boolean closed = true;
+
     protected final String brokerName;
     protected final Semaphore semaphore;
     protected final org.apache.rocketmq.store.MessageStore defaultStore;
-    protected final MessageStore messageStoreExt;
+    protected final FlatMessageStore flatMessageStore;
     protected final MessageStoreConfig storeConfig;
-    protected final FlatFileStore flatFileManager;
+    protected final FlatFileStore flatFileStore;
     protected final MessageStoreExecutor storeExecutor;
-    protected final ReentrantLock dispatchLock;
-    protected ConcurrentMap<FlatMessageFileExt, List<DispatchRequest>> dispatchRequestReadMap;
-    protected ConcurrentMap<FlatMessageFileExt, List<DispatchRequest>> dispatchRequestWriteMap;
+    protected final MessageStoreFilter topicFilter;
 
-    public MessageStoreDispatcherImpl(MessageStore messageStoreExt) {
-        this.messageStoreExt = messageStoreExt;
-        this.defaultStore = messageStoreExt.getMessageStore();
-        this.storeConfig = messageStoreExt.getStoreConfig();
+    public MessageStoreDispatcherImpl(FlatMessageStore currentFlatMessageStore) {
+        this.flatMessageStore = currentFlatMessageStore;
+        this.defaultStore = currentFlatMessageStore.getMessageStore();
+        this.storeConfig = currentFlatMessageStore.getStoreConfig();
         this.brokerName = storeConfig.getBrokerName();
-        this.dispatchLock = new ReentrantLock();
-        this.dispatchRequestReadMap = new ConcurrentHashMap<>();
-        this.dispatchRequestWriteMap = new ConcurrentHashMap<>();
         this.semaphore = new Semaphore(10000 / 4);
         this.topicFilter = new MessageStoreTopicFilter();
-        this.flatFileManager = messageStoreExt.getFlatFileManager();
-        this.storeExecutor = messageStoreExt.getStoreExecutor();
+        this.flatFileStore = currentFlatMessageStore.getFlatFileStore();
+        this.storeExecutor = currentFlatMessageStore.getStoreExecutor();
         this.initScheduledTasks();
     }
 
@@ -90,7 +82,7 @@ public class MessageStoreDispatcherImpl extends ServiceThread implements Message
     }
 
     public void start() {
-        this.stopped = false;
+        this.closed = false;
         log.info("MessageStoreDispatcherImpl#start success");
     }
 
@@ -103,11 +95,11 @@ public class MessageStoreDispatcherImpl extends ServiceThread implements Message
     }
 
     public void submitAll() {
-        if (stopped) {
+        if (closed) {
             return;
         }
         try {
-            for (FlatMessageFileExt flatFile : flatFileManager.deepCopyFlatFileToList()) {
+            for (FlatMessageFileExt flatFile : flatFileStore.deepCopyFlatFileToList()) {
                 semaphore.acquire();
 //                MessageStoreExecutor.commitExecutor.submit(() -> {
 //                    try {
@@ -130,11 +122,11 @@ public class MessageStoreDispatcherImpl extends ServiceThread implements Message
     }
 
     public void cleanExpiredFile() {
-        if (stopped) {
+        if (closed) {
             return;
         }
         try {
-            for (FlatMessageFileExt flatFile : flatFileManager.deepCopyFlatFileToList()) {
+            for (FlatMessageFileExt flatFile : flatFileStore.deepCopyFlatFileToList()) {
                 semaphore.acquire();
 //                MessageStoreExecutor.commitExecutor.submit(() -> {
 //                    try {
@@ -149,177 +141,170 @@ public class MessageStoreDispatcherImpl extends ServiceThread implements Message
         }
     }
 
-    public MessageStoreFilter getTopicFilter() {
-        return topicFilter;
-    }
-
-    public void setTopicFilter(MessageStoreFilter topicFilter) {
-        this.topicFilter = topicFilter;
-    }
-
     @Override
     public void dispatch(DispatchRequest request) {
-        if (stopped || topicFilter != null && topicFilter.filterTopic(request.getTopic())) {
+        if (closed || topicFilter != null && topicFilter.filterTopic(request.getTopic())) {
             return;
         }
-        flatFileManager.getOrCreateFlatFileIfAbsent(
+        flatFileStore.getOrCreateFlatFileIfAbsent(
             new MessageQueue(request.getTopic(), brokerName, request.getQueueId()));
     }
 
     @Override
     public boolean dispatchFlatFile(FlatMessageFileExt flatFile) {
-        if (stopped) {
-            return false;
-        }
-
-        String topic = flatFile.getMessageQueue().getTopic();
-        int queueId = flatFile.getMessageQueue().getQueueId();
-
-        if (topicFilter != null && topicFilter.filterTopic(topic)) {
-            return false;
-        }
-
-        if (flatFile.getFileLock().tryLock()) {
-            return false;
-        }
-
-        try {
-            return dispatch(flatFile, topic, queueId);
-        } finally {
-            flatFile.getFileLock().unlock();
-        }
+//        if (closed) {
+//            return false;
+//        }
+//
+//        String topic = flatFile.getMessageQueue().getTopic();
+//        int queueId = flatFile.getMessageQueue().getQueueId();
+//
+//        if (topicFilter != null && topicFilter.filterTopic(topic)) {
+//            return false;
+//        }
+//
+//        if (flatFile.getFileLock().tryLock()) {
+//            return false;
+//        }
+//
+//        try {
+//            return dispatch(flatFile, topic, queueId);
+//        } finally {
+//            flatFile.getFileLock().unlock();
+//        }
+        return true;
     }
 
     public boolean dispatch(FlatMessageFileExt flatFile, String topic, int queueId) {
+//
+//        long currentOffset = flatFile.getDispatchOffset();
+//        long minOffsetInQueue = defaultStore.getMinOffsetInQueue(topic, queueId);
+//        long maxOffsetInQueue = defaultStore.getMaxOffsetInQueue(topic, queueId);
+//
+//        if (currentOffset == OFFSET_NOT_EXIST) {
+//            flatFile.initOffset(maxOffsetInQueue);
+//            currentOffset = maxOffsetInQueue;
+//        }
+//
+//        if (currentOffset < minOffsetInQueue) {
+//            log.warn("MessageStoreDispatcherImpl#dispatch: dispatch offset is too small, " +
+//                    "topic: {}, queueId: {}, dispatch offset: {}, local cq offset range {}-{}",
+//                topic, queueId, currentOffset, minOffsetInQueue, maxOffsetInQueue);
+//
+//            // Some earliest messages maybe lost at this time
+//            flatFileStore.destroyFile(flatFile.getMessageQueue());
+//            flatFileStore.getOrCreateFlatFileIfAbsent(new MessageQueue(topic, brokerName, queueId));
+//            return true;
+//        }
+//
+//        if (flatFile.getCommitLogCommitOffset() != flatFile.getCommitLogMaxOffset()) {
+//            flatFile.commitCommitLog();
+//            return true;
+//        }
+//
+//        if (flatFile.getConsumeQueueCommitOffset() != flatFile.getConsumeQueueMaxOffset()) {
+//            flatFile.commitConsumeQueue();
+//            return true;
+//        }
+//
+//        if (currentOffset >= maxOffsetInQueue) {
+//            return false;
+//        }
+//
+//        long totalBufferSize = 0L;
+//        long groupCommitSize = storeConfig.getTieredStoreGroupCommitSize();
+//        long groupCommitCount = storeConfig.getTieredStoreGroupCommitCount();
+//        long targetOffset = Math.min(currentOffset + groupCommitCount, maxOffsetInQueue);
+//
+//        List<DispatchRequest> requestList = new ArrayList<>();
+//        ConsumeQueueInterface consumeQueue = defaultStore.getConsumeQueue(topic, queueId);
+//
+//        long dispatchOffset = currentOffset;
+//        for (; dispatchOffset < targetOffset; dispatchOffset++) {
+//            CqUnit cqUnit = consumeQueue.get(dispatchOffset);
+//            if (cqUnit == null) {
+//                log.error("[Bug] MessageStoreDispatcherImpl#dispatch: cq item is null, " +
+//                        "topic: {}, queueId: {}, dispatch offset: {}, local cq offset range {}-{}",
+//                    topic, queueId, currentOffset, minOffsetInQueue, maxOffsetInQueue);
+//                continue;
+//            }
+//
+//            totalBufferSize += cqUnit.getSize();
+//            if (totalBufferSize >= groupCommitSize) {
+//                break;
+//            }
+//
+//            SelectMappedBufferResult message =
+//                defaultStore.selectOneMessageByOffset(cqUnit.getPos(), cqUnit.getSize());
+//            if (message == null) {
+//                log.error("[Bug] MessageStoreDispatcherImpl#dispatch: message is null, " +
+//                        "topic: {}, queueId: {}, dispatch offset: {}, local cq offset range {}-{}",
+//                    topic, queueId, currentOffset, minOffsetInQueue, maxOffsetInQueue);
+//                continue;
+//            }
+//
+//            ByteBuffer byteBuffer = message.getByteBuffer();
+//            AppendResult result = flatFile.appendCommitLog(byteBuffer);
+//            if (!AppendResult.SUCCESS.equals(result)) {
+//                break;
+//            }
+//
+//            long mappedCommitLogOffset = flatFile.getCommitLogMaxOffset() - byteBuffer.remaining();
+//            Map<String, String> properties = MessageFormatUtil.getProperties(byteBuffer);
+//            DispatchRequest dispatchRequest = new DispatchRequest(topic, queueId, mappedCommitLogOffset,
+//                cqUnit.getSize(), cqUnit.getTagsCode(), MessageFormatUtil.getStoreTimeStamp(byteBuffer),
+//                cqUnit.getQueueOffset(), properties.getOrDefault(MessageConst.PROPERTY_KEYS, ""),
+//                properties.getOrDefault(MessageConst.PROPERTY_UNIQ_CLIENT_MESSAGE_ID_KEYIDX, ""),
+//                0, 0, new HashMap<>());
+//            dispatchRequest.setOffsetId(MessageFormatUtil.getOffsetId(byteBuffer));
+//
+//            result = flatFile.appendConsumeQueue(dispatchRequest);
+//            if (!AppendResult.SUCCESS.equals(result)) {
+//                break;
+//            }
+//            requestList.add(dispatchRequest);
+//        }
 
-        long currentOffset = flatFile.getDispatchOffset();
-        long minOffsetInQueue = defaultStore.getMinOffsetInQueue(topic, queueId);
-        long maxOffsetInQueue = defaultStore.getMaxOffsetInQueue(topic, queueId);
+//        flatFile.commitCommitLog();
+//        if (flatFile.getCommitLogCommitOffset() != flatFile.getCommitLogMaxOffset()) {
+//            return true;
+//        }
+//
+//        flatFile.commitConsumeQueue();
+//        if (flatFile.getConsumeQueueCommitOffset() != flatFile.getConsumeQueueMaxOffset()) {
+//            return true;
+//        }
+//
+//        this.buildIndex(flatFile, requestList);
 
-        if (currentOffset == OFFSET_NOT_EXIST) {
-            flatFile.initOffset(maxOffsetInQueue);
-            currentOffset = maxOffsetInQueue;
-        }
-
-        if (currentOffset < minOffsetInQueue) {
-            log.warn("MessageStoreDispatcherImpl#dispatch: dispatch offset is too small, " +
-                    "topic: {}, queueId: {}, dispatch offset: {}, local cq offset range {}-{}",
-                topic, queueId, currentOffset, minOffsetInQueue, maxOffsetInQueue);
-
-            // Some earliest messages maybe lost at this time
-            flatFileManager.destroyFile(flatFile.getMessageQueue());
-            flatFileManager.getOrCreateFlatFileIfAbsent(new MessageQueue(topic, brokerName, queueId));
-            return true;
-        }
-
-        if (flatFile.getCommitLogCommitOffset() != flatFile.getCommitLogMaxOffset()) {
-            flatFile.commitCommitLog();
-            return true;
-        }
-
-        if (flatFile.getConsumeQueueCommitOffset() != flatFile.getConsumeQueueMaxOffset()) {
-            flatFile.commitConsumeQueue();
-            return true;
-        }
-
-        if (currentOffset >= maxOffsetInQueue) {
-            return false;
-        }
-
-        long totalBufferSize = 0L;
-        long groupCommitSize = storeConfig.getTieredStoreGroupCommitSize();
-        long groupCommitCount = storeConfig.getTieredStoreGroupCommitCount();
-        long targetOffset = Math.min(currentOffset + groupCommitCount, maxOffsetInQueue);
-
-        List<DispatchRequest> requestList = new ArrayList<>();
-        ConsumeQueueInterface consumeQueue = defaultStore.getConsumeQueue(topic, queueId);
-
-        long dispatchOffset = currentOffset;
-        for (; dispatchOffset < targetOffset; dispatchOffset++) {
-            CqUnit cqUnit = consumeQueue.get(dispatchOffset);
-            if (cqUnit == null) {
-                log.error("[Bug] MessageStoreDispatcherImpl#dispatch: cq item is null, " +
-                        "topic: {}, queueId: {}, dispatch offset: {}, local cq offset range {}-{}",
-                    topic, queueId, currentOffset, minOffsetInQueue, maxOffsetInQueue);
-                continue;
-            }
-
-            totalBufferSize += cqUnit.getSize();
-            if (totalBufferSize >= groupCommitSize) {
-                break;
-            }
-
-            SelectMappedBufferResult message =
-                defaultStore.selectOneMessageByOffset(cqUnit.getPos(), cqUnit.getSize());
-            if (message == null) {
-                log.error("[Bug] MessageStoreDispatcherImpl#dispatch: message is null, " +
-                        "topic: {}, queueId: {}, dispatch offset: {}, local cq offset range {}-{}",
-                    topic, queueId, currentOffset, minOffsetInQueue, maxOffsetInQueue);
-                continue;
-            }
-
-            ByteBuffer byteBuffer = message.getByteBuffer();
-            AppendResult result = flatFile.appendCommitLog(byteBuffer);
-            if (!AppendResult.SUCCESS.equals(result)) {
-                break;
-            }
-
-            long mappedCommitLogOffset = flatFile.getCommitLogMaxOffset() - byteBuffer.remaining();
-            Map<String, String> properties = MessageFormatUtil.getProperties(byteBuffer);
-            DispatchRequest dispatchRequest = new DispatchRequest(topic, queueId, mappedCommitLogOffset,
-                cqUnit.getSize(), cqUnit.getTagsCode(), MessageFormatUtil.getStoreTimeStamp(byteBuffer),
-                cqUnit.getQueueOffset(), properties.getOrDefault(MessageConst.PROPERTY_KEYS, ""),
-                properties.getOrDefault(MessageConst.PROPERTY_UNIQ_CLIENT_MESSAGE_ID_KEYIDX, ""),
-                0, 0, new HashMap<>());
-            dispatchRequest.setOffsetId(MessageFormatUtil.getOffsetId(byteBuffer));
-
-            result = flatFile.appendConsumeQueue(dispatchRequest);
-            if (!AppendResult.SUCCESS.equals(result)) {
-                break;
-            }
-            requestList.add(dispatchRequest);
-        }
-
-        flatFile.commitCommitLog();
-        if (flatFile.getCommitLogCommitOffset() != flatFile.getCommitLogMaxOffset()) {
-            return true;
-        }
-
-        flatFile.commitConsumeQueue();
-        if (flatFile.getConsumeQueueCommitOffset() != flatFile.getConsumeQueueMaxOffset()) {
-            return true;
-        }
-
-        this.buildIndex(flatFile, requestList);
-
-        Attributes attributes = MessageStoreMetricsManager.newAttributesBuilder()
-            .put(MessageStoreMetricsConstant.LABEL_TOPIC, topic)
-            .put(MessageStoreMetricsConstant.LABEL_QUEUE_ID, queueId)
-            .put(MessageStoreMetricsConstant.LABEL_FILE_TYPE, FileSegmentType.COMMIT_LOG.name().toLowerCase())
-            .build();
-        MessageStoreMetricsManager.messagesDispatchTotal.add(dispatchOffset - currentOffset, attributes);
+//        Attributes attributes = MessageStoreMetricsManager.newAttributesBuilder()
+//            .put(MessageStoreMetricsConstant.LABEL_TOPIC, topic)
+//            .put(MessageStoreMetricsConstant.LABEL_QUEUE_ID, queueId)
+//            .put(MessageStoreMetricsConstant.LABEL_FILE_TYPE, FileSegmentType.COMMIT_LOG.name().toLowerCase())
+//            .build();
+//        MessageStoreMetricsManager.messagesDispatchTotal.add(dispatchOffset - currentOffset, attributes);
 
         return false;
     }
 
-    public void buildIndex(FlatMessageFileExt flatFile, List<DispatchRequest> requestList) {
-        dispatchLock.lock();
-        try {
-            dispatchRequestWriteMap.computeIfAbsent(flatFile, k -> new ArrayList<>()).addAll(requestList);
-        } finally {
-            dispatchLock.unlock();
-        }
-    }
-
-    public void swapDispatchRequestList() {
-        dispatchLock.lock();
-        try {
-            dispatchRequestReadMap = dispatchRequestWriteMap;
-            dispatchRequestWriteMap = new ConcurrentHashMap<>();
-        } finally {
-            dispatchLock.unlock();
-        }
-    }
+//    public void buildIndex(FlatMessageFileExt flatFile, List<DispatchRequest> requestList) {
+//        dispatchLock.lock();
+//        try {
+//            dispatchRequestWriteMap.computeIfAbsent(flatFile, k -> new ArrayList<>()).addAll(requestList);
+//        } finally {
+//            dispatchLock.unlock();
+//        }
+//    }
+//
+//    public void swapDispatchRequestList() {
+//        dispatchLock.lock();
+//        try {
+//            dispatchRequestReadMap = dispatchRequestWriteMap;
+//            dispatchRequestWriteMap = new ConcurrentHashMap<>();
+//        } finally {
+//            dispatchLock.unlock();
+//        }
+//    }
 
     @Override
     public void deleteExpiredFile(FlatMessageFileExt flatFile) {
@@ -327,7 +312,7 @@ public class MessageStoreDispatcherImpl extends ServiceThread implements Message
     }
 
     public AppendResult appendIndexFile(FlatMessageFileExt flatFile, DispatchRequest request) {
-        if (stopped) {
+        if (closed) {
             return AppendResult.FILE_CLOSED;
         }
 
@@ -337,35 +322,35 @@ public class MessageStoreDispatcherImpl extends ServiceThread implements Message
             keySet.add(request.getUniqKey());
         }
 
-        return flatFileManager.getIndexService().putKey(
+        return flatFileStore.getIndexService().putKey(
             request.getTopic(), (int) flatFile.getTopicMetadata().getTopicId(), request.getQueueId(), keySet,
             request.getCommitLogOffset(), request.getMsgSize(), request.getStoreTimestamp());
     }
 
     protected void buildIndexFile() {
-        this.swapDispatchRequestList();
-
-        if (storeConfig.isMessageIndexEnable()) {
-            this.dispatchRequestReadMap.clear();
-            return;
-        }
-
-        for (Map.Entry<FlatMessageFileExt, List<DispatchRequest>> entry : dispatchRequestReadMap.entrySet()) {
-            FlatMessageFileExt flatFile = entry.getKey();
-            List<DispatchRequest> requestList = entry.getValue();
-            if (flatFile.isClosed()) {
-                requestList.clear();
-            }
-            for (DispatchRequest request : requestList) {
-                this.appendIndexFile(flatFile, request);
-            }
-        }
-        this.dispatchRequestReadMap.clear();
+//        this.swapDispatchRequestList();
+//
+//        if (storeConfig.isMessageIndexEnable()) {
+//            this.dispatchRequestReadMap.clear();
+//            return;
+//        }
+//
+//        for (Map.Entry<FlatMessageFileExt, List<DispatchRequest>> entry : dispatchRequestReadMap.entrySet()) {
+//            FlatMessageFileExt flatFile = entry.getKey();
+//            List<DispatchRequest> requestList = entry.getValue();
+//            if (flatFile.isClosed()) {
+//                requestList.clear();
+//            }
+//            for (DispatchRequest request : requestList) {
+//                this.appendIndexFile(flatFile, request);
+//            }
+//        }
+//        this.dispatchRequestReadMap.clear();
     }
 
     @Override
     public void run() {
-        while (!stopped) {
+        while (!closed) {
             waitForRunning(1000);
             buildIndexFile();
         }

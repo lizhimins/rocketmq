@@ -19,7 +19,7 @@ package org.apache.rocketmq.tieredstore.core;
 import java.io.IOException;
 import org.apache.rocketmq.common.message.MessageQueue;
 import org.apache.rocketmq.tieredstore.MessageStoreConfig;
-import org.apache.rocketmq.tieredstore.MessageStoreTest;
+import org.apache.rocketmq.tieredstore.FlatMessageStoreTest;
 import org.apache.rocketmq.tieredstore.metadata.DefaultMetadataStore;
 import org.apache.rocketmq.tieredstore.metadata.MetadataStore;
 import org.junit.After;
@@ -27,7 +27,7 @@ import org.junit.Before;
 
 public class MessageStoreDispatcherImplTest {
 
-    private final String storePath = MessageStoreTest.getRandomStorePath();
+    private final String storePath = FlatMessageStoreTest.getRandomStorePath();
     private MessageStoreConfig storeConfig;
     private MessageQueue mq;
     private MetadataStore metadataStore;
@@ -45,7 +45,7 @@ public class MessageStoreDispatcherImplTest {
 
     @After
     public void tearDown() throws IOException {
-        MessageStoreTest.deleteStoreDirectory(storePath);
+        FlatMessageStoreTest.deleteStoreDirectory(storePath);
 //        MessageStoreExecutor.shutdown();
     }
 

@@ -17,7 +17,7 @@
 package org.apache.rocketmq.tieredstore.file;
 
 import org.apache.rocketmq.common.message.MessageQueue;
-import org.apache.rocketmq.tieredstore.MessageStoreTest;
+import org.apache.rocketmq.tieredstore.FlatMessageStoreTest;
 import org.apache.rocketmq.tieredstore.common.FileSegmentType;
 import org.apache.rocketmq.tieredstore.MessageStoreConfig;
 import org.apache.rocketmq.tieredstore.metadata.entity.FileSegmentMetadata;
@@ -37,9 +37,9 @@ import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
 
-public class FlatFlatFileTest {
+public class FlatAppendFileTest {
 
-    private final String storePath = MessageStoreTest.getRandomStorePath();
+    private final String storePath = FlatMessageStoreTest.getRandomStorePath();
     private MessageQueue queue;
     private MessageStoreConfig storeConfig;
     private FlatFileFactory fileQueueFactory;
@@ -57,7 +57,7 @@ public class FlatFlatFileTest {
 
     @After
     public void tearDown() throws IOException {
-        MessageStoreTest.deleteStoreDirectory(storePath);
+        FlatMessageStoreTest.deleteStoreDirectory(storePath);
         // MessageStoreExecutor.shutdown();
     }
 
@@ -146,13 +146,13 @@ public class FlatFlatFileTest {
         segment1.initPosition(segment1.getSize());
         Assert.assertEquals(0, segment1.getBaseOffset());
         Assert.assertEquals(1000, fileQueue.getCommitOffset());
-        Assert.assertEquals(1000, fileQueue.getMaxOffset());
+        Assert.assertEquals(1000, fileQueue.getAppendOffset());
 
         ByteBuffer buffer = ByteBuffer.allocate(100);
         long currentTimeMillis = System.currentTimeMillis();
         buffer.putLong(currentTimeMillis);
         buffer.rewind();
-        fileQueue.append(buffer);
+        fileQueue.append(buffer, currentTimeMillis);
         Assert.assertEquals(1100, segment1.getAppendOffset());
 
 //        segment1.setFull();
@@ -166,7 +166,7 @@ public class FlatFlatFileTest {
         Assert.assertNotEquals(segment1, segment2);
         segment2.initPosition(segment2.getSize());
         buffer.rewind();
-        fileQueue.append(buffer);
+        fileQueue.append(buffer, currentTimeMillis);
         fileQueue.commit(true);
         readBuffer = fileQueue.readAsync(1000, 1200).join();
         Assert.assertEquals(currentTimeMillis, readBuffer.getLong(1100));

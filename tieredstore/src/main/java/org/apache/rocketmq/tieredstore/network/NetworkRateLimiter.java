@@ -14,10 +14,11 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.rocketmq.tieredstore.file;
+package org.apache.rocketmq.tieredstore.network;
 
-import static org.junit.Assert.*;
+public class NetworkRateLimiter {
 
-public class FlatConsumeQueueFileTest {
-
+    enum NetworkThrottleStrategy {
+        BY_BYTES, BY_PACKETS
+    }
 }

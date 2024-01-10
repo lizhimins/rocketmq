@@ -22,7 +22,6 @@ import io.opentelemetry.api.common.AttributesBuilder;
 import io.opentelemetry.api.metrics.Meter;
 import io.opentelemetry.sdk.metrics.InstrumentSelector;
 import io.opentelemetry.sdk.metrics.ViewBuilder;
-import java.io.File;
 import java.lang.reflect.Constructor;
 import java.util.List;
 import java.util.Set;
@@ -42,6 +41,7 @@ import org.apache.rocketmq.logging.org.slf4j.LoggerFactory;
 import org.apache.rocketmq.store.GetMessageResult;
 import org.apache.rocketmq.store.GetMessageStatus;
 import org.apache.rocketmq.store.MessageFilter;
+import org.apache.rocketmq.store.MessageStore;
 import org.apache.rocketmq.store.PutMessageResult;
 import org.apache.rocketmq.store.QueryMessageResult;
 import org.apache.rocketmq.store.SelectMappedBufferResult;
@@ -57,39 +57,36 @@ import org.apache.rocketmq.tieredstore.core.MessageStoreFetcherImpl;
 import org.apache.rocketmq.tieredstore.core.MessageStoreFilter;
 import org.apache.rocketmq.tieredstore.util.MessageStoreUtil;
 
-public class MessageStore extends AbstractPluginMessageStore {
+public class FlatMessageStore extends AbstractPluginMessageStore {
 
     protected static final Logger logger = LoggerFactory.getLogger(MessageStoreUtil.TIERED_STORE_LOGGER_NAME);
 
     protected final String brokerName;
-    protected final org.apache.rocketmq.store.MessageStore defaultStore;
+    protected final MessageStore defaultStore;
     protected final MessageStoreConfig storeConfig;
     protected final MetadataStore metadataStore;
-
+    protected final MessageStorePluginContext context;
     protected final MessageStoreExecutor storeExecutor;
     protected final MessageStoreFilter topicFilter;
     protected final MessageStoreFetcherImpl fetcher;
     protected final MessageStoreDispatcherImpl dispatcher;
-    protected final FlatFileStore flatFileManager;
+    protected final FlatFileStore flatFileStore;
 
-    public MessageStore(MessageStorePluginContext context, org.apache.rocketmq.store.MessageStore next,
-        MessageStoreFilter filter) throws Exception {
+    public FlatMessageStore(MessageStorePluginContext context, MessageStore next, MessageStoreFilter filter) {
         super(context, next);
-        topicFilter = filter;
-        this.storeConfig = new MessageStoreConfig();
-        context.registerConfiguration(storeConfig);
-        this.brokerName = storeConfig.getBrokerName();
 
+        this.storeConfig = new MessageStoreConfig();
+        this.context = context;
+        this.context.registerConfiguration(this.storeConfig);
+        this.brokerName = this.storeConfig.getBrokerName();
+
+        this.topicFilter = filter;
         this.defaultStore = next;
         this.metadataStore = this.getMetadataStore(storeConfig);
         this.storeExecutor = new MessageStoreExecutor(this.storeConfig.getMaxCommitJitter());
-        this.flatFileManager = new FlatFileStore(metadataStore, storeConfig);
-        this.fetcher = new MessageStoreFetcherImpl(flatFileManager);
+        this.flatFileStore = new FlatFileStore(metadataStore, storeConfig);
+        this.fetcher = new MessageStoreFetcherImpl(flatFileStore);
         this.dispatcher = new MessageStoreDispatcherImpl(this);
-    }
-
-    public static String toPath(MessageQueue mq) {
-        return mq.getBrokerName() + File.separator + mq.getTopic() + File.separator + mq.getQueueId();
     }
 
 //    public static void addSystemTopic(final String topic) {
@@ -119,11 +116,15 @@ public class MessageStore extends AbstractPluginMessageStore {
         return defaultStore;
     }
 
-    public MetadataStore getMetadataStore(MessageStoreConfig storeConfig) throws Exception {
-        Class<? extends MetadataStore> clazz =
-            Class.forName(storeConfig.getTieredMetadataServiceProvider()).asSubclass(MetadataStore.class);
-        Constructor<? extends MetadataStore> constructor = clazz.getConstructor(MessageStoreConfig.class);
-        return constructor.newInstance(storeConfig);
+    public MetadataStore getMetadataStore(MessageStoreConfig storeConfig) {
+        try {
+            Class<? extends MetadataStore> clazz =
+                Class.forName(storeConfig.getTieredMetadataServiceProvider()).asSubclass(MetadataStore.class);
+            Constructor<? extends MetadataStore> constructor = clazz.getConstructor(MessageStoreConfig.class);
+            return constructor.newInstance(storeConfig);
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
     }
 
     public String getBrokerName() {
@@ -146,13 +147,13 @@ public class MessageStore extends AbstractPluginMessageStore {
         return dispatcher;
     }
 
-    public FlatFileStore getFlatFileManager() {
-        return flatFileManager;
+    public FlatFileStore getFlatFileStore() {
+        return flatFileStore;
     }
 
     @Override
     public boolean load() {
-        boolean loadFlatFile = flatFileManager.load();
+        boolean loadFlatFile = flatFileStore.load();
         boolean loadNextStore = next.load();
         boolean result = loadFlatFile && loadNextStore;
         if (result) {
@@ -180,7 +181,7 @@ public class MessageStore extends AbstractPluginMessageStore {
             return false;
         }
 
-        FlatMessageFile flatFile = flatFileManager.getFlatFile(new MessageQueue(topic, brokerName, queueId));
+        FlatMessageFile flatFile = flatFileStore.getFlatFile(new MessageQueue(topic, brokerName, queueId));
         if (flatFile == null) {
             return false;
         }
@@ -295,7 +296,7 @@ public class MessageStore extends AbstractPluginMessageStore {
     @Override
     public long getMinOffsetInQueue(String topic, int queueId) {
         long minOffsetInNextStore = next.getMinOffsetInQueue(topic, queueId);
-        FlatMessageFile flatFile = flatFileManager.getFlatFile(new MessageQueue(topic, brokerName, queueId));
+        FlatMessageFile flatFile = flatFileStore.getFlatFile(new MessageQueue(topic, brokerName, queueId));
         if (flatFile == null) {
             return minOffsetInNextStore;
         }
@@ -434,7 +435,7 @@ public class MessageStore extends AbstractPluginMessageStore {
     @Override
     public void initMetrics(Meter meter, Supplier<AttributesBuilder> attributesBuilderSupplier) {
         super.initMetrics(meter, attributesBuilderSupplier);
-        MessageStoreMetricsManager.init(meter, attributesBuilderSupplier, storeConfig, fetcher, flatFileManager, next);
+        MessageStoreMetricsManager.init(meter, attributesBuilderSupplier, storeConfig, fetcher, flatFileStore, next);
     }
 
     @Override
@@ -448,8 +449,8 @@ public class MessageStore extends AbstractPluginMessageStore {
         if (fetcher != null) {
             fetcher.shutdown();
         }
-        if (flatFileManager != null) {
-            flatFileManager.shutdown();
+        if (flatFileStore != null) {
+            flatFileStore.shutdown();
         }
         if (this.storeExecutor != null) {
             this.storeExecutor.shutdown();
@@ -461,8 +462,8 @@ public class MessageStore extends AbstractPluginMessageStore {
         if (next != null) {
             next.destroy();
         }
-        if (flatFileManager != null) {
-            flatFileManager.destroy();
+        if (flatFileStore != null) {
+            flatFileStore.destroy();
         }
         if (metadataStore != null) {
             metadataStore.destroy();
@@ -501,7 +502,7 @@ public class MessageStore extends AbstractPluginMessageStore {
                 return;
             }
             metadataStore.iterateQueue(topic, queueMetadata -> {
-                flatFileManager.destroyFile(queueMetadata.getQueue());
+                flatFileStore.destroyFile(queueMetadata.getQueue());
             });
             // delete topic metadata
             metadataStore.deleteTopic(topic);

@@ -16,18 +16,6 @@
  */
 package org.apache.rocketmq.tieredstore.provider;
 
-import java.util.Arrays;
-import org.apache.rocketmq.common.message.MessageQueue;
-import org.apache.rocketmq.tieredstore.MessageStoreConfig;
-import org.apache.rocketmq.tieredstore.MessageStoreExecutor;
-import org.apache.rocketmq.tieredstore.MessageStoreTest;
-import org.apache.rocketmq.tieredstore.common.FileSegmentType;
-import org.apache.rocketmq.tieredstore.util.MessageStoreUtil;
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
-
 public class PosixFileSegmentTest {
 
 }

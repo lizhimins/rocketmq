@@ -20,7 +20,7 @@ import java.io.IOException;
 import org.junit.After;
 import org.junit.Test;
 
-public class MessageStoreMetricsManagerTest {
+public class FlatMessageStoreMetricsManagerTest {
 
     @After
     public void tearDown() throws IOException {

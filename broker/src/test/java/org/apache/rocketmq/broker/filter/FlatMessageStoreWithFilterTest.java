@@ -56,7 +56,7 @@ import org.junit.Test;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
-public class MessageStoreWithFilterTest {
+public class FlatMessageStoreWithFilterTest {
 
     private static final String MSG = "Once, there was a chance for me!";
     private static final byte[] MSG_BODY = MSG.getBytes();
