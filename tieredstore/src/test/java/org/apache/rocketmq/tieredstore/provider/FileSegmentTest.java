@@ -341,7 +341,7 @@ public class FileSegmentTest {
         segment.blocker = new CompletableFuture<>();
         new Thread(() -> {
             try {
-                Thread.sleep(3000);
+                Thread.sleep(1000);
             } catch (InterruptedException e) {
                 Assert.fail(e.getMessage());
             }

@@ -16,21 +16,28 @@
  */
 package org.apache.rocketmq.tieredstore.metadata.entity;
 
+import com.alibaba.fastjson.annotation.JSONField;
+
 public class TopicMetadata {
 
+    @JSONField(ordinal = 1)
     private long topicId;
+
+    @JSONField(ordinal = 2)
     private String topic;
+
+    @JSONField(ordinal = 3)
     private int status;
+
+    @JSONField(ordinal = 4)
     private long reserveTime;
+
+    @JSONField(ordinal = 5)
     private long updateTimestamp;
 
     // default constructor is used by fastjson
+    @SuppressWarnings("unused")
     public TopicMetadata() {
-
-    }
-
-    public TopicMetadata(String topic) {
-        this.topic = topic;
     }
 
     public TopicMetadata(long topicId, String topic, long reserveTime) {

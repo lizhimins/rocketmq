@@ -48,7 +48,7 @@ public class DefaultMetadataStore extends ConfigManager implements MetadataStore
     private final ConcurrentMap<String /* topic */, TopicMetadata> topicMetadataTable;
     private final ConcurrentMap<String /* topic */, ConcurrentMap<Integer, QueueMetadata>> queueMetadataTable;
 
-    // Declare concurrent mapping tables to store file segment metadata for different types of files
+    // Declare concurrent mapping tables to store file segment metadata
     // Key: filePath -> Value: <baseOffset, metadata>
     private final ConcurrentMap<String, ConcurrentMap<Long, FileSegmentMetadata>> commitLogFileSegmentTable;
     private final ConcurrentMap<String, ConcurrentMap<Long, FileSegmentMetadata>> consumeQueueFileSegmentTable;
@@ -117,16 +117,6 @@ public class DefaultMetadataStore extends ConfigManager implements MetadataStore
                     (filePath, entry) -> this.indexFileSegmentTable.put(filePath, new ConcurrentHashMap<>(entry)));
             }
         }
-    }
-
-    public void recoverSequenceNumber() {
-//        AtomicLong topicSequenceNumber = new AtomicLong();
-//        metadataStore.iterateTopic(topicMetadata -> {
-//            if (topicMetadata != null && topicMetadata.getTopicId() > 0) {
-//                topicSequenceNumber.set(Math.max(topicSequenceNumber.get(), topicMetadata.getTopicId()));
-//            }
-//        });
-//        metadataStore.setTopicSequenceNumber(topicSequenceNumber.incrementAndGet());
     }
 
     @Override
@@ -322,7 +312,7 @@ public class DefaultMetadataStore extends ConfigManager implements MetadataStore
         private ConcurrentMap<String /* topic */, TopicMetadata> topicMetadataTable;
         private ConcurrentMap<String /* topic */, ConcurrentMap<Integer /* queueId */, QueueMetadata>> queueMetadataTable;
 
-        // Declare concurrent mapping tables to store file segment metadata for different types of files
+        // Declare concurrent mapping tables to store file segment metadata
         // Key: filePath -> Value: <baseOffset, metadata>
         private ConcurrentMap<String, ConcurrentMap<Long, FileSegmentMetadata>> commitLogFileSegmentTable;
         private ConcurrentMap<String, ConcurrentMap<Long, FileSegmentMetadata>> consumeQueueFileSegmentTable;
@@ -349,7 +339,7 @@ public class DefaultMetadataStore extends ConfigManager implements MetadataStore
         }
 
         public void setTopicMetadataTable(
-                ConcurrentMap<String, TopicMetadata> topicMetadataTable) {
+            ConcurrentMap<String, TopicMetadata> topicMetadataTable) {
             this.topicMetadataTable = topicMetadataTable;
         }
 
@@ -358,7 +348,7 @@ public class DefaultMetadataStore extends ConfigManager implements MetadataStore
         }
 
         public void setQueueMetadataTable(
-                ConcurrentMap<String, ConcurrentMap<Integer, QueueMetadata>> queueMetadataTable) {
+            ConcurrentMap<String, ConcurrentMap<Integer, QueueMetadata>> queueMetadataTable) {
             this.queueMetadataTable = queueMetadataTable;
         }
 
@@ -367,7 +357,7 @@ public class DefaultMetadataStore extends ConfigManager implements MetadataStore
         }
 
         public void setCommitLogFileSegmentTable(
-                ConcurrentMap<String, ConcurrentMap<Long, FileSegmentMetadata>> commitLogFileSegmentTable) {
+            ConcurrentMap<String, ConcurrentMap<Long, FileSegmentMetadata>> commitLogFileSegmentTable) {
             this.commitLogFileSegmentTable = commitLogFileSegmentTable;
         }
 
@@ -376,7 +366,7 @@ public class DefaultMetadataStore extends ConfigManager implements MetadataStore
         }
 
         public void setConsumeQueueFileSegmentTable(
-                ConcurrentMap<String, ConcurrentMap<Long, FileSegmentMetadata>> consumeQueueFileSegmentTable) {
+            ConcurrentMap<String, ConcurrentMap<Long, FileSegmentMetadata>> consumeQueueFileSegmentTable) {
             this.consumeQueueFileSegmentTable = consumeQueueFileSegmentTable;
         }
 
@@ -385,7 +375,7 @@ public class DefaultMetadataStore extends ConfigManager implements MetadataStore
         }
 
         public void setIndexFileSegmentTable(
-                ConcurrentMap<String, ConcurrentMap<Long, FileSegmentMetadata>> indexFileSegmentTable) {
+            ConcurrentMap<String, ConcurrentMap<Long, FileSegmentMetadata>> indexFileSegmentTable) {
             this.indexFileSegmentTable = indexFileSegmentTable;
         }
     }

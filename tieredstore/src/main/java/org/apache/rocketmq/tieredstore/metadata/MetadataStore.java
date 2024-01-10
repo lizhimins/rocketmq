@@ -24,10 +24,26 @@ import org.apache.rocketmq.tieredstore.metadata.entity.QueueMetadata;
 import org.apache.rocketmq.tieredstore.metadata.entity.TimerMetadata;
 import org.apache.rocketmq.tieredstore.metadata.entity.TopicMetadata;
 
+/**
+ * Provides tiered metadata storage service to store metadata information of Topic, Queue, FileSegment, etc.
+ */
 public interface MetadataStore {
 
-    TopicMetadata getTopic(String topicName);
+    /**
+     * Get the metadata information of specified Topic.
+     *
+     * @param topic The name of Topic.
+     * @return The metadata information of specified Topic, or null if it does not exist.
+     */
+    TopicMetadata getTopic(String topic);
 
+    /**
+     * Add a new metadata information of Topic.
+     *
+     * @param topic       The name of Topic.
+     * @param reserveTime The reserve time.
+     * @return The newly added metadata information of Topic.
+     */
     TopicMetadata addTopic(String topic, long reserveTime);
 
     void updateTopic(TopicMetadata topicMetadata);

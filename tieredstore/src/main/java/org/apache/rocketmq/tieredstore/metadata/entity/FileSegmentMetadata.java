@@ -16,6 +16,7 @@
  */
 package org.apache.rocketmq.tieredstore.metadata.entity;
 
+import com.alibaba.fastjson.annotation.JSONField;
 import java.util.Objects;
 
 public class FileSegmentMetadata {
@@ -24,20 +25,36 @@ public class FileSegmentMetadata {
     public static final int STATUS_SEALED = 1;
     public static final int STATUS_DELETED = 2;
 
-    private int type;
+    @JSONField(ordinal = 1)
     private String path;
+
+    @JSONField(ordinal = 2)
+    private int type;
+
+    @JSONField(ordinal = 3)
     private long baseOffset;
+
+    @JSONField(ordinal = 4)
     private int status;
+
+    @JSONField(ordinal = 5)
     private long size;
 
+    @JSONField(ordinal = 6)
     private long createTimestamp;
+
+    @JSONField(ordinal = 7)
     private long beginTimestamp;
+
+    @JSONField(ordinal = 8)
     private long endTimestamp;
+
+    @JSONField(ordinal = 9)
     private long sealTimestamp;
 
     // default constructor is used by fastjson
+    @SuppressWarnings("unused")
     public FileSegmentMetadata() {
-
     }
 
     public FileSegmentMetadata(String path, long baseOffset, int type) {

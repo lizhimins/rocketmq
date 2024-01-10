@@ -37,6 +37,7 @@ public class TimerMetadata {
     private long updateTimestamp;
 
     // default constructor is used by fastjson
+    @SuppressWarnings("unused")
     public TimerMetadata() {
     }
 

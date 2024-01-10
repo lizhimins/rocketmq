@@ -16,18 +16,26 @@
  */
 package org.apache.rocketmq.tieredstore.metadata.entity;
 
+import com.alibaba.fastjson.annotation.JSONField;
 import org.apache.rocketmq.common.message.MessageQueue;
 
 public class QueueMetadata {
 
+    @JSONField(ordinal = 1)
     private MessageQueue queue;
+
+    @JSONField(ordinal = 2)
     private long minOffset;
+
+    @JSONField(ordinal = 3)
     private long maxOffset;
+
+    @JSONField(ordinal = 4)
     private long updateTimestamp;
 
     // default constructor is used by fastjson
+    @SuppressWarnings("unused")
     public QueueMetadata() {
-
     }
 
     public QueueMetadata(MessageQueue queue, long minOffset, long maxOffset) {
