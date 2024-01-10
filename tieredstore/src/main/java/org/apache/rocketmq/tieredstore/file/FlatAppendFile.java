@@ -18,6 +18,7 @@ package org.apache.rocketmq.tieredstore.file;
 
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -122,27 +123,27 @@ public class FlatAppendFile {
     }
 
     public long getMinOffset() {
-        List<FileSegment> list = fileSegmentTable;
+        List<FileSegment> list = this.fileSegmentTable;
         return list.isEmpty() ? OFFSET_NOT_EXIST : list.get(0).getBaseOffset();
     }
 
     public long getCommitOffset() {
-        List<FileSegment> list = fileSegmentTable;
+        List<FileSegment> list = this.fileSegmentTable;
         return list.isEmpty() ? OFFSET_NOT_EXIST : list.get(list.size() - 1).getCommitOffset();
     }
 
     public long getAppendOffset() {
-        List<FileSegment> list = fileSegmentTable;
+        List<FileSegment> list = this.fileSegmentTable;
         return list.isEmpty() ? OFFSET_NOT_EXIST : list.get(list.size() - 1).getAppendOffset();
     }
 
     public long getMinTimestamp() {
-        List<FileSegment> list = fileSegmentTable;
+        List<FileSegment> list = this.fileSegmentTable;
         return list.isEmpty() ? OFFSET_NOT_EXIST : list.get(0).getMinTimestamp();
     }
 
     public long getMaxTimestamp() {
-        List<FileSegment> list = fileSegmentTable;
+        List<FileSegment> list = this.fileSegmentTable;
         return list.isEmpty() ? OFFSET_NOT_EXIST : list.get(list.size() - 1).getMaxTimestamp();
     }
 
@@ -171,166 +172,28 @@ public class FlatAppendFile {
         }
     }
 
-    protected FileSegment getFileToWrite() {
-        if (fileSegmentTable.isEmpty()) {
+    public FileSegment getFileToWrite() {
+        List<FileSegment> fileSegmentList = this.fileSegmentTable;
+        if (fileSegmentList.isEmpty()) {
             throw new IllegalStateException("Need to set base offset before create file segment");
+        } else {
+            return fileSegmentList.get(fileSegmentList.size() - 1);
         }
-
-        FileSegment fileSegment;
-        fileSegmentLock.readLock().lock();
-        try {
-            if (!fileSegmentList.isEmpty()) {
-                fileSegment = fileSegmentList.get(fileSegmentList.size() - 1);
-                if (!fileSegment.isFull()) {
-                    return fileSegment;
-                }
-            }
-        } finally {
-            fileSegmentLock.readLock().unlock();
-        }
-
-        fileSegmentLock.writeLock().lock();
-        try {
-            long offset = baseOffset;
-            if (!fileSegmentList.isEmpty()) {
-                fileSegment = fileSegmentList.get(fileSegmentList.size() - 1);
-                if (fileSegment.isFull()) {
-                    if (fileSegment.commit()) {
-                        this.updateFileSegment(fileSegment);
-                    }
-                } else {
-                    return fileSegment;
-                }
-                offset = fileSegment.getMaxOffset();
-            }
-            fileSegment = this.newSegment(fileType, offset, true);
-            fileSegmentList.add(fileSegment);
-            needCommitFileSegmentList.add(fileSegment);
-        } finally {
-            fileSegmentLock.writeLock().unlock();
-        }
-        return null;
     }
 
-    @Nullable
     protected FileSegment getFileByTime(long timestamp, BoundaryType boundaryType) {
-        fileSegmentLock.readLock().lock();
-        try {
-//            List<FileSegment> segmentList = fileSegmentList.stream()
-//                .sorted(boundaryType == BoundaryType.UPPER ?
-//                    Comparator.comparingLong(FileSegment::getMaxTimestamp) :
-//                    Comparator.comparingLong(FileSegment::getMinTimestamp))
-//                .filter(segment -> boundaryType == BoundaryType.UPPER ?
-//                    segment.getMaxTimestamp() >= timestamp : segment.getMinTimestamp() <= timestamp)
-//                .collect(Collectors.toList());
-//
-//            if (!segmentList.isEmpty()) {
-//                return boundaryType == BoundaryType.UPPER ? segmentList.get(0) : segmentList.get(segmentList.size() - 1);
-//            }
-//
-//            if (fileSegmentList.isEmpty()) {
-//                return null;
-//            }
-//            return boundaryType == BoundaryType.UPPER ?
-//                fileSegmentList.get(fileSegmentList.size() - 1) : fileSegmentList.get(0);
-        } finally {
-            fileSegmentLock.readLock().unlock();
-        }
-
+        // todo: ???
         return null;
     }
 
-    public AppendResult append(ByteBuffer byteBuf) {
-        return append(byteBuf, Long.MAX_VALUE, false);
-    }
-
-    public AppendResult append(ByteBuffer byteBuf, long timeStamp) {
-        return append(byteBuf, timeStamp, false);
-    }
-
-    public AppendResult append(ByteBuffer byteBuf, long timeStamp, boolean commit) {
-        FileSegment fileSegment = getFileToWrite();
-        AppendResult result = fileSegment.append(byteBuf, timeStamp);
-        if (commit && result == AppendResult.BUFFER_FULL && fileSegment.commit()) {
-            result = fileSegment.append(byteBuf, timeStamp);
-        }
+    public AppendResult append(ByteBuffer byteBuf, long timestamp) {
+        FileSegment fileSegment = this.getFileToWrite();
+        AppendResult result = fileSegment.append(byteBuf, timestamp);
         if (result == AppendResult.FILE_FULL) {
-            // write to new file
-            return getFileToWrite().append(byteBuf, timeStamp);
+            this.rollingNewFile();
+            return getFileToWrite().append(byteBuf, timestamp);
         }
         return result;
-    }
-
-    public int cleanExpiredFile(long expireTimestamp) {
-        Set<Long> needToDeleteSet = new HashSet<>();
-        try {
-            metadataStore.iterateFileSegment(filePath, fileType, metadata -> {
-                if (metadata.getEndTimestamp() < expireTimestamp) {
-                    needToDeleteSet.add(metadata.getBaseOffset());
-                }
-            });
-        } catch (Exception e) {
-            log.error("Clean expired file, filePath: {}, file type: {}, expire timestamp: {}",
-                filePath, fileType, expireTimestamp);
-        }
-
-        if (needToDeleteSet.isEmpty()) {
-            return 0;
-        }
-
-        fileSegmentLock.writeLock().lock();
-        try {
-//            for (int i = 0; i < fileSegmentList.size(); i++) {
-//                FileSegment fileSegment = fileSegmentList.get(i);
-//                try {
-//                    if (needToDeleteSet.contains(fileSegment.getBaseOffset())) {
-//                        fileSegment.close();
-//                        fileSegmentList.remove(fileSegment);
-//                        needCommitFileSegmentList.remove(fileSegment);
-//                        i--;
-//                        this.updateFileSegment(fileSegment);
-//                        log.debug("Clean expired file, filePath: {}", fileSegment.getPath());
-//                    } else {
-//                        break;
-//                    }
-//                } catch (Exception e) {
-//                    log.error("Clean expired file failed: filePath: {}, file type: {}, expire timestamp: {}",
-//                        fileSegment.getPath(), fileSegment.getFileType(), expireTimestamp, e);
-//                }
-//            }
-//            if (!fileSegmentList.isEmpty()) {
-//                baseOffset = fileSegmentList.get(0).getBaseOffset();
-//            } else if (fileType == FileSegmentType.CONSUME_QUEUE) {
-//                baseOffset = -1;
-//            } else {
-//                baseOffset = 0;
-//            }
-        } finally {
-            fileSegmentLock.writeLock().unlock();
-        }
-        return needToDeleteSet.size();
-    }
-
-    public void destroyExpiredFile() {
-        try {
-            metadataStore.iterateFileSegment(filePath, fileType, metadata -> {
-                if (metadata.getStatus() == FileSegmentMetadata.STATUS_DELETED) {
-                    try {
-                        FileSegment fileSegment =
-                            this.newSegment(fileType, metadata.getBaseOffset(), false);
-                        fileSegment.destroyFile();
-                        if (!fileSegment.exists()) {
-                            metadataStore.deleteFileSegment(filePath, fileType, metadata.getBaseOffset());
-                        }
-                    } catch (Exception e) {
-                        log.error("Destroyed expired file failed, file path: {}, file type: {}",
-                            filePath, fileType, e);
-                    }
-                }
-            });
-        } catch (Exception e) {
-            log.error("Destroyed expired file, file path: {}, file type: {}", filePath, fileType);
-        }
     }
 
     public void commit(boolean sync) {
@@ -392,6 +255,76 @@ public class FlatAppendFile {
 //                    return compositeBuffer;
 //                });
         return CompletableFuture.completedFuture(null);
+    }
+
+    public void destroyExpiredFile(long expireTimestamp) {
+        Set<Long> needToDeleteSet = new HashSet<>();
+        try {
+            metadataStore.iterateFileSegment(filePath, fileType, metadata -> {
+                if (metadata.getEndTimestamp() < expireTimestamp) {
+                    needToDeleteSet.add(metadata.getBaseOffset());
+                }
+            });
+        } catch (Exception e) {
+            log.error("Clean expired file, filePath: {}, file type: {}, expire timestamp: {}",
+                filePath, fileType, expireTimestamp);
+        }
+
+        if (needToDeleteSet.isEmpty()) {
+            return 0;
+        }
+
+        fileSegmentLock.writeLock().lock();
+        try {
+            for (int i = 0; i < fileSegmentList.size(); i++) {
+                FileSegment fileSegment = fileSegmentList.get(i);
+                try {
+                    if (needToDeleteSet.contains(fileSegment.getBaseOffset())) {
+                        fileSegment.close();
+                        fileSegmentList.remove(fileSegment);
+                        needCommitFileSegmentList.remove(fileSegment);
+                        i--;
+                        this.updateFileSegment(fileSegment);
+                        log.debug("Clean expired file, filePath: {}", fileSegment.getPath());
+                    } else {
+                        break;
+                    }
+                } catch (Exception e) {
+                    log.error("Clean expired file failed: filePath: {}, file type: {}, expire timestamp: {}",
+                        fileSegment.getPath(), fileSegment.getFileType(), expireTimestamp, e);
+                }
+            }
+            if (!fileSegmentList.isEmpty()) {
+                baseOffset = fileSegmentList.get(0).getBaseOffset();
+            } else if (fileType == FileSegmentType.CONSUME_QUEUE) {
+                baseOffset = -1;
+            } else {
+                baseOffset = 0;
+            }
+        } finally {
+            fileSegmentLock.writeLock().unlock();
+        }
+        return needToDeleteSet.size();
+
+        try {
+            metadataStore.iterateFileSegment(filePath, fileType, metadata -> {
+                if (metadata.getStatus() == FileSegmentMetadata.STATUS_DELETED) {
+                    try {
+                        FileSegment fileSegment =
+                            this.newSegment(fileType, metadata.getBaseOffset(), false);
+                        fileSegment.destroyFile();
+                        if (!fileSegment.exists()) {
+                            metadataStore.deleteFileSegment(filePath, fileType, metadata.getBaseOffset());
+                        }
+                    } catch (Exception e) {
+                        log.error("Destroyed expired file failed, file path: {}, file type: {}",
+                            filePath, fileType, e);
+                    }
+                }
+            });
+        } catch (Exception e) {
+            log.error("Destroyed expired file, file path: {}, file type: {}", filePath, fileType);
+        }
     }
 
     public void destroy() {
