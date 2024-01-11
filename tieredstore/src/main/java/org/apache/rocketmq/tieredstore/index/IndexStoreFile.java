@@ -176,6 +176,11 @@ public class IndexStoreFile implements IndexFile {
     }
 
     @Override
+    public void start() {
+
+    }
+
+    @Override
     public AppendResult putKey(
         String topic, int topicId, int queueId, Set<String> keySet, long offset, int size, long timestamp) {
 

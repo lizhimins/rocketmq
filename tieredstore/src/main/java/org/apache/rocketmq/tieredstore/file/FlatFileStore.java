@@ -31,30 +31,23 @@ import org.apache.rocketmq.common.message.MessageQueue;
 import org.apache.rocketmq.logging.org.slf4j.Logger;
 import org.apache.rocketmq.logging.org.slf4j.LoggerFactory;
 import org.apache.rocketmq.tieredstore.MessageStoreConfig;
-import org.apache.rocketmq.tieredstore.index.IndexService;
-import org.apache.rocketmq.tieredstore.index.IndexStoreService;
 import org.apache.rocketmq.tieredstore.metadata.MetadataStore;
 import org.apache.rocketmq.tieredstore.util.MessageStoreUtil;
 
 public class FlatFileStore {
 
     private static final Logger log = LoggerFactory.getLogger(MessageStoreUtil.TIERED_STORE_LOGGER_NAME);
-    private static final String RMQ_SYS_TIERED_STORE_INDEX_TOPIC = "rmq_sys_INDEX";
 
     private final MetadataStore metadataStore;
     private final MessageStoreConfig storeConfig;
-    private final IndexStoreService indexStoreService;
-    private final FlatFileFactory fileAllocator;
+    private final FlatFileFactory flatFileFactory;
     private final ConcurrentMap<MessageQueue, FlatMessageFileExt> flatFileConcurrentMap;
 
     public FlatFileStore(MetadataStore metadataStore, MessageStoreConfig storeConfig) {
         try {
             this.storeConfig = storeConfig;
             this.metadataStore = metadataStore;
-            this.fileAllocator = new FlatFileFactory(metadataStore, storeConfig);
-            this.indexStoreService = null;
-//        this.indexStoreService = new IndexStoreService(fileAllocator, MessageStoreUtil.toPath(new MessageQueue(
-//            RMQ_SYS_TIERED_STORE_INDEX_TOPIC, storeConfig.getBrokerName(), 0)));
+            this.flatFileFactory = new FlatFileFactory(metadataStore, storeConfig);
             this.flatFileConcurrentMap = new ConcurrentHashMap<>();
         } catch (Exception e) {
             throw new RuntimeException(e);
@@ -125,9 +118,13 @@ public class FlatFileStore {
         return storeConfig;
     }
 
+    public FlatFileFactory getFlatFileFactory() {
+        return flatFileFactory;
+    }
+
     public FlatMessageFileExt getOrCreateFlatFileIfAbsent(MessageQueue messageQueue) {
         return flatFileConcurrentMap.computeIfAbsent(messageQueue,
-            mq -> new FlatMessageFileExt(fileAllocator, mq));
+            mq -> new FlatMessageFileExt(flatFileFactory, mq));
     }
 
     public FlatMessageFileExt getFlatFile(MessageQueue messageQueue) {
@@ -157,10 +154,6 @@ public class FlatFileStore {
     //        request.getCommitLogOffset(), request.getMsgSize(), request.getStoreTimestamp());
     //}
 
-    public IndexService getIndexService() {
-        return this.indexStoreService;
-    }
-
     public void doScheduleCommitTask() {
 //        MessageStoreExecutor.commonScheduledExecutor.scheduleWithFixedDelay(() -> {
 //            try {
@@ -184,9 +177,6 @@ public class FlatFileStore {
     }
 
     public void shutdown() {
-        if (indexStoreService != null) {
-            indexStoreService.shutdown();
-        }
         flatFileConcurrentMap.values().forEach(FlatMessageFile::shutdown);
     }
 
@@ -203,9 +193,6 @@ public class FlatFileStore {
     }
 
     public void destroy() {
-        if (indexStoreService != null) {
-            indexStoreService.destroy();
-        }
         flatFileConcurrentMap.values().forEach(FlatMessageFile::destroy);
         flatFileConcurrentMap.clear();
     }

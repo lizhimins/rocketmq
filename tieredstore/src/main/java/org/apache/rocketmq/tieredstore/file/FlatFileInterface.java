@@ -24,6 +24,12 @@ import org.apache.rocketmq.tieredstore.common.AppendResult;
 
 public interface FlatFileInterface {
 
+    long getCommitLogMinOffset();
+
+    long getCommitLogMaxOffset();
+
+    long getCommitLogCommitOffset();
+
     long getConsumeQueueMinOffset();
 
     long getConsumeQueueMaxOffset();
@@ -49,7 +55,7 @@ public interface FlatFileInterface {
     /**
      * Persist commit log file and consume queue file
      */
-    CompletableFuture<Void> commitAsync();
+    CompletableFuture<Boolean> commitAsync();
 
     /**
      * Asynchronously retrieves the message at the specified consume queue offset

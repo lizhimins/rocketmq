@@ -88,6 +88,21 @@ public class FlatMessageFile implements FlatFileInterface {
 //    }
 
     @Override
+    public long getCommitLogMinOffset() {
+        return commitLog.getMinOffset();
+    }
+
+    @Override
+    public long getCommitLogMaxOffset() {
+        return commitLog.getAppendOffset();
+    }
+
+    @Override
+    public long getCommitLogCommitOffset() {
+        return commitLog.getCommitOffset();
+    }
+
+    @Override
     public long getConsumeQueueMinOffset() {
         long cqOffset = consumeQueue.getMinOffset() / MessageFormatUtil.CONSUME_QUEUE_UNIT_SIZE;
         long effectiveOffset = this.commitLog.getMinConsumeQueueOffset();
@@ -126,7 +141,7 @@ public class FlatMessageFile implements FlatFileInterface {
     }
 
     @Override
-    public CompletableFuture<Void> commitAsync() {
+    public CompletableFuture<Boolean> commitAsync() {
         return CompletableFuture.completedFuture(null);
     }
 

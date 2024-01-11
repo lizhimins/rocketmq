@@ -70,10 +70,10 @@ public class IndexStoreService extends ServiceThread implements IndexService {
     private IndexFile currentWriteFile;
     private FlatAppendFile flatAppendFile;
 
-    public IndexStoreService(FlatFileFactory fileAllocator, String filePath) {
-        this.storeConfig = fileAllocator.getStoreConfig();
+    public IndexStoreService(FlatFileFactory flatFileFactory, String filePath) {
+        this.storeConfig = flatFileFactory.getStoreConfig();
         this.filePath = filePath;
-        this.fileAllocator = fileAllocator;
+        this.fileAllocator = flatFileFactory;
         this.timeStoreTable = new ConcurrentSkipListMap<>();
         this.compactTimestamp = new AtomicLong(0L);
         this.readWriteLock = new ReentrantReadWriteLock();

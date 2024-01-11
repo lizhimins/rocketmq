@@ -18,9 +18,10 @@
 package org.apache.rocketmq.tieredstore.core;
 
 import java.util.concurrent.CompletableFuture;
+import org.apache.rocketmq.store.CommitLogDispatcher;
 import org.apache.rocketmq.tieredstore.file.FlatMessageFileExt;
 
-public interface MessageStoreDispatcher {
+public interface MessageStoreDispatcher extends CommitLogDispatcher {
 
     void start();
 

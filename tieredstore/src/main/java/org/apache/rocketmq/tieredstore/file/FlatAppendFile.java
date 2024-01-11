@@ -42,7 +42,7 @@ import org.apache.rocketmq.tieredstore.util.MessageStoreUtil;
 public class FlatAppendFile {
 
     protected static final Logger log = LoggerFactory.getLogger(MessageStoreUtil.TIERED_STORE_LOGGER_NAME);
-    protected static final long OFFSET_NOT_EXIST = -1L;
+    public static final long OFFSET_NOT_EXIST = -1L;
 
     private final String filePath;
     private final FileSegmentType fileType;

@@ -36,7 +36,6 @@ import org.apache.rocketmq.tieredstore.RemoteMessageStore;
 import org.apache.rocketmq.tieredstore.common.GetMessageResultExt;
 import org.apache.rocketmq.tieredstore.common.SelectBufferResult;
 import org.apache.rocketmq.tieredstore.exception.MessageStoreException;
-import org.apache.rocketmq.tieredstore.file.FlatConsumeQueueFile;
 import org.apache.rocketmq.tieredstore.file.FlatFileStore;
 import org.apache.rocketmq.tieredstore.file.FlatMessageFile;
 import org.apache.rocketmq.tieredstore.file.FlatMessageFileExt;
@@ -55,6 +54,7 @@ public class MessageStoreFetcherImpl implements MessageStoreFetcher {
     private final String brokerName;
     private final MetadataStore metadataStore;
     private final MessageStoreConfig storeConfig;
+    private final RemoteMessageStore messageStore;
     private final FlatFileStore flatFileManager;
 //    private final Cache<MessageCacheKey, SelectBufferResultWrapper> readAheadCache;
 
@@ -62,6 +62,7 @@ public class MessageStoreFetcherImpl implements MessageStoreFetcher {
         this.storeConfig = messageStore.getFlatFileStore().getStoreConfig();
         this.brokerName = storeConfig.getBrokerName();
         this.flatFileManager = messageStore.getFlatFileStore();
+        this.messageStore = messageStore;
         this.metadataStore = flatFileManager.getMetadataStore();
 //        this.readAheadCache = this.initCache(storeConfig);
     }
@@ -118,7 +119,7 @@ public class MessageStoreFetcherImpl implements MessageStoreFetcher {
 //            return;
 //        }
 
-        synchronized (flatFile) {
+//        synchronized (flatFile) {
 //            inflightRequest = flatFile.getInflightRequest(nextBeginOffset, maxCount);
 //            if (!inflightRequest.isAllDone()) {
 //                return;
@@ -164,7 +165,7 @@ public class MessageStoreFetcherImpl implements MessageStoreFetcher {
 //                log.debug("MessageStoreFetcherImpl#preFetchMessage: try to prefetch messages for later requests: next begin offset: {}, request offset: {}, factor: {}, flag: {}, request batch: {}, concurrency: {}",
 //                    nextBeginOffset, queueOffset, factor, flag, requestBatchSize, concurrency);
 //            }
-        }
+//        }
     }
 
     private CompletableFuture<Long> prefetchMessageThenPutToCache(
@@ -538,7 +539,7 @@ public class MessageStoreFetcherImpl implements MessageStoreFetcher {
         }
 
         CompletableFuture<List<IndexItem>> future =
-            flatFileManager.getIndexService().queryAsync(topic, key, maxCount, begin, end);
+            messageStore.getIndexService().queryAsync(topic, key, maxCount, begin, end);
 
         return future.thenCompose(indexItemList -> {
             QueryMessageResult result = new QueryMessageResult();

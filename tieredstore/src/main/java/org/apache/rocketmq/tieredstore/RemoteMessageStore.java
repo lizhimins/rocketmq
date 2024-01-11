@@ -53,6 +53,9 @@ import org.apache.rocketmq.tieredstore.core.MessageStoreFetcher;
 import org.apache.rocketmq.tieredstore.core.MessageStoreTopicFilter;
 import org.apache.rocketmq.tieredstore.file.FlatFileStore;
 import org.apache.rocketmq.tieredstore.file.FlatMessageFile;
+import org.apache.rocketmq.tieredstore.index.IndexService;
+import org.apache.rocketmq.tieredstore.index.IndexStoreFile;
+import org.apache.rocketmq.tieredstore.index.IndexStoreService;
 import org.apache.rocketmq.tieredstore.metadata.MetadataStore;
 import org.apache.rocketmq.tieredstore.metrics.MessageStoreMetricsConstant;
 import org.apache.rocketmq.tieredstore.metrics.MessageStoreMetricsManager;
@@ -65,6 +68,7 @@ public class RemoteMessageStore extends AbstractPluginMessageStore {
 
     protected static final Logger logger = LoggerFactory.getLogger(MessageStoreUtil.TIERED_STORE_LOGGER_NAME);
 
+
     protected final String brokerName;
     protected final MessageStore defaultStore;
     protected final MessageStoreConfig storeConfig;
@@ -72,6 +76,7 @@ public class RemoteMessageStore extends AbstractPluginMessageStore {
 
     protected final MetadataStore metadataStore;
     protected final MessageStoreExecutor storeExecutor;
+    protected final IndexService indexService;
     protected final FlatFileStore flatFileStore;
     protected final MessageStoreFilter topicFilter;
     protected final MessageStoreFetcher fetcher;
@@ -90,6 +95,8 @@ public class RemoteMessageStore extends AbstractPluginMessageStore {
         this.topicFilter = new MessageStoreTopicFilter(this.storeConfig);
         this.storeExecutor = new MessageStoreExecutor(this.storeConfig.getTieredStoreMaxPendingLimit());
         this.flatFileStore = new FlatFileStore(this.metadataStore, this.storeConfig);
+        this.indexService = new IndexStoreService(this.flatFileStore.getFlatFileFactory(),
+            MessageStoreUtil.getIndexFilePath(this.storeConfig.getBrokerName()));
         this.fetcher = new MessageStoreFetcherImpl(this);
         this.dispatcher = new MessageStoreDispatcherImpl(this);
     }
@@ -100,6 +107,7 @@ public class RemoteMessageStore extends AbstractPluginMessageStore {
         boolean loadNextStore = next.load();
         boolean result = loadFlatFile && loadNextStore;
         if (result) {
+            indexService.start();
             fetcher.start();
             dispatcher.start();
         }
@@ -143,6 +151,10 @@ public class RemoteMessageStore extends AbstractPluginMessageStore {
 
     public FlatFileStore getFlatFileStore() {
         return flatFileStore;
+    }
+
+    public IndexService getIndexService() {
+        return indexService;
     }
 
     public boolean fetchFromCurrentStore(String topic, int queueId, long offset) {

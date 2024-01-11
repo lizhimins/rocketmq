@@ -27,6 +27,7 @@ import org.apache.rocketmq.common.message.MessageQueue;
 public class MessageStoreUtil {
 
     public static final String TIERED_STORE_LOGGER_NAME = "RocketmqTieredStore";
+    public static final String RMQ_SYS_TIERED_STORE_INDEX_TOPIC = "rmq_sys_INDEX";
 
     public static final long BYTE = 1L;
     public static final long KB = BYTE << 10;
@@ -73,6 +74,10 @@ public class MessageStoreUtil {
 
     public static String toFilePath(MessageQueue mq) {
         return String.format("%s/%s/%s", mq.getBrokerName(), mq.getTopic(), mq.getQueueId());
+    }
+
+    public static String getIndexFilePath(String brokerName) {
+        return toFilePath(new MessageQueue(RMQ_SYS_TIERED_STORE_INDEX_TOPIC, brokerName, 0));
     }
 
     public static String offset2FileName(final long offset) {
