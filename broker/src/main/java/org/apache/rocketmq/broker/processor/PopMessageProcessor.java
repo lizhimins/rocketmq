@@ -178,6 +178,11 @@ public class PopMessageProcessor implements NettyRequestProcessor {
     }
 
     public void notifyLongPollingRequestIfNeed(String topic, String group, int queueId) throws ConsumeQueueException {
+
+        // if (!"serverless-rocketmq-broker-3-s-i-0".equals(brokerController.getBrokerConfig().getBrokerName())) {
+        POP_LOGGER.info("Notify from unlock, topic={}, queueId={}, group={}, brokerName={}", topic, queueId, group, brokerController.getBrokerConfig().getBrokerName());
+        // }
+
         this.notifyLongPollingRequestIfNeed(
             topic, group, queueId, null, 0L, null, null);
     }
@@ -239,6 +244,10 @@ public class PopMessageProcessor implements NettyRequestProcessor {
         // Pop mode only supports consumption in cluster load balancing mode
         brokerController.getConsumerManager().compensateBasicConsumerInfo(
             requestHeader.getConsumerGroup(), ConsumeType.CONSUME_POP, MessageModel.CLUSTERING);
+
+        if (!"serverless-rocketmq-broker-3-s-i-0".equals(brokerController.getBrokerConfig().getBrokerName())) {
+            POP_LOGGER.info("Pop request          , attemptId={}, request={}", requestHeader.getAttemptId(), requestHeader);
+        }
 
         if (brokerController.getBrokerConfig().isEnablePopLog()) {
             POP_LOGGER.info("receive PopMessage request command, {}", request);
@@ -564,6 +573,12 @@ public class PopMessageProcessor implements NettyRequestProcessor {
             } else {
                 PollingResult pollingResult = popLongPollingService.polling(
                     ctx, request, new PollingHeader(requestHeader), finalSubscriptionData, finalMessageFilter);
+
+                if (!"serverless-rocketmq-broker-3-s-i-0".equals(brokerController.getBrokerConfig().getBrokerName())) {
+                    POP_LOGGER.info("Polling              , attemptId={}, result={}-{}, rest={}, poll={}", requestHeader.getAttemptId(),
+                        getMessageResult.getStatus(), getMessageResult.getMessageCount(), restNum, pollingResult.name());
+                }
+
                 if (PollingResult.POLLING_SUC == pollingResult) {
                     if (restNum > 0) {
                         popLongPollingService.notifyMessageArriving(
@@ -664,6 +679,7 @@ public class PopMessageProcessor implements NettyRequestProcessor {
         Channel channel, long popTime, ExpressionMessageFilter messageFilter, StringBuilder startOffsetInfo,
         StringBuilder msgOffsetInfo, StringBuilder orderCountInfo) {
 
+        final long finalResetNum = restNum;
         String lockKey =
             topic + PopAckConstants.SPLIT + requestHeader.getConsumerGroup() + PopAckConstants.SPLIT + queueId;
         boolean isOrder = requestHeader.isOrder();
@@ -680,7 +696,16 @@ public class PopMessageProcessor implements NettyRequestProcessor {
         CompletableFuture<Long> future = new CompletableFuture<>();
         if (!queueLockManager.tryLock(lockKey)) {
             try {
-                restNum = this.brokerController.getMessageStore().getMaxOffsetInQueue(topic, queueId) - offset + restNum;
+                // restNum = this.brokerController.getMessageStore().getMaxOffsetInQueue(topic, queueId) - offset + restNum;
+                if (!"serverless-rocketmq-broker-3-s-i-0".equals(brokerController.getBrokerConfig().getBrokerName())) {
+                    boolean block = brokerController.getConsumerOrderInfoManager().checkBlock(
+                        attemptId, topic, requestHeader.getConsumerGroup(), queueId, requestHeader.getInvisibleTime());
+                    long minOffset = this.brokerController.getMessageStore().getMinOffsetInQueue(topic, queueId);
+                    long maxOffset = this.brokerController.getMessageStore().getMaxOffsetInQueue(topic, queueId);
+
+                    POP_LOGGER.info("PopGetMessage lock failed, attemptId={}, topic={}, queueId={}, group={}, block={}, offset={}, range={}-{}, rest={}, new rest={}",
+                        attemptId, topic, queueId, requestHeader.getConsumerGroup(), block, offset, minOffset, maxOffset, finalResetNum, restNum);
+                }
                 future.complete(restNum);
             } catch (ConsumeQueueException e) {
                 future.completeExceptionally(e);
@@ -714,6 +739,17 @@ public class PopMessageProcessor implements NettyRequestProcessor {
             // When client ack message, long-polling request would be notifications
             // by AckMessageProcessor.ackOrderly() and message will not be delayed.
             if (isOrder) {
+
+                if (!"serverless-rocketmq-broker-3-s-i-0".equals(brokerController.getBrokerConfig().getBrokerName())) {
+                    boolean block = brokerController.getConsumerOrderInfoManager().checkBlock(
+                        attemptId, topic, requestHeader.getConsumerGroup(), queueId, requestHeader.getInvisibleTime());
+                    long minOffset = this.brokerController.getMessageStore().getMinOffsetInQueue(topic, queueId);
+                    long maxOffset = this.brokerController.getMessageStore().getMaxOffsetInQueue(topic, queueId);
+
+                    POP_LOGGER.info("PopGetMessage, attemptId={}, topic={}, queueId={}, group={}, block={}, offset={}, range={}-{}, rest={}, new rest={}",
+                        attemptId, topic, queueId, requestHeader.getConsumerGroup(), block, offset, minOffset, maxOffset, finalResetNum, restNum);
+                }
+
                 if (brokerController.getConsumerOrderInfoManager().checkBlock(
                     attemptId, topic, requestHeader.getConsumerGroup(), queueId, requestHeader.getInvisibleTime())) {
                     // should not add accumulation(max offset - consumer offset) here
@@ -814,6 +850,11 @@ public class PopMessageProcessor implements NettyRequestProcessor {
                             requestHeader.getInvisibleTime(), popTime, reviveQid, result.getNextBeginOffset(), brokerController.getBrokerConfig().getBrokerName());
                     }
                 }
+
+                POP_LOGGER.info("PopGetMessage Got, brokerName={}, attemptId={}, topic={}, queueId={}, brokerName={}, rest={}, atomic rest={}, count={}, result={}",
+                    brokerController.getBrokerConfig().getBrokerName(), requestHeader.getAttemptId(),
+                    topic, queueId, brokerController.getBrokerConfig().getBrokerName(),
+                    finalResetNum, atomicRestNum.get(), result.getMessageCount(), result);
 
                 atomicRestNum.set(result.getMaxOffset() - result.getNextBeginOffset() + atomicRestNum.get());
                 String brokerName = brokerController.getBrokerConfig().getBrokerName();

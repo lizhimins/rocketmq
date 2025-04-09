@@ -319,7 +319,7 @@ public class PopBufferMergeService extends ServiceThread {
             this.serving = false;
         } else {
             if (scanTimes % countOfSecond1 == 0) {
-                POP_LOGGER.info("[PopBuffer]scan, PopBufferEclipse={}, " +
+                POP_LOGGER.debug("[PopBuffer]scan, PopBufferEclipse={}, " +
                         "PopBufferToStoreAck={}, PopBufferToStoreCk={}, PopBufferSize={}, PopBufferOffsetSize={}",
                     eclipse, count.get(), countCk, counter.get(), offsetBufferSize);
             }

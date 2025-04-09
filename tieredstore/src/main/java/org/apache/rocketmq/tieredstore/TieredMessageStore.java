@@ -250,6 +250,7 @@ public class TieredMessageStore extends AbstractPluginMessageStore {
                 if (result.getStatus() != GetMessageStatus.FOUND &&
                     result.getStatus() != GetMessageStatus.NO_MESSAGE_IN_QUEUE &&
                     result.getStatus() != GetMessageStatus.NO_MATCHED_LOGIC_QUEUE &&
+                    result.getStatus() != GetMessageStatus.NO_MATCHED_MESSAGE &&
                     result.getStatus() != GetMessageStatus.OFFSET_TOO_SMALL &&
                     result.getStatus() != GetMessageStatus.OFFSET_OVERFLOW_ONE &&
                     result.getStatus() != GetMessageStatus.OFFSET_OVERFLOW_BADLY) {

@@ -409,7 +409,15 @@ public class AckMessageProcessor implements NettyRequestProcessor {
                     this.brokerController.getConsumerOffsetManager().commitOffset(
                         channel.remoteAddress().toString(), consumeGroup, topic, qId, nextOffset);
                 }
-                if (!this.brokerController.getConsumerOrderInfoManager().checkBlock(null, topic, consumeGroup, qId, invisibleTime)) {
+
+                boolean block = this.brokerController.getConsumerOrderInfoManager().checkBlock(null, topic, consumeGroup, qId, invisibleTime);
+
+                if (!"serverless-rocketmq-broker-3-s-i-0".equals(brokerController.getBrokerConfig().getBrokerName())) {
+                    POP_LOGGER.info("PopAck, topic={}, queueId={}, group={}, time={}, offset={}, block={}",
+                        topic, qId, consumeGroup, popTime, ackOffset, block);
+                }
+
+                if (!block) {
                     this.brokerController.getPopMessageProcessor().notifyMessageArriving(topic, qId, consumeGroup);
                 }
             } else if (nextOffset == -1) {

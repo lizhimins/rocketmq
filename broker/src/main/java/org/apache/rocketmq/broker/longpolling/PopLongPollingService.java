@@ -125,7 +125,7 @@ public class PopLongPollingService extends ServiceThread {
                 }
 
                 if (i >= 100) {
-                    POP_LOGGER.info("pollingMapSize={},tmpTotalSize={},atomicTotalSize={},diffSize={}",
+                    POP_LOGGER.debug("pollingMapSize={},tmpTotalSize={},atomicTotalSize={},diffSize={}",
                         pollingMap.size(), tmpTotalPollingNum, totalPollingNum.get(),
                         Math.abs(totalPollingNum.get() - tmpTotalPollingNum));
                     totalPollingNum.set(tmpTotalPollingNum);
@@ -196,6 +196,11 @@ public class PopLongPollingService extends ServiceThread {
 
     public boolean notifyMessageArriving(final String topic, final int queueId, final String cid, boolean force,
         Long tagsCode, long msgStoreTime, byte[] filterBitMap, Map<String, String> properties, CommandCallback callback) {
+
+        if (!"serverless-rocketmq-broker-3-s-i-0".equals(brokerController.getBrokerConfig().getBrokerName())) {
+            POP_LOGGER.info("Notify, topic={}, queueId={}, group={}", topic, queueId, cid);
+        }
+
         ConcurrentSkipListSet<PopRequest> remotingCommands = pollingMap.get(KeyBuilder.buildPollingKey(topic, cid, queueId));
         if (remotingCommands == null || remotingCommands.isEmpty()) {
             return false;
@@ -223,6 +228,9 @@ public class PopLongPollingService extends ServiceThread {
             POP_LOGGER.info("lock release, new msg arrive, wakeUp: {}", popRequest);
         }
 
+        if (!"serverless-rocketmq-broker-3-s-i-0".equals(brokerController.getBrokerConfig().getBrokerName())) {
+            POP_LOGGER.info("Wakeup, topic={}, queueId={}, group={}", topic, queueId, cid);
+        }
         return wakeUp(popRequest, callback);
     }
 
@@ -309,8 +317,11 @@ public class PopLongPollingService extends ServiceThread {
             }
             return POLLING_TIMEOUT;
         }
-        String key = KeyBuilder.buildPollingKey(requestHeader.getTopic(), requestHeader.getConsumerGroup(),
-            requestHeader.getQueueId());
+
+        // -1;
+        String key = KeyBuilder.buildPollingKey(
+            requestHeader.getTopic(), requestHeader.getConsumerGroup(), requestHeader.getQueueId());
+
         ConcurrentSkipListSet<PopRequest> queue = pollingMap.get(key);
         if (queue == null) {
             queue = new ConcurrentSkipListSet<>(PopRequest.COMPARATOR);
