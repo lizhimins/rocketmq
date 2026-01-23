@@ -30,7 +30,10 @@ import org.apache.rocketmq.store.DefaultMessageStore;
 import org.apache.rocketmq.store.queue.RocksDBConsumeQueueOffsetTable.PhyAndCQOffset;
 import org.apache.rocketmq.store.rocksdb.ConsumeQueueRocksDBStorage;
 import org.rocksdb.ColumnFamilyHandle;
+import org.rocksdb.ReadOptions;
 import org.rocksdb.RocksDBException;
+import org.rocksdb.RocksIterator;
+import org.rocksdb.Slice;
 import org.rocksdb.WriteBatch;
 
 import static org.apache.rocketmq.common.config.AbstractRocksDBStorage.CTRL_0;
@@ -120,6 +123,21 @@ public class RocksDBConsumeQueueTable {
         final ByteBuffer keyBB = buildCQKeyByteBuffer(topicBytes, queueId, cqOffset);
         byte[] value = this.rocksDBStorage.getCQ(keyBB.array());
         return (value != null) ? ByteBuffer.wrap(value) : null;
+    }
+
+    public RocksIterator getRocksIterator(final ReadOptions readOptions,
+        final String topic, final int queueId, final long offset) {
+
+        final byte[] topicBytes = topic.getBytes(StandardCharsets.UTF_8);
+        final ByteBuffer keyLowerBuffer = buildCQKeyByteBuffer(topicBytes, queueId, offset);
+        final ByteBuffer keyUpperBuffer = buildCQKeyByteBuffer(topicBytes, queueId, Long.MAX_VALUE);
+
+        readOptions.setIterateLowerBound(new Slice(keyLowerBuffer.array()));
+        readOptions.setIterateUpperBound(new Slice(keyUpperBuffer.array()));
+
+        RocksIterator iterator = this.rocksDBStorage.seekDefaultCF(readOptions);
+        iterator.seek(keyLowerBuffer);
+        return iterator;
     }
 
     public List<ByteBuffer> rangeQuery(final String topic, final int queueId, final long startIndex, final int num) throws RocksDBException {

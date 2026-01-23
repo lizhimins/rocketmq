@@ -51,7 +51,9 @@ import org.apache.rocketmq.store.exception.ConsumeQueueException;
 import org.apache.rocketmq.store.exception.StoreException;
 import org.apache.rocketmq.store.rocksdb.ConsumeQueueRocksDBStorage;
 import org.rocksdb.FlushOptions;
+import org.rocksdb.ReadOptions;
 import org.rocksdb.RocksDBException;
+import org.rocksdb.RocksIterator;
 import org.rocksdb.Statistics;
 import org.rocksdb.WriteBatch;
 
@@ -371,6 +373,11 @@ public class RocksDBConsumeQueueStore extends AbstractConsumeQueueStore {
 
     public ByteBuffer get(final String topic, final int queueId, final long cqOffset) throws RocksDBException {
         return this.rocksDBConsumeQueueTable.getCQInKV(topic, queueId, cqOffset);
+    }
+
+    public RocksIterator getRocksIterator(
+        final ReadOptions readOptions, final String topic, final int queueId, final long offset) {
+        return this.rocksDBConsumeQueueTable.getRocksIterator(readOptions, topic, queueId, offset);
     }
 
     /**

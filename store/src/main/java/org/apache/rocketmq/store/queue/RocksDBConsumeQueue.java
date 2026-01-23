@@ -29,7 +29,9 @@ import org.apache.rocketmq.store.ConsumeQueue;
 import org.apache.rocketmq.store.DispatchRequest;
 import org.apache.rocketmq.store.MessageFilter;
 import org.apache.rocketmq.store.config.MessageStoreConfig;
+import org.rocksdb.ReadOptions;
 import org.rocksdb.RocksDBException;
+import org.rocksdb.RocksIterator;
 
 public class RocksDBConsumeQueue implements ConsumeQueueInterface {
     private static final Logger log = LoggerFactory.getLogger(LoggerName.STORE_LOGGER_NAME);
@@ -366,6 +368,9 @@ public class RocksDBConsumeQueue implements ConsumeQueueInterface {
     }
 
     private ReferredIterator<CqUnit> iterateFrom0(final long startIndex, final int count) throws RocksDBException {
+        if (messageStoreConfig.isUseNativeIteratorGetConsumeQueue()) {
+            return new RocksDBNativeIterator(topic, queueId, startIndex);
+        }
         List<ByteBuffer> byteBufferList = this.consumeQueueStore.rangeQuery(topic, queueId, startIndex, count);
         if (byteBufferList == null || byteBufferList.isEmpty()) {
             if (this.messageStoreConfig.isEnableRocksDBLog()) {
@@ -384,6 +389,52 @@ public class RocksDBConsumeQueue implements ConsumeQueueInterface {
     @Override
     public int getQueueId() {
         return queueId;
+    }
+
+    private class RocksDBNativeIterator implements ReferredIterator<CqUnit> {
+
+        private long offset;
+        private final ReadOptions scanOptions;
+        private final RocksIterator iterator;
+
+        public RocksDBNativeIterator(String topic, int queueId, long offset) {
+            this.offset = offset;
+            this.scanOptions = new ReadOptions();
+            this.iterator = consumeQueueStore.getRocksIterator(scanOptions, topic, queueId, offset);
+        }
+
+        @Override
+        public void release() {
+            this.iterator.close();
+            if (this.scanOptions.iterateLowerBound() != null) {
+                this.scanOptions.iterateLowerBound().close();
+            }
+            if (this.scanOptions.iterateUpperBound() != null) {
+                this.scanOptions.iterateUpperBound().close();
+            }
+            this.scanOptions.close();
+        }
+
+        @Override
+        public CqUnit nextAndRelease() {
+            try {
+                return next();
+            } finally {
+                release();
+            }
+        }
+
+        @Override
+        public boolean hasNext() {
+            return iterator.isValid();
+        }
+
+        @Override
+        public CqUnit next() {
+            ByteBuffer buffer = ByteBuffer.wrap(this.iterator.value());
+            iterator.next();
+            return new CqUnit(offset++, buffer.getLong(), buffer.getInt(), buffer.getLong());
+        }
     }
 
     private class RocksDBConsumeQueueIterator implements ReferredIterator<CqUnit> {

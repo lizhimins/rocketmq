@@ -127,6 +127,10 @@ public class ConsumeQueueRocksDBStorage extends AbstractRocksDBStorage {
         return this.db.newIterator(this.offsetCFHandle, this.totalOrderReadOptions);
     }
 
+    public RocksIterator seekDefaultCF(ReadOptions readOptions) {
+        return this.db.newIterator(this.defaultCFHandle, readOptions);
+    }
+
     public ColumnFamilyHandle getOffsetCFHandle() {
         return this.offsetCFHandle;
     }
