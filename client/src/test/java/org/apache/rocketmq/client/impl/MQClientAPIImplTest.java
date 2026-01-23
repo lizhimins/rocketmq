@@ -541,7 +541,7 @@ public class MQClientAPIImplTest {
             message.setBody("body".getBytes());
             message.setTopic(topic);
             message.putUserProperty("key", "value");
-            MessageAccessor.putProperty(message, MessageConst.PROPERTY_INNER_MULTI_DISPATCH, lmqTopic);
+            message.putUserProperty(MessageConst.PROPERTY_INNER_MULTI_DISPATCH, lmqTopic);
             message.getProperties().put(MessageConst.PROPERTY_INNER_MULTI_QUEUE_OFFSET, String.valueOf(0));
             response.setBody(MessageDecoder.encode(message, false));
             responseFuture.setResponseCommand(response);

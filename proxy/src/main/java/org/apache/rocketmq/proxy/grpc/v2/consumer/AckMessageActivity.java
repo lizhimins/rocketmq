@@ -55,9 +55,7 @@ public class AckMessageActivity extends AbstractMessagingActivity {
             validateTopicAndConsumerGroup(request.getTopic(), request.getGroup());
             String group = request.getGroup().getName();
             String topic = request.getTopic().getName();
-            boolean isBatchAck = ConfigurationManager.getProxyConfig().isEnableBatchAck()
-                && !request.getEntries(0).hasLiteTopic();
-            if (isBatchAck) {
+            if (ConfigurationManager.getProxyConfig().isEnableBatchAck()) {
                 future = ackMessageInBatch(ctx, group, topic, request);
             } else {
                 future = ackMessageOneByOne(ctx, group, topic, request);
@@ -145,8 +143,7 @@ public class AckMessageActivity extends AbstractMessagingActivity {
                 ReceiptHandle.decode(handleString),
                 ackMessageEntry.getMessageId(),
                 group,
-                topic,
-                ackMessageEntry.hasLiteTopic() ? ackMessageEntry.getLiteTopic() : null
+                topic
             );
             ackResultFuture.thenAccept(result -> {
                 future.complete(convertToAckMessageResultEntry(ctx, ackMessageEntry, result));

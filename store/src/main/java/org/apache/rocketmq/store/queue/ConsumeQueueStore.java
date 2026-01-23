@@ -33,10 +33,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.FutureTask;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicInteger;
-
 import org.apache.rocketmq.common.BoundaryType;
-import org.apache.rocketmq.common.MixAll;
 import org.apache.rocketmq.common.ServiceThread;
 import org.apache.rocketmq.common.ThreadFactoryImpl;
 import org.apache.rocketmq.common.TopicConfig;
@@ -64,7 +61,6 @@ public class ConsumeQueueStore extends AbstractConsumeQueueStore {
 
     private long dispatchFromPhyOffset;
     private long dispatchFromStoreTimestamp;
-    private final AtomicInteger lmqCounter = new AtomicInteger(0);
 
     public ConsumeQueueStore(DefaultMessageStore messageStore) {
         super(messageStore);
@@ -340,9 +336,6 @@ public class ConsumeQueueStore extends AbstractConsumeQueueStore {
     public void destroy(ConsumeQueueInterface consumeQueue) {
         FileQueueLifeCycle fileQueueLifeCycle = getLifeCycle(consumeQueue.getTopic(), consumeQueue.getQueueId());
         fileQueueLifeCycle.destroy();
-        if (MixAll.isLmq(consumeQueue.getTopic())) {
-            lmqCounter.decrementAndGet();
-        }
     }
 
     public int deleteExpiredFile(ConsumeQueueInterface consumeQueue, long minCommitLogPos) {
@@ -419,9 +412,6 @@ public class ConsumeQueueStore extends AbstractConsumeQueueStore {
             logic = oldLogic;
         } else {
             logic = newLogic;
-            if (MixAll.isLmq(topic)) {
-                lmqCounter.incrementAndGet();
-            }
         }
 
         return logic;
@@ -451,14 +441,8 @@ public class ConsumeQueueStore extends AbstractConsumeQueueStore {
             map = new ConcurrentHashMap<>();
             map.put(queueId, consumeQueue);
             this.consumeQueueTable.put(topic, map);
-            if (MixAll.isLmq(topic)) {
-                lmqCounter.incrementAndGet();
-            }
         } else {
-            ConsumeQueueInterface prev = map.put(queueId, consumeQueue);
-            if (null == prev && MixAll.isLmq(topic)) {
-                lmqCounter.incrementAndGet();
-            }
+            map.put(queueId, consumeQueue);
         }
     }
 
@@ -617,16 +601,6 @@ public class ConsumeQueueStore extends AbstractConsumeQueueStore {
         } else {
             return storeTimestamp <= this.dispatchFromStoreTimestamp;
         }
-    }
-
-    @Override
-    public int getLmqNum() {
-        return lmqCounter.get();
-    }
-
-    @Override
-    public boolean isLmqExist(String lmqTopic) {
-        return getConsumeQueue(lmqTopic, 0) != null;
     }
 
     public class FlushConsumeQueueService extends ServiceThread {

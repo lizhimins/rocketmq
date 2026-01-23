@@ -53,7 +53,7 @@ public class ConsumerOffsetManagerV2 extends ConsumerOffsetManager {
     }
 
     @Override
-    public void removeConsumerOffset(String topicAtGroup) {
+    protected void removeConsumerOffset(String topicAtGroup) {
         if (!MixAll.isLmq(topicAtGroup)) {
             super.removeConsumerOffset(topicAtGroup);
         }

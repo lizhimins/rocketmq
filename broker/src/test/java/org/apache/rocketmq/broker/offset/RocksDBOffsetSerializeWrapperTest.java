@@ -26,6 +26,7 @@ import org.junit.Before;
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
 
 public class RocksDBOffsetSerializeWrapperTest {
 
@@ -34,6 +35,12 @@ public class RocksDBOffsetSerializeWrapperTest {
     @Before
     public void setUp() {
         wrapper = new RocksDBOffsetSerializeWrapper();
+    }
+
+    @Test
+    public void testGetOffsetTable_ShouldReturnConcurrentHashMap() {
+        ConcurrentMap<Integer, Long> offsetTable = wrapper.getOffsetTable();
+        assertNotNull("The offsetTable should not be null", offsetTable);
     }
 
     @Test

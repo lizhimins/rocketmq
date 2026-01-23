@@ -201,7 +201,6 @@ public class ProducerProcessorTest extends BaseProcessorTest {
             messageExt.getMsgId(),
             CONSUMER_GROUP,
             TOPIC,
-            null,
             3000
         ).get();
 

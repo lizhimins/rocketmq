@@ -37,7 +37,6 @@ import org.apache.rocketmq.remoting.protocol.header.ConsumerSendMsgBackRequestHe
 import org.apache.rocketmq.remoting.protocol.header.EndTransactionRequestHeader;
 import org.apache.rocketmq.remoting.protocol.header.GetMaxOffsetRequestHeader;
 import org.apache.rocketmq.remoting.protocol.header.GetMinOffsetRequestHeader;
-import org.apache.rocketmq.remoting.protocol.header.PopLiteMessageRequestHeader;
 import org.apache.rocketmq.remoting.protocol.header.PopMessageRequestHeader;
 import org.apache.rocketmq.remoting.protocol.header.PullMessageRequestHeader;
 import org.apache.rocketmq.remoting.protocol.header.QueryConsumerOffsetRequestHeader;
@@ -74,13 +73,6 @@ public interface MessageService {
         ProxyContext ctx,
         AddressableMessageQueue messageQueue,
         PopMessageRequestHeader requestHeader,
-        long timeoutMillis
-    );
-
-    CompletableFuture<PopResult> popLiteMessage(
-        ProxyContext ctx,
-        AddressableMessageQueue messageQueue,
-        PopLiteMessageRequestHeader requestHeader,
         long timeoutMillis
     );
 

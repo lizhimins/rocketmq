@@ -257,7 +257,6 @@ public class GrpcBaseIT extends BaseConf {
     public void testTransactionCheckThenCommit() {
         String topic = initTopicOnSampleTopicBroker(BROKER1_NAME, TopicMessageType.TRANSACTION);
         String group = MQRandomUtils.getRandomConsumerGroup();
-        initConsumerGroup(group);
 
         AtomicReference<TelemetryCommand> telemetryCommandRef = new AtomicReference<>(null);
         StreamObserver<TelemetryCommand> requestStreamObserver = stub.telemetry(new DefaultTelemetryCommandStreamObserver() {
@@ -352,7 +351,6 @@ public class GrpcBaseIT extends BaseConf {
         String topic = initTopicOnSampleTopicBroker(BROKER1_NAME, TopicMessageType.DELAY);
         String group = MQRandomUtils.getRandomConsumerGroup();
         long delayTime = TimeUnit.SECONDS.toMillis(5);
-        initConsumerGroup(group);
 
         // init consumer offset
         this.sendClientSettings(stub, buildSimpleConsumerClientSettings(group)).get();
@@ -400,7 +398,6 @@ public class GrpcBaseIT extends BaseConf {
     public void testSimpleConsumerSendAndRecallDelayMessage() throws Exception {
         String topic = initTopicOnSampleTopicBroker(BROKER1_NAME, TopicMessageType.DELAY);
         String group = MQRandomUtils.getRandomConsumerGroup();
-        initConsumerGroup(group);
         long delayTime = TimeUnit.SECONDS.toMillis(5);
 
         // init consumer offset
@@ -464,7 +461,6 @@ public class GrpcBaseIT extends BaseConf {
     public void testSimpleConsumerSendAndRecvBigMessage() throws Exception {
         String topic = initTopicOnSampleTopicBroker(BROKER1_NAME);
         String group = MQRandomUtils.getRandomConsumerGroup();
-        initConsumerGroup(group);
 
         int bodySize = 4 * 1024;
 
@@ -487,7 +483,6 @@ public class GrpcBaseIT extends BaseConf {
     public void testSimpleConsumerSendAndRecv() throws Exception {
         String topic = initTopicOnSampleTopicBroker(BROKER1_NAME);
         String group = MQRandomUtils.getRandomConsumerGroup();
-        initConsumerGroup(group);
 
         // init consumer offset
         this.sendClientSettings(stub, buildSimpleConsumerClientSettings(group)).get();
@@ -544,7 +539,6 @@ public class GrpcBaseIT extends BaseConf {
     public void testSimpleConsumerToDLQ() throws Exception {
         String topic = initTopicOnSampleTopicBroker(BROKER1_NAME);
         String group = MQRandomUtils.getRandomConsumerGroup();
-        initConsumerGroup(group);
         int maxDeliveryAttempts = 2;
 
         SubscriptionGroupConfig groupConfig = brokerController1.getSubscriptionGroupManager().findSubscriptionGroupConfig(group);
@@ -638,7 +632,6 @@ public class GrpcBaseIT extends BaseConf {
     public void testSimpleConsumerSendAndRecvPriorityMessage() throws Exception {
         String topic = initTopicOnSampleTopicBroker(BROKER1_NAME, TopicMessageType.PRIORITY);
         String group = MQRandomUtils.getRandomConsumerGroup();
-        initConsumerGroup(group);
 
         // init consumer offset
         this.sendClientSettings(stub, buildSimpleConsumerClientSettings(group)).get();

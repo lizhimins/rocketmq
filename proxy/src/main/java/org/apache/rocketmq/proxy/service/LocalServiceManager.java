@@ -33,7 +33,6 @@ import org.apache.rocketmq.proxy.config.ProxyConfig;
 import org.apache.rocketmq.proxy.service.admin.AdminService;
 import org.apache.rocketmq.proxy.service.admin.DefaultAdminService;
 import org.apache.rocketmq.proxy.service.channel.ChannelManager;
-import org.apache.rocketmq.proxy.service.lite.LiteSubscriptionService;
 import org.apache.rocketmq.proxy.service.message.LocalMessageService;
 import org.apache.rocketmq.proxy.service.message.MessageService;
 import org.apache.rocketmq.proxy.service.metadata.LocalMetadataService;
@@ -129,11 +128,6 @@ public class LocalServiceManager extends AbstractStartAndShutdown implements Ser
     @Override
     public AdminService getAdminService() {
         return this.adminService;
-    }
-
-    @Override
-    public LiteSubscriptionService getLiteSubscriptionService() {
-        return null;
     }
 
     private class LocalServiceManagerStartAndShutdown implements StartAndShutdown {

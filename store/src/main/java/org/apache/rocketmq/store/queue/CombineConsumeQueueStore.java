@@ -390,16 +390,6 @@ public class CombineConsumeQueueStore implements ConsumeQueueStoreInterface {
         return result;
     }
 
-    @Override
-    public int getLmqNum() {
-        return currentReadStore.getLmqNum();
-    }
-
-    @Override
-    public boolean isLmqExist(String lmqTopic) {
-        return currentReadStore.isLmqExist(lmqTopic);
-    }
-
     public RocksDBConsumeQueueStore getRocksDBConsumeQueueStore() {
         return rocksDBConsumeQueueStore;
     }

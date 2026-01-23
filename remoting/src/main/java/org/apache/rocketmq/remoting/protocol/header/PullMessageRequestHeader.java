@@ -43,7 +43,6 @@ public class PullMessageRequestHeader extends TopicQueueRequestHeader implements
     @CFNotNull
     @RocketMQResource(ResourceType.TOPIC)
     private String topic;
-    private String liteTopic;
     @CFNotNull
     private Integer queueId;
     @CFNotNull
@@ -83,7 +82,6 @@ public class PullMessageRequestHeader extends TopicQueueRequestHeader implements
     public void encode(ByteBuf out) {
         writeIfNotNull(out, "consumerGroup", consumerGroup);
         writeIfNotNull(out, "topic", topic);
-        writeIfNotNull(out, "liteTopic", liteTopic);
         writeIfNotNull(out, "queueId", queueId);
         writeIfNotNull(out, "queueOffset", queueOffset);
         writeIfNotNull(out, "maxMsgNums", maxMsgNums);
@@ -113,11 +111,6 @@ public class PullMessageRequestHeader extends TopicQueueRequestHeader implements
         str = getAndCheckNotNull(fields, "topic");
         if (str != null) {
             this.topic = str;
-        }
-
-        str = fields.get("liteTopic");
-        if (str != null) {
-            this.liteTopic = str;
         }
 
         str = getAndCheckNotNull(fields, "queueId");
@@ -224,14 +217,6 @@ public class PullMessageRequestHeader extends TopicQueueRequestHeader implements
         this.topic = topic;
     }
 
-    public String getLiteTopic() {
-        return liteTopic;
-    }
-
-    public void setLiteTopic(String liteTopic) {
-        this.liteTopic = liteTopic;
-    }
-
     @Override
     public Integer getQueueId() {
         return queueId;
@@ -335,7 +320,6 @@ public class PullMessageRequestHeader extends TopicQueueRequestHeader implements
         return MoreObjects.toStringHelper(this)
             .add("consumerGroup", consumerGroup)
             .add("topic", topic)
-            .add("liteTopic", liteTopic)
             .add("queueId", queueId)
             .add("queueOffset", queueOffset)
             .add("maxMsgBytes", maxMsgBytes)

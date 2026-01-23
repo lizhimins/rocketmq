@@ -279,13 +279,6 @@ public class SendMessageActivity extends AbstractMessagingActivity {
             validateMessageGroup(messageGroup);
             MessageAccessor.putProperty(messageWithHeader, MessageConst.PROPERTY_SHARDING_KEY, messageGroup);
         }
-        // set lite topic
-        String liteTopic = message.getSystemProperties().getLiteTopic();
-        if (StringUtils.isNotEmpty(liteTopic)) {
-            validateLiteTopic(liteTopic);
-            MessageAccessor.setLiteTopic(messageWithHeader, liteTopic);
-        }
-
         // set trace context
         String traceContext = message.getSystemProperties().getTraceContext();
         if (!traceContext.isEmpty()) {
@@ -392,10 +385,6 @@ public class SendMessageActivity extends AbstractMessagingActivity {
                 String shardingKey = null;
                 if (request.getMessagesCount() == 1) {
                     shardingKey = message.getSystemProperties().getMessageGroup();
-                    // lite topic
-                    if (StringUtils.isBlank(shardingKey)) {
-                        shardingKey = message.getSystemProperties().getLiteTopic();
-                    }
                 }
                 AddressableMessageQueue targetMessageQueue;
                 if (StringUtils.isNotEmpty(shardingKey)) {

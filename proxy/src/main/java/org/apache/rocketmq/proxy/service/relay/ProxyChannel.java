@@ -46,7 +46,6 @@ import org.apache.rocketmq.remoting.protocol.body.ConsumerRunningInfo;
 import org.apache.rocketmq.remoting.protocol.header.CheckTransactionStateRequestHeader;
 import org.apache.rocketmq.remoting.protocol.header.ConsumeMessageDirectlyResultRequestHeader;
 import org.apache.rocketmq.remoting.protocol.header.GetConsumerRunningInfoRequestHeader;
-import org.apache.rocketmq.remoting.protocol.header.NotifyUnsubscribeLiteRequestHeader;
 
 public abstract class ProxyChannel extends SimpleChannel {
     private static final Logger log = LoggerFactory.getLogger(LoggerName.PROXY_LOGGER_NAME);
@@ -105,11 +104,6 @@ public abstract class ProxyChannel extends SimpleChannel {
                             this.proxyRelayService.processConsumeMessageDirectly(context, command, header));
                         break;
                     }
-                    case RequestCode.NOTIFY_UNSUBSCRIBE_LITE: {
-                        NotifyUnsubscribeLiteRequestHeader header = (NotifyUnsubscribeLiteRequestHeader) command.readCustomHeader();
-                        processFuture = this.processNotifyUnsubscribeLite(header);
-                        break;
-                    }
                     default:
                         break;
                 }
@@ -137,8 +131,6 @@ public abstract class ProxyChannel extends SimpleChannel {
         MessageExt messageExt,
         TransactionData transactionData,
         CompletableFuture<ProxyRelayResult<Void>> responseFuture);
-
-    protected abstract CompletableFuture<Void> processNotifyUnsubscribeLite(NotifyUnsubscribeLiteRequestHeader header);
 
     protected abstract CompletableFuture<Void> processGetConsumerRunningInfo(
         RemotingCommand command,

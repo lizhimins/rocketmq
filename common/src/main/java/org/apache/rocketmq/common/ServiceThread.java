@@ -41,9 +41,7 @@ public abstract class ServiceThread implements Runnable {
 
     }
 
-    public String getServiceName() {
-        return this.getClass().getSimpleName();
-    }
+    public abstract String getServiceName();
 
     public void start() {
         log.info("Try to start service thread:{} started:{} lastThread:{}", getServiceName(), started.get(), thread);

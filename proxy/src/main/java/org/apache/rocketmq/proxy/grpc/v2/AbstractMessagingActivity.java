@@ -42,10 +42,6 @@ public abstract class AbstractMessagingActivity {
         GrpcValidator.getInstance().validateTopic(topic);
     }
 
-    protected void validateLiteTopic(String liteTopic) {
-        GrpcValidator.getInstance().validateLiteTopic(liteTopic);
-    }
-
     protected void validateConsumerGroup(Resource consumerGroup) {
         GrpcValidator.getInstance().validateConsumerGroup(consumerGroup);
     }

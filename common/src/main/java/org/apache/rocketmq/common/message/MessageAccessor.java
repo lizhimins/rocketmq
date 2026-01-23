@@ -90,10 +90,6 @@ public class MessageAccessor {
         return msg.getProperty(MessageConst.PROPERTY_CONSUME_START_TIMESTAMP);
     }
 
-    public static void setLiteTopic(final Message msg, String liteTopic) {
-        MessageAccessor.putProperty(msg, MessageConst.PROPERTY_LITE_TOPIC, liteTopic);
-    }
-
     public static Message cloneMessage(final Message msg) {
         Message newMsg = new Message(msg.getTopic(), msg.getBody());
         newMsg.setFlag(msg.getFlag());

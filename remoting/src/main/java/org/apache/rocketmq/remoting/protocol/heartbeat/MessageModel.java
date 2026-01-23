@@ -31,11 +31,7 @@ public enum MessageModel {
     /**
      * clustering
      */
-    CLUSTERING("CLUSTERING"),
-    /**
-     * for lite consumer
-     */
-    LITE_SELECTIVE("LITE_SELECTIVE");
+    CLUSTERING("CLUSTERING");
 
     private String modeCN;
 
