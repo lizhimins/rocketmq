@@ -203,6 +203,15 @@ public final class ThreadUtils {
     }
 
     /**
+     * Create an ExecutorService that spawns a new virtual thread for each task.
+     * Suitable for I/O-bound workloads where tasks may block on locks, remote calls, or disk operations.
+     * Backpressure is handled at the application level (semaphores, lock contention, etc).
+     */
+    public static ExecutorService newVirtualThreadPerTaskExecutor() {
+        return Executors.newVirtualThreadPerTaskExecutor();
+    }
+
+    /**
      * Shutdown the specific ExecutorService
      *
      * @param executorService the executor

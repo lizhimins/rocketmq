@@ -338,7 +338,24 @@ public class SendMessageProcessor extends AbstractSendMessageProcessor implement
 
         long beginTimeMillis = this.brokerController.getMessageStore().now();
 
-        if (brokerController.getBrokerConfig().isAsyncSendEnable()) {
+        if (brokerController.getBrokerConfig().isEnableVirtualThread()) {
+            // Virtual thread: suspend on I/O instead of occupying a platform thread.
+            // The .join() suspides the virtual thread, no need for callback executor.
+            PutMessageResult putMessageResult;
+            if (sendTransactionPrepareMessage) {
+                putMessageResult = this.brokerController.getTransactionalMessageService()
+                    .asyncPrepareMessage(msgInner).join();
+            } else {
+                putMessageResult = this.brokerController.getMessageStore()
+                    .asyncPutMessage(msgInner).join();
+            }
+            RemotingCommand putResult = handlePutMessageResult(putMessageResult, response, request, msgInner, responseHeader, sendMessageContext, ctx, queueIdInt, beginTimeMillis, mappingContext, BrokerMetricsManager.getMessageType(requestHeader));
+            if (sendTransactionPrepareMessage && (putResult == null || putResult.getCode() == ResponseCode.SUCCESS)) {
+                this.brokerController.getTransactionalMessageService().getTransactionMetrics().addAndGet(msgInner.getProperty(MessageConst.PROPERTY_REAL_TOPIC), 1);
+            }
+            sendMessageCallback.onComplete(sendMessageContext, response);
+            return response;
+        } else if (brokerController.getBrokerConfig().isAsyncSendEnable()) {
             CompletableFuture<PutMessageResult> asyncPutMessageFuture;
             if (sendTransactionPrepareMessage) {
                 asyncPutMessageFuture = this.brokerController.getTransactionalMessageService().asyncPrepareMessage(msgInner);
@@ -634,7 +651,20 @@ public class SendMessageProcessor extends AbstractSendMessageProcessor implement
 
         long beginTimeMillis = this.brokerController.getMessageStore().now();
 
-        if (this.brokerController.getBrokerConfig().isAsyncSendEnable()) {
+        if (this.brokerController.getBrokerConfig().isEnableVirtualThread()) {
+            PutMessageResult putMessageResult;
+            if (isInnerBatch) {
+                putMessageResult = this.brokerController.getMessageStore()
+                    .asyncPutMessage(messageExtBatch).join();
+            } else {
+                putMessageResult = this.brokerController.getMessageStore()
+                    .asyncPutMessages(messageExtBatch).join();
+            }
+            handlePutMessageResult(putMessageResult, response, request, messageExtBatch, responseHeader,
+                sendMessageContext, ctx, queueIdInt, beginTimeMillis, mappingContext, BrokerMetricsManager.getMessageType(requestHeader));
+            sendMessageCallback.onComplete(sendMessageContext, response);
+            return response;
+        } else if (this.brokerController.getBrokerConfig().isAsyncSendEnable()) {
             CompletableFuture<PutMessageResult> asyncPutMessageFuture;
             if (isInnerBatch) {
                 asyncPutMessageFuture = this.brokerController.getMessageStore().asyncPutMessage(messageExtBatch);

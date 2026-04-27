@@ -333,8 +333,8 @@ public class PopConsumerServiceTest {
         Mockito.when(record.getGroupId()).thenReturn(groupName);
         Mockito.when(brokerController.getSubscriptionGroupManager()
             .containsSubscriptionGroup(groupName)).thenReturn(false);
-        CompletableFuture<Boolean> result = consumerService.revive(record);
-        Assert.assertTrue(result.join());
+        boolean result = consumerService.revive(record);
+        Assert.assertTrue(result);
     }
 
     @Test

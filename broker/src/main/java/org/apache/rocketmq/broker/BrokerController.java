@@ -563,21 +563,29 @@ public class BrokerController {
         this.scheduledExecutorService = ThreadUtils.newScheduledThreadPool(1,
             new ThreadFactoryImpl("BrokerControllerScheduledThread", true, getBrokerIdentity()));
 
-        this.sendMessageExecutor = ThreadUtils.newThreadPoolExecutor(
-            this.brokerConfig.getSendMessageThreadPoolNums(),
-            this.brokerConfig.getSendMessageThreadPoolNums(),
-            1000 * 60,
-            TimeUnit.MILLISECONDS,
-            this.sendThreadPoolQueue,
-            new ThreadFactoryImpl("SendMessageThread_", getBrokerIdentity()));
+        if (this.brokerConfig.isEnableVirtualThread()) {
+            this.sendMessageExecutor = ThreadUtils.newVirtualThreadPerTaskExecutor();
+        } else {
+            this.sendMessageExecutor = ThreadUtils.newThreadPoolExecutor(
+                this.brokerConfig.getSendMessageThreadPoolNums(),
+                this.brokerConfig.getSendMessageThreadPoolNums(),
+                1000 * 60,
+                TimeUnit.MILLISECONDS,
+                this.sendThreadPoolQueue,
+                new ThreadFactoryImpl("SendMessageThread_", getBrokerIdentity()));
+        }
 
-        this.pullMessageExecutor = ThreadUtils.newThreadPoolExecutor(
-            this.brokerConfig.getPullMessageThreadPoolNums(),
-            this.brokerConfig.getPullMessageThreadPoolNums(),
-            1000 * 60,
-            TimeUnit.MILLISECONDS,
-            this.pullThreadPoolQueue,
-            new ThreadFactoryImpl("PullMessageThread_", getBrokerIdentity()));
+        if (this.brokerConfig.isEnableVirtualThread()) {
+            this.pullMessageExecutor = ThreadUtils.newVirtualThreadPerTaskExecutor();
+        } else {
+            this.pullMessageExecutor = ThreadUtils.newThreadPoolExecutor(
+                this.brokerConfig.getPullMessageThreadPoolNums(),
+                this.brokerConfig.getPullMessageThreadPoolNums(),
+                1000 * 60,
+                TimeUnit.MILLISECONDS,
+                this.pullThreadPoolQueue,
+                new ThreadFactoryImpl("PullMessageThread_", getBrokerIdentity()));
+        }
 
         this.litePullMessageExecutor = ThreadUtils.newThreadPoolExecutor(
             this.brokerConfig.getLitePullMessageThreadPoolNums(),
@@ -595,13 +603,17 @@ public class BrokerController {
             this.putThreadPoolQueue,
             new ThreadFactoryImpl("PutMessageThread_", getBrokerIdentity()));
 
-        this.ackMessageExecutor = ThreadUtils.newThreadPoolExecutor(
-            this.brokerConfig.getAckMessageThreadPoolNums(),
-            this.brokerConfig.getAckMessageThreadPoolNums(),
-            1000 * 60,
-            TimeUnit.MILLISECONDS,
-            this.ackThreadPoolQueue,
-            new ThreadFactoryImpl("AckMessageThread_", getBrokerIdentity()));
+        if (this.brokerConfig.isEnableVirtualThread()) {
+            this.ackMessageExecutor = ThreadUtils.newVirtualThreadPerTaskExecutor();
+        } else {
+            this.ackMessageExecutor = ThreadUtils.newThreadPoolExecutor(
+                this.brokerConfig.getAckMessageThreadPoolNums(),
+                this.brokerConfig.getAckMessageThreadPoolNums(),
+                1000 * 60,
+                TimeUnit.MILLISECONDS,
+                this.ackThreadPoolQueue,
+                new ThreadFactoryImpl("AckMessageThread_", getBrokerIdentity()));
+        }
 
         this.queryMessageExecutor = ThreadUtils.newThreadPoolExecutor(
             this.brokerConfig.getQueryMessageThreadPoolNums(),

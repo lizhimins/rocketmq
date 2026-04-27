@@ -82,6 +82,13 @@ public class BrokerConfig extends BrokerIdentity {
     private int recoverThreadPoolNums = 32;
 
     /**
+     * Enable virtual threads (JDK 21+) for request processing executors (send/pull).
+     * Virtual threads suspend instead of blocking platform threads, improving throughput
+     * under lock contention (e.g. putMessageLock) and remote I/O waits.
+     */
+    private boolean enableVirtualThread = true;
+
+    /**
      * Thread numbers for EndTransactionProcessor
      */
     private int endTransactionThreadPoolNums = Math.max(8 + PROCESSOR_NUMBER * 2,
@@ -954,6 +961,14 @@ public class BrokerConfig extends BrokerIdentity {
 
     public void setPullMessageThreadPoolNums(int pullMessageThreadPoolNums) {
         this.pullMessageThreadPoolNums = pullMessageThreadPoolNums;
+    }
+
+    public boolean isEnableVirtualThread() {
+        return enableVirtualThread;
+    }
+
+    public void setEnableVirtualThread(boolean enableVirtualThread) {
+        this.enableVirtualThread = enableVirtualThread;
     }
 
     public int getAckMessageThreadPoolNums() {
