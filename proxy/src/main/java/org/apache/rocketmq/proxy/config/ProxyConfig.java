@@ -275,6 +275,9 @@ public class ProxyConfig implements ConfigFile {
     private int remotingUpdateOffsetThreadPoolNums = 4 * PROCESSOR_NUMBER;
     private int remotingDefaultThreadPoolNums = 4 * PROCESSOR_NUMBER;
 
+    // whether to use virtual threads for remoting executors
+    private boolean enableRemotingVirtualThread = true;
+
     private int remotingHeartbeatThreadPoolQueueCapacity = 50000;
     private int remotingTopicRouteThreadPoolQueueCapacity = 50000;
     private int remotingSendThreadPoolQueueCapacity = 10000;
@@ -1343,6 +1346,14 @@ public class ProxyConfig implements ConfigFile {
 
     public void setEnableRemotingLocalProxyGrpc(boolean enableRemotingLocalProxyGrpc) {
         this.enableRemotingLocalProxyGrpc = enableRemotingLocalProxyGrpc;
+    }
+
+    public boolean isEnableRemotingVirtualThread() {
+        return enableRemotingVirtualThread;
+    }
+
+    public void setEnableRemotingVirtualThread(boolean enableRemotingVirtualThread) {
+        this.enableRemotingVirtualThread = enableRemotingVirtualThread;
     }
 
     public int getLocalProxyConnectTimeoutMs() {

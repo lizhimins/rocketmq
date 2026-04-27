@@ -21,6 +21,7 @@ import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import io.netty.channel.Channel;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
@@ -81,12 +82,12 @@ public class RemotingProtocolServer implements StartAndShutdown, RemotingProxyOu
     protected final PopMessageActivity popMessageActivity;
     protected final AckMessageActivity ackMessageActivity;
     protected final ChangeInvisibleTimeActivity changeInvisibleTimeActivity;
-    protected final ThreadPoolExecutor sendMessageExecutor;
-    protected final ThreadPoolExecutor pullMessageExecutor;
-    protected final ThreadPoolExecutor heartbeatExecutor;
-    protected final ThreadPoolExecutor updateOffsetExecutor;
-    protected final ThreadPoolExecutor topicRouteExecutor;
-    protected final ThreadPoolExecutor defaultExecutor;
+    protected final ExecutorService sendMessageExecutor;
+    protected final ExecutorService pullMessageExecutor;
+    protected final ExecutorService heartbeatExecutor;
+    protected final ExecutorService updateOffsetExecutor;
+    protected final ExecutorService topicRouteExecutor;
+    protected final ExecutorService defaultExecutor;
     protected final ScheduledExecutorService timerExecutor;
     protected final TlsCertificateManager tlsCertificateManager;
     protected final RemotingTlsReloadHandler tlsReloadHandler;
@@ -130,65 +131,74 @@ public class RemotingProtocolServer implements StartAndShutdown, RemotingProxyOu
             this.defaultRemotingServer = new NettyRemotingServer(defaultServerConfig, this.clientHousekeepingService);
         }
 
-        this.sendMessageExecutor = ThreadPoolMonitor.createAndMonitor(
-            config.getRemotingSendMessageThreadPoolNums(),
-            config.getRemotingSendMessageThreadPoolNums(),
-            1000 * 60,
-            TimeUnit.MILLISECONDS,
-            "RemotingSendMessageThread",
-            config.getRemotingSendThreadPoolQueueCapacity(),
-            new ThreadPoolHeadSlowTimeMillsMonitor(config.getRemotingWaitTimeMillsInSendQueue())
-        );
+        if (config.isEnableRemotingVirtualThread()) {
+            this.sendMessageExecutor = ThreadUtils.newVirtualThreadPerTaskExecutor();
+            this.pullMessageExecutor = ThreadUtils.newVirtualThreadPerTaskExecutor();
+            this.updateOffsetExecutor = ThreadUtils.newVirtualThreadPerTaskExecutor();
+            this.heartbeatExecutor = ThreadUtils.newVirtualThreadPerTaskExecutor();
+            this.topicRouteExecutor = ThreadUtils.newVirtualThreadPerTaskExecutor();
+            this.defaultExecutor = ThreadUtils.newVirtualThreadPerTaskExecutor();
+        } else {
+            this.sendMessageExecutor = ThreadPoolMonitor.createAndMonitor(
+                config.getRemotingSendMessageThreadPoolNums(),
+                config.getRemotingSendMessageThreadPoolNums(),
+                1000 * 60,
+                TimeUnit.MILLISECONDS,
+                "RemotingSendMessageThread",
+                config.getRemotingSendThreadPoolQueueCapacity(),
+                new ThreadPoolHeadSlowTimeMillsMonitor(config.getRemotingWaitTimeMillsInSendQueue())
+            );
 
-        this.pullMessageExecutor = ThreadPoolMonitor.createAndMonitor(
-            config.getRemotingPullMessageThreadPoolNums(),
-            config.getRemotingPullMessageThreadPoolNums(),
-            1000 * 60,
-            TimeUnit.MILLISECONDS,
-            "RemotingPullMessageThread",
-            config.getRemotingPullThreadPoolQueueCapacity(),
-            new ThreadPoolHeadSlowTimeMillsMonitor(config.getRemotingWaitTimeMillsInPullQueue())
-        );
+            this.pullMessageExecutor = ThreadPoolMonitor.createAndMonitor(
+                config.getRemotingPullMessageThreadPoolNums(),
+                config.getRemotingPullMessageThreadPoolNums(),
+                1000 * 60,
+                TimeUnit.MILLISECONDS,
+                "RemotingPullMessageThread",
+                config.getRemotingPullThreadPoolQueueCapacity(),
+                new ThreadPoolHeadSlowTimeMillsMonitor(config.getRemotingWaitTimeMillsInPullQueue())
+            );
 
-        this.updateOffsetExecutor = ThreadPoolMonitor.createAndMonitor(
-            config.getRemotingUpdateOffsetThreadPoolNums(),
-            config.getRemotingUpdateOffsetThreadPoolNums(),
-            1,
-            TimeUnit.MINUTES,
-            "RemotingUpdateOffsetThread",
-            config.getRemotingUpdateOffsetThreadPoolQueueCapacity(),
-            new ThreadPoolHeadSlowTimeMillsMonitor(config.getRemotingWaitTimeMillsInUpdateOffsetQueue())
-        );
+            this.updateOffsetExecutor = ThreadPoolMonitor.createAndMonitor(
+                config.getRemotingUpdateOffsetThreadPoolNums(),
+                config.getRemotingUpdateOffsetThreadPoolNums(),
+                1,
+                TimeUnit.MINUTES,
+                "RemotingUpdateOffsetThread",
+                config.getRemotingUpdateOffsetThreadPoolQueueCapacity(),
+                new ThreadPoolHeadSlowTimeMillsMonitor(config.getRemotingWaitTimeMillsInUpdateOffsetQueue())
+            );
 
-        this.heartbeatExecutor = ThreadPoolMonitor.createAndMonitor(
-            config.getRemotingHeartbeatThreadPoolNums(),
-            config.getRemotingHeartbeatThreadPoolNums(),
-            1000 * 60,
-            TimeUnit.MILLISECONDS,
-            "RemotingHeartbeatThread",
-            config.getRemotingHeartbeatThreadPoolQueueCapacity(),
-            new ThreadPoolHeadSlowTimeMillsMonitor(config.getRemotingWaitTimeMillsInHeartbeatQueue())
-        );
+            this.heartbeatExecutor = ThreadPoolMonitor.createAndMonitor(
+                config.getRemotingHeartbeatThreadPoolNums(),
+                config.getRemotingHeartbeatThreadPoolNums(),
+                1000 * 60,
+                TimeUnit.MILLISECONDS,
+                "RemotingHeartbeatThread",
+                config.getRemotingHeartbeatThreadPoolQueueCapacity(),
+                new ThreadPoolHeadSlowTimeMillsMonitor(config.getRemotingWaitTimeMillsInHeartbeatQueue())
+            );
 
-        this.topicRouteExecutor = ThreadPoolMonitor.createAndMonitor(
-            config.getRemotingTopicRouteThreadPoolNums(),
-            config.getRemotingTopicRouteThreadPoolNums(),
-            1000 * 60,
-            TimeUnit.MILLISECONDS,
-            "RemotingTopicRouteThread",
-            config.getRemotingTopicRouteThreadPoolQueueCapacity(),
-            new ThreadPoolHeadSlowTimeMillsMonitor(config.getRemotingWaitTimeMillsInTopicRouteQueue())
-        );
+            this.topicRouteExecutor = ThreadPoolMonitor.createAndMonitor(
+                config.getRemotingTopicRouteThreadPoolNums(),
+                config.getRemotingTopicRouteThreadPoolNums(),
+                1000 * 60,
+                TimeUnit.MILLISECONDS,
+                "RemotingTopicRouteThread",
+                config.getRemotingTopicRouteThreadPoolQueueCapacity(),
+                new ThreadPoolHeadSlowTimeMillsMonitor(config.getRemotingWaitTimeMillsInTopicRouteQueue())
+            );
 
-        this.defaultExecutor = ThreadPoolMonitor.createAndMonitor(
-            config.getRemotingDefaultThreadPoolNums(),
-            config.getRemotingDefaultThreadPoolNums(),
-            1000 * 60,
-            TimeUnit.MILLISECONDS,
-            "RemotingDefaultThread",
-            config.getRemotingDefaultThreadPoolQueueCapacity(),
-            new ThreadPoolHeadSlowTimeMillsMonitor(config.getRemotingWaitTimeMillsInDefaultQueue())
-        );
+            this.defaultExecutor = ThreadPoolMonitor.createAndMonitor(
+                config.getRemotingDefaultThreadPoolNums(),
+                config.getRemotingDefaultThreadPoolNums(),
+                1000 * 60,
+                TimeUnit.MILLISECONDS,
+                "RemotingDefaultThread",
+                config.getRemotingDefaultThreadPoolQueueCapacity(),
+                new ThreadPoolHeadSlowTimeMillsMonitor(config.getRemotingWaitTimeMillsInDefaultQueue())
+            );
+        }
 
         this.timerExecutor = ThreadUtils.newSingleThreadScheduledExecutor(
             new ThreadFactoryBuilder().setNameFormat("RemotingServerScheduler-%d").build()
@@ -360,7 +370,11 @@ public class RemotingProtocolServer implements StartAndShutdown, RemotingProxyOu
         cleanExpiredRequestInQueue(this.defaultExecutor, config.getRemotingWaitTimeMillsInDefaultQueue());
     }
 
-    protected void cleanExpiredRequestInQueue(ThreadPoolExecutor threadPoolExecutor, long maxWaitTimeMillsInQueue) {
+    protected void cleanExpiredRequestInQueue(ExecutorService executor, long maxWaitTimeMillsInQueue) {
+        if (!(executor instanceof ThreadPoolExecutor threadPoolExecutor)) {
+            // Virtual thread executor has no queue, skip cleanup
+            return;
+        }
         while (true) {
             try {
                 BlockingQueue<Runnable> blockingQueue = threadPoolExecutor.getQueue();
