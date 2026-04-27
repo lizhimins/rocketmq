@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(chmod +x /home/terrance.lzm/IdeaProjects/rocketmq/build-jdk21.sh)",
+      "Bash(kill 693133 693649)",
+      "Bash(kill 693158 693677)",
+      "Bash(kill -9 693650 693677)",
+      "Bash(export JAVA_HOME=/home/terrance.lzm/.jdks/azul-21.0.9)",
+      "Bash(export PATH=\"$JAVA_HOME/bin:$PATH\")",
+      "Bash(mvn test *)",
+      "Bash(mvn checkstyle:check -pl broker -am -Dcheckstyle.skip=false -Drevision=5.5.0-JDK21-SNAPSHOT)"
+    ]
+  }
+}
