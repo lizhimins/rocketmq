@@ -27,7 +27,6 @@ import org.apache.rocketmq.common.BrokerConfig;
 import org.apache.rocketmq.common.MixAll;
 import org.apache.rocketmq.common.TopicConfig;
 import org.apache.rocketmq.common.message.MessageConst;
-import org.apache.rocketmq.common.message.MessageExtBrokerInner;
 import org.apache.rocketmq.remoting.exception.RemotingCommandException;
 import org.apache.rocketmq.remoting.exception.RemotingSendRequestException;
 import org.apache.rocketmq.remoting.exception.RemotingTimeoutException;
@@ -58,6 +57,7 @@ import org.mockito.Spy;
 import org.mockito.junit.MockitoJUnitRunner;
 
 import java.lang.reflect.Field;
+import java.util.concurrent.CompletableFuture;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.BitSet;
@@ -125,13 +125,14 @@ public class AckMessageProcessorTest {
 
         when(messageStore.getMinOffsetInQueue(anyString(), anyInt())).thenReturn(MIN_OFFSET_IN_QUEUE);
         when(messageStore.getMaxOffsetInQueue(anyString(), anyInt())).thenReturn(MAX_OFFSET_IN_QUEUE);
+        when(messageStore.asyncPutMessage(any())).thenReturn(CompletableFuture.completedFuture(
+                new PutMessageResult(PutMessageStatus.PUT_OK, new AppendMessageResult(AppendMessageStatus.PUT_OK))));
 
         when(brokerController.getPopMessageProcessor()).thenReturn(popMessageProcessor);
     }
 
     @Test
     public void testProcessRequest_Success() throws RemotingCommandException, InterruptedException, RemotingTimeoutException, RemotingSendRequestException {
-        when(messageStore.putMessage(any(MessageExtBrokerInner.class))).thenReturn(new PutMessageResult(PutMessageStatus.PUT_OK, new AppendMessageResult(AppendMessageStatus.PUT_OK)));
         PopBufferMergeService popBufferMergeService = mock(PopBufferMergeService.class);
         when(popBufferMergeService.addAk(anyInt(), any())).thenReturn(false);
         when(popMessageProcessor.getPopBufferMergeService()).thenReturn(popBufferMergeService);
@@ -293,9 +294,6 @@ public class AckMessageProcessorTest {
             PopBufferMergeService popBufferMergeService = mock(PopBufferMergeService.class);
             when(popBufferMergeService.addAk(anyInt(), any())).thenReturn(false);
             when(popMessageProcessor.getPopBufferMergeService()).thenReturn(popBufferMergeService);
-            // store putMessage OK
-            PutMessageResult putMessageResult = new PutMessageResult(PutMessageStatus.PUT_OK, null);
-            when(messageStore.putMessage(any())).thenReturn(putMessageResult);
 
             AckMessageRequestHeader requestHeader = new AckMessageRequestHeader();
             long ackOffset = MIN_OFFSET_IN_QUEUE + 10;
@@ -343,9 +341,6 @@ public class AckMessageProcessorTest {
             PopBufferMergeService popBufferMergeService = mock(PopBufferMergeService.class);
             when(popBufferMergeService.addAk(anyInt(), any())).thenReturn(false);
             when(popMessageProcessor.getPopBufferMergeService()).thenReturn(popBufferMergeService);
-            // store putMessage OK
-            PutMessageResult putMessageResult = new PutMessageResult(PutMessageStatus.PUT_OK, null);
-            when(messageStore.putMessage(any())).thenReturn(putMessageResult);
 
             BatchAck bAck1 = new BatchAck();
             bAck1.setConsumerGroup(MixAll.DEFAULT_CONSUMER_GROUP);

@@ -305,7 +305,11 @@ public class AckMessageProcessor implements NettyRequestProcessor {
         msgInner.setDeliverTimeMs(popTime + invisibleTime);
         msgInner.getProperties().put(MessageConst.PROPERTY_UNIQ_CLIENT_MESSAGE_ID_KEYIDX, PopMessageProcessor.genAckUniqueId(ackMsg));
         msgInner.setPropertiesString(MessageDecoder.messageProperties2String(msgInner.getProperties()));
-        if (brokerController.getBrokerConfig().isAppendAckAsync()) {
+        if (brokerController.getBrokerConfig().isEnableVirtualThread()) {
+            PutMessageResult putMessageResult = this.brokerController.getEscapeBridge()
+                .asyncPutMessageToSpecificQueue(msgInner).join();
+            handlePutMessageResult(putMessageResult, ackMsg, topic, consumeGroup, popTime, qId, ackCount);
+        } else if (brokerController.getBrokerConfig().isAppendAckAsync()) {
             int finalAckCount = ackCount;
             this.brokerController.getEscapeBridge().asyncPutMessageToSpecificQueue(msgInner).thenAccept(putMessageResult -> {
                 handlePutMessageResult(putMessageResult, ackMsg, topic, consumeGroup, popTime, qId, finalAckCount);
