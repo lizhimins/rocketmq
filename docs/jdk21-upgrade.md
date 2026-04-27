@@ -2,7 +2,7 @@
 
 ## 一、背景
 
-将 RocketMQ Broker 的 Send/Pull/ACK 流程从传统的 `ThreadPoolExecutor` + `CompletableFuture` 回调模式，
+将 RocketMQ Broker 的 Send/Pull/ACK 流程以及 Proxy Remoting 协议层从传统的 `ThreadPoolExecutor` + `CompletableFuture` 回调模式，
 升级为 **JDK 21 虚拟线程 (Virtual Threads)** + **同步编程模型**，降低代码复杂度并提升高并发场景下的 P99 延迟表现。
 
 ## 二、修改文件清单
@@ -20,6 +20,8 @@
 | Broker 模块 | `broker/PopConsumerService.java` | 新增同步 `pop()` / `getMessage()` / `revive()` 方法；`revive` 批量使用 `StructuredTaskScope` |
 | Broker 测试 | `broker/PopConsumerServiceTest.java` | `revive()` 返回值从 `CompletableFuture<Boolean>` 改为 `boolean` |
 | Broker 测试 | `broker/AckMessageProcessorTest.java` | 新增 `asyncPutMessage` mock，移除不再使用的 `putMessage` stub |
+| 代理模块 | `proxy/ProxyConfig.java` | 新增 `enableRemotingVirtualThread` 配置（默认 `true`） |
+| 代理模块 | `proxy/RemotingProtocolServer.java` | 6 个 remoting 线程池条件切换为虚拟线程 |
 
 ## 三、核心改造点
 
@@ -117,6 +119,22 @@ try (var scope = new StructuredTaskScope.ShutdownOnFailure()) {
 } catch (InterruptedException e) { ... }
 ```
 
+### 3.6 Proxy Remoting 线程池切换 (RemotingProtocolServer)
+
+```java
+// 改造前：固定大小线程池
+this.sendMessageExecutor = ThreadPoolMonitor.createAndMonitor(
+    config.getRemotingSendMessageThreadPoolNums(), ...);
+
+// 改造后：虚拟线程（enableRemotingVirtualThread=true 时）
+this.sendMessageExecutor = ThreadUtils.newVirtualThreadPerTaskExecutor();
+// pullMessageExecutor、heartbeatExecutor、updateOffsetExecutor
+// topicRouteExecutor、defaultExecutor 同理
+```
+
+> **注意：** 字段类型从 `ThreadPoolExecutor` 改为 `ExecutorService`，
+> `cleanExpiredRequestInQueue` 对虚拟线程自动跳过队列清理。
+
 ## 四、运行环境
 
 ### 4.1 编译
@@ -163,6 +181,7 @@ Time=386ms, TPS=2590
 | `sendMessageThreadPoolNums` | `min(ncpu, 4)` | 虚拟线程关闭时的 send 线程数 |
 | `pullMessageThreadPoolNums` | `16 + ncpu * 2` | 虚拟线程关闭时的 pull 线程数 |
 | `ackMessageThreadPoolNums` | `16` | 虚拟线程关闭时的 ack 线程数 |
+| `enableRemotingVirtualThread` | `true` | Proxy: 是否启用 remoting 虚拟线程 |
 
 关闭虚拟线程（回退到原有模式）：
 ```properties
@@ -176,6 +195,7 @@ enableVirtualThread=false
 | Send 代码路径 | 3 段分支 (sync / async / vt) | 3 段分支，vt 路径逻辑最简洁 |
 | Pop 代码可读性 | 多层 `thenCompose` 嵌套 | 顺序控制流 |
 | ACK 代码路径 | `thenAccept` + `exceptionally` 回调 | `.join()` 同步风格 |
+| Proxy Remoting 线程数 | 固定大小 (4n*6=24n) | 无上限（虚拟线程按需创建） |
 | Revive 并发模型 | `CompletableFuture.allOf` + `Semaphore` | `StructuredTaskScope` |
 | 线程调度开销 | 平台线程上下文切换 | 虚拟线程轻量挂起 |
 | P99 延迟 | 线程池队列排队 | 虚拟线程自动挂起 |
@@ -185,6 +205,6 @@ enableVirtualThread=false
 
 | 特性 | 使用场景 |
 |------|----------|
-| **Virtual Threads** | `sendMessageExecutor`, `pullMessageExecutor`, `ackMessageExecutor`, `PopConsumerService.pop()` |
+| **Virtual Threads** | Broker: `sendMessageExecutor`, `pullMessageExecutor`, `ackMessageExecutor`; Proxy: 6 remoting executors; `PopConsumerService.pop()` |
 | **StructuredTaskScope** (预览) | `PopConsumerService.revive(AtomicLong, int)` 批量并发处理 |
 | **--enable-preview** | 父 pom compiler + surefire 配置 |
