@@ -739,7 +739,7 @@ public class PopConsumerService extends ServiceThread {
             return true;
         }
 
-        var result = this.getMessageAsync(record).join();
+        Triple<MessageExt, String, Boolean> result = this.getMessageAsync(record).join();
         if (result == null) {
             log.error("PopConsumerService revive error, message may be lost, record={}", record);
             return false;
@@ -794,7 +794,7 @@ public class PopConsumerService extends ServiceThread {
 
         Queue<PopConsumerRecord> failureList = new LinkedBlockingQueue<>();
 
-        try (var scope = new StructuredTaskScope.ShutdownOnFailure()) {
+        try (StructuredTaskScope.ShutdownOnFailure scope = new StructuredTaskScope.ShutdownOnFailure()) {
             for (PopConsumerRecord record : consumerRecords) {
                 scope.fork(() -> {
                     boolean success = this.revive(record);
