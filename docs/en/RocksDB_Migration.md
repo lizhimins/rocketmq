@@ -27,7 +27,7 @@ The official `rocksdbjni` provides a `ColumnFamilyOptions.setCompactionFilter(Ab
 
 To implement a custom compaction filter outside the `rocksdbjni` build, we create a standalone C++ shared library that:
 - Directly subclasses `rocksdb::CompactionFilter` in C++
-- Exposes JNI methods to create/destroy filter instances and update the `minPhyOffset` threshold
+- Exposes JNI methods to create filter instances and update the `minPhyOffset` threshold
 - Returns the raw `CompactionFilter*` pointer as a `jlong` to Java
 
 ### Architecture
@@ -42,7 +42,8 @@ To implement a custom compaction filter outside the `rocksdbjni` build, we creat
                    ▼
 ┌──────────────────────────────────────────────────────┐
 │  CqCompactionFilterJni.java                          │
-│  - Extracts both .so files to a shared temp dir      │
+│  - Extracts libcq_compaction_filter.so to the same   │
+│    temp dir as the already-loaded rocksdbjni .so     │
 │  - Uses reflection to call setCompactionFilterHandle │
 │    (ColumnFamilyOptions private method)              │
 │  - Calls native createNativeFilter0() → raw pointer  │
@@ -57,7 +58,6 @@ To implement a custom compaction filter outside the `rocksdbjni` build, we creat
 │                                                      │
 │  JNI: createNativeFilter0() → new CqCompactionFilter │
 │  JNI: setMinPhyOffset0(ptr, offset)                  │
-│  JNI: destroyNativeFilter0(ptr) → delete filter      │
 │                                                      │
 │  NEEDED: librocksdbjni-linux64.so ($ORIGIN RPATH)   │
 └──────────────────┬───────────────────────────────────┘
@@ -83,9 +83,9 @@ This replaced an earlier dlopen/RTLD_GLOBAL approach that caused C++ `double fre
 
 The native shim creates `new CqCompactionFilter()` and returns the raw C++ pointer as a `jlong`. Instead of wrapping it in a Java `AbstractCompactionFilter` subclass (which would try to `dispose()` the native pointer), we use reflection to call `ColumnFamilyOptions.setCompactionFilterHandle(nativeHandle, filterPointer)` directly. This bypasses the Java wrapper lifecycle entirely — the native filter's lifetime is managed by the `ColumnFamilyOptions` and RocksDB.
 
-**3. Shared temp directory for both .so files**
+**3. Shared temp directory for .so resolution**
 
-At runtime, `CqCompactionFilterJni` extracts both `librocksdbjni-linux64.so` and `libcq_compaction_filter.so` to the same temp directory, so the `$ORIGIN` RPATH in the shim correctly resolves its `NEEDED` dependency. If the JVM has already loaded `librocksdbjni` (which is the normal case), the shim is extracted to the JVM's existing temp directory alongside the already-loaded library.
+At runtime, `CqCompactionFilterJni` loads `librocksdbjni-linux64.so` from the rocksdbjni JAR first (via `System.loadLibrary` or extraction to a temp dir), then extracts `libcq_compaction_filter.so` to the same temp directory. This ensures the `$ORIGIN` RPATH in the shim correctly resolves its `NEEDED` dependency on `librocksdbjni-linux64.so`. The rocksdbjni native library is NOT bundled in the RocketMQ repository — it is sourced from the `org.rocksdb:rocksdbjni:8.4.4` JAR at runtime.
 
 **4. Thread-safe minPhyOffset with pthread mutex**
 
@@ -102,9 +102,8 @@ The `CqCompactionFilter` uses a `pthread_mutex_t` to protect concurrent reads of
 | `store/.../rocksdb/RocksDBOptionsFactory.java` | Remove `setCompactionFilterFactory()` call from `createCQCFOptions()` |
 | `store/.../rocksdb/CqCompactionFilterJni.java` | **Rewritten** — uses raw JNI pointer + reflection to set filter on ColumnFamilyOptions |
 | `store/.../resources/native/cq_compaction_filter.cpp` | **Rewritten** — direct C++ subclassing, explicit linking |
-| `store/.../resources/native/libcq_compaction_filter.so` | **Pre-compiled** native library (Linux x86_64) |
-| `store/.../resources/native/librocksdbjni-linux64.so` | **Bundled** from rocksdbjni:8.4.4 jar (Linux x86_64) |
-| `store/.../rocksdb/ConsumeQueueRocksDBStorageCompactionTest.java` | **New** — integration test for compaction filter |
+| `store/.../resources/native/libcq_compaction_filter.so` | **New** — pre-compiled native library (Linux x86_64) |
+| `store/.../rocksdb/CqCompactionFilterJniTest.java` | **New** — integration test for compaction filter |
 
 ## Building the native shim
 
@@ -272,7 +271,7 @@ Run the entire RocketMQ build and test under WSL (Windows Subsystem for Linux). 
 ```bash
 # In WSL (Ubuntu)
 java -version    # should show WSL JDK
-mvn test -pl store -Dtest=ConsumeQueueRocksDBStorageCompactionTest -Djacoco.skip=true
+mvn test -pl store -Dtest=CqCompactionFilterJniTest -Djacoco.skip=true
 ```
 
 ## Platform support
@@ -297,4 +296,4 @@ For platforms without a pre-built library, follow the build instructions above. 
 
 3. **Source uses POSIX pthreads** — The C++ source uses `pthread_mutex_t` which is available on Linux and macOS natively. Windows builds require either MinGW-w64 (which provides pthreads) or code changes to use `std::mutex`.
 
-4. **Bundled librocksdbjni size** — The `librocksdbjni-linux64.so` is ~13 MB. It is bundled to ensure the shim can resolve its `NEEDED` dependency without requiring users to manually configure `LD_LIBRARY_PATH`.
+4. **Shim depends on rocksdbjni native library at runtime** — The `libcq_compaction_filter.so` has a `DT_NEEDED` entry for `librocksdbjni-linux64.so` (~13 MB). The `CqCompactionFilterJni` class handles this by extracting the shim to the same temp directory as the rocksdbjni native library, so the `$ORIGIN` RPATH resolves correctly without requiring `LD_LIBRARY_PATH`.
