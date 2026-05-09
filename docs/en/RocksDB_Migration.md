@@ -59,7 +59,7 @@ To implement a custom compaction filter outside the `rocksdbjni` build, we creat
 │  JNI: createNativeFilter0() → new CqCompactionFilter │
 │  JNI: setMinPhyOffset0(ptr, offset)                  │
 │                                                      │
-│  NEEDED: librocksdbjni-linux64.so ($ORIGIN RPATH)   │
+│  NEEDED: librocksdbjni-linux64.so ($ORIGIN RPATH)    │
 └──────────────────┬───────────────────────────────────┘
                    │
                    ▼
