@@ -44,8 +44,8 @@ To implement a custom compaction filter outside the `rocksdbjni` build, we creat
 │  CqCompactionFilterJni.java                          │
 │  - Extracts libcq_compaction_filter.so to the same   │
 │    temp dir as the already-loaded rocksdbjni .so     │
-│  - Uses reflection to call setCompactionFilterHandle │
-│    (ColumnFamilyOptions private method)              │
+│  - Uses NativeCqCompactionFilter wrapper with        │
+│    disOwnNativeHandle() + public setCompactionFilter │
 │  - Calls native createNativeFilter0() → raw pointer  │
 └──────────────────┬───────────────────────────────────┘
                    │
@@ -79,17 +79,17 @@ The shim directly subclasses `rocksdb::CompactionFilter` in C++ and is compiled 
 
 This replaced an earlier dlopen/RTLD_GLOBAL approach that caused C++ `double free` crashes — loading the same `.so` twice (once via JVM's `RTLD_LOCAL` and once via `RTLD_GLOBAL`) creates conflicting C++ global state (memory allocators, static singletons, vtables).
 
-**2. Raw pointer as jlong, no Java wrapper disposal**
+**2. Raw pointer as jlong, wrapped with disOwnNativeHandle()**
 
-The native shim creates `new CqCompactionFilter()` and returns the raw C++ pointer as a `jlong`. Instead of wrapping it in a Java `AbstractCompactionFilter` subclass (which would try to `dispose()` the native pointer), we use reflection to call `ColumnFamilyOptions.setCompactionFilterHandle(nativeHandle, filterPointer)` directly. This bypasses the Java wrapper lifecycle entirely — the native filter's lifetime is managed by the `ColumnFamilyOptions` and RocksDB.
+The native shim creates `new CqCompactionFilter()` and returns the raw C++ pointer as a `jlong`. A thin Java wrapper `NativeCqCompactionFilter extends AbstractCompactionFilter<Slice>` passes this pointer to the protected `AbstractCompactionFilter(long)` constructor, then calls `disOwnNativeHandle()` so that `close()` does not free the native memory. This is critical because `AbstractRocksDBStorage.shutdown()` closes `ColumnFamilyOptions` (step 2) before closing the DB (step 4) — without `disOwnNativeHandle()`, background compaction threads would access a freed filter. The filter is then set via the public `ColumnFamilyOptions.setCompactionFilter()` API, avoiding reflection and ensuring JDK 17+ compatibility.
 
 **3. Shared temp directory for .so resolution**
 
 At runtime, `CqCompactionFilterJni` loads `librocksdbjni-linux64.so` from the rocksdbjni JAR first (via `System.loadLibrary` or extraction to a temp dir), then extracts `libcq_compaction_filter.so` to the same temp directory. This ensures the `$ORIGIN` RPATH in the shim correctly resolves its `NEEDED` dependency on `librocksdbjni-linux64.so`. The rocksdbjni native library is NOT bundled in the RocketMQ repository — it is sourced from the `org.rocksdb:rocksdbjni:8.4.4` JAR at runtime.
 
-**4. Thread-safe minPhyOffset with pthread mutex**
+**4. Thread-safe minPhyOffset with std::atomic**
 
-The `CqCompactionFilter` uses a `pthread_mutex_t` to protect concurrent reads of `min_phy_offset_` during compaction (which runs on background threads) and updates from the Java side via `setMinPhyOffset()`. The `volatile` qualifier on `min_phy_offset_` ensures visibility without additional memory barriers.
+The `CqCompactionFilter` uses `std::atomic<int64_t>` with `memory_order_relaxed` for `min_phy_offset_`. This is sufficient because there is a single writer (Java main thread via JNI) and one reader (compaction background thread), and eventual consistency is acceptable — a slightly stale threshold only means a few extra entries survive one compaction cycle. This replaces the earlier `pthread_mutex` approach, eliminating per-entry lock/unlock overhead during full compaction over hundreds of millions of entries.
 
 ## Changed files
 
@@ -100,7 +100,8 @@ The `CqCompactionFilter` uses a `pthread_mutex_t` to protect concurrent reads of
 | `store/.../rocksdb/ConsumeQueueCompactionFilterFactory.java` | **Deleted** — replaced by native shim |
 | `store/.../rocksdb/ConsumeQueueRocksDBStorage.java` | Use `CqCompactionFilterJni.createAndSetFilter()` instead of `CompactionFilterFactory`; added `triggerCompactionSync()` and `countEntries()` helpers |
 | `store/.../rocksdb/RocksDBOptionsFactory.java` | Remove `setCompactionFilterFactory()` call from `createCQCFOptions()` |
-| `store/.../rocksdb/CqCompactionFilterJni.java` | **Rewritten** — uses raw JNI pointer + reflection to set filter on ColumnFamilyOptions |
+| `store/.../rocksdb/CqCompactionFilterJni.java` | **Rewritten** — uses raw JNI pointer + `NativeCqCompactionFilter` wrapper via public API |
+| `store/.../rocksdb/NativeCqCompactionFilter.java` | **New** — thin `AbstractCompactionFilter<Slice>` wrapper with `disOwnNativeHandle()` |
 | `store/.../resources/native/cq_compaction_filter.cpp` | **Rewritten** — direct C++ subclassing, explicit linking |
 | `store/.../resources/native/libcq_compaction_filter.so` | **New** — pre-compiled native library (Linux x86_64) |
 | `store/.../rocksdb/CqCompactionFilterJniTest.java` | **New** — integration test for compaction filter |
@@ -183,15 +184,13 @@ otool -L libcq_compaction_filter.dylib
 cp libcq_compaction_filter.dylib store/src/main/resources/native/
 ```
 
-**Note:** The current C++ source uses `pthread_mutex_t` which is available natively on macOS (POSIX threads are part of the system). No code changes are needed.
+**Note:** The C++ source uses `std::atomic<int64_t>` (C++17 standard library) for thread safety. No platform-specific threading APIs are needed.
 
 ### Windows (x86_64)
 
-Windows requires code changes because the current shim uses POSIX-specific APIs (`pthread_mutex_t`). Two options:
+Windows builds work with any C++17 compiler since the source now uses `std::atomic` instead of POSIX pthreads. Two options:
 
-**Option A: Use MSYS2/MinGW-w64 with pthreads**
-
-MinGW-w64 provides POSIX thread support (`-lpthread`), so the existing C++ source can compile without modification.
+**Option A: Use MSYS2/MinGW-w64**
 
 ```powershell
 # 1. Install MSYS2 from https://www.msys2.org/
@@ -226,23 +225,9 @@ objdump -p cq_compaction_filter.dll | grep "DLL Name"
 cp cq_compaction_filter.dll store/src/main/resources/native/
 ```
 
-**Option B: Native MSVC build (requires code changes)**
+**Option B: Native MSVC build**
 
-Replace `pthread_mutex_t` with `std::mutex` (C++11 standard library, works on MSVC):
-
-```cpp
-// In cq_compaction_filter.cpp, replace:
-// #include <pthread.h>
-// mutable pthread_mutex_t mutex_;
-// With:
-#include <mutex>
-mutable std::mutex mutex_;
-
-// Replace pthread_mutex_lock/unlock with std::lock_guard:
-std::lock_guard<std::mutex> lock(mutex_);
-```
-
-Then compile with MSVC:
+No code changes needed — the source uses `std::atomic` which is standard C++17. Compile with MSVC:
 
 ```powershell
 # 1. Open "x64 Native Tools Command Prompt for VS 2022"
@@ -294,6 +279,6 @@ For platforms without a pre-built library, follow the build instructions above. 
 
 2. **Single native filter per ColumnFamilyOptions** — Each `ColumnFamilyOptions` instance gets its own `CqCompactionFilter` instance with its own `min_phy_offset_`. Multiple `ConsumeQueueRocksDBStorage` instances (e.g., different topics) each have independent filter thresholds.
 
-3. **Source uses POSIX pthreads** — The C++ source uses `pthread_mutex_t` which is available on Linux and macOS natively. Windows builds require either MinGW-w64 (which provides pthreads) or code changes to use `std::mutex`.
+3. **C++17 required** — The C++ source uses `std::atomic<int64_t>` which requires a C++17-capable compiler. All modern compilers (GCC 7+, Clang 5+, MSVC 2017+) support this.
 
 4. **Shim depends on rocksdbjni native library at runtime** — The `libcq_compaction_filter.so` has a `DT_NEEDED` entry for `librocksdbjni-linux64.so` (~13 MB). The `CqCompactionFilterJni` class handles this by extracting the shim to the same temp directory as the rocksdbjni native library, so the `$ORIGIN` RPATH resolves correctly without requiring `LD_LIBRARY_PATH`.

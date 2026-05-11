@@ -26,9 +26,9 @@
  * symbols already loaded by the JVM's ClassLoader.
  */
 
+#include <atomic>
 #include <cstdint>
 #include <cstring>
-#include <pthread.h>
 #include <string>
 
 #include "rocksdb/compaction_filter.h"
@@ -40,14 +40,6 @@
 
 class CqCompactionFilter : public rocksdb::CompactionFilter {
 public:
-    CqCompactionFilter() {
-        pthread_mutex_init(&mutex_, nullptr);
-    }
-
-    ~CqCompactionFilter() override {
-        pthread_mutex_destroy(&mutex_);
-    }
-
     const char* Name() const override {
         return "ConsumeQueueCompactionFilter";
     }
@@ -59,33 +51,28 @@ public:
         if (existing_value.size() < static_cast<size_t>(CQ_MIN_SIZE)) {
             return false;
         }
-        /* Value[0..7] is phy_offset in big-endian */
-        const char* data = existing_value.data();
-        long long phy_offset =
-            (((long long)data[0]) << 56) |
-            (((long long)(unsigned char)data[1]) << 48) |
-            (((long long)(unsigned char)data[2]) << 40) |
-            (((long long)(unsigned char)data[3]) << 32) |
-            (((long long)(unsigned char)data[4]) << 24) |
-            (((long long)(unsigned char)data[5]) << 16) |
-            (((long long)(unsigned char)data[6]) << 8) |
-            (((long long)(unsigned char)data[7]));
+        const unsigned char* data =
+            reinterpret_cast<const unsigned char*>(existing_value.data());
+        int64_t phy_offset =
+            (static_cast<int64_t>(data[0]) << 56) |
+            (static_cast<int64_t>(data[1]) << 48) |
+            (static_cast<int64_t>(data[2]) << 40) |
+            (static_cast<int64_t>(data[3]) << 32) |
+            (static_cast<int64_t>(data[4]) << 24) |
+            (static_cast<int64_t>(data[5]) << 16) |
+            (static_cast<int64_t>(data[6]) << 8) |
+            (static_cast<int64_t>(data[7]));
 
-        pthread_mutex_lock(&mutex_);
-        long long min_offset = min_phy_offset_;
-        pthread_mutex_unlock(&mutex_);
+        int64_t min_offset = min_phy_offset_.load(std::memory_order_relaxed);
         return phy_offset < min_offset;
     }
 
-    void SetMinPhyOffset(long long offset) {
-        pthread_mutex_lock(&mutex_);
-        min_phy_offset_ = offset;
-        pthread_mutex_unlock(&mutex_);
+    void SetMinPhyOffset(int64_t offset) {
+        min_phy_offset_.store(offset, std::memory_order_relaxed);
     }
 
 private:
-    mutable pthread_mutex_t mutex_;
-    volatile long long min_phy_offset_ = 0;
+    std::atomic<int64_t> min_phy_offset_{0};
 };
 
 /* ------------------------------------------------------------------ */

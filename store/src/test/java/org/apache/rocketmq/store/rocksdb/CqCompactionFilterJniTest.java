@@ -38,14 +38,12 @@ public class CqCompactionFilterJniTest {
     private static final int MSG_SIZE = 1000;
 
     private static final byte CTRL_1 = '\u0001';
-
     private ConsumeQueueRocksDBStorage storage;
-    private String dbPath;
 
     @Before
     public void setUp() throws Exception {
         Assume.assumeTrue("CqCompactionFilterJni native library must be loaded", CqCompactionFilterJni.isLoaded());
-        dbPath = Files.createTempDirectory("rocksdb-cq-compaction-" + UUID.randomUUID()).toString();
+        String dbPath = Files.createTempDirectory("rocksdb-cq-compaction-" + UUID.randomUUID()).toString();
         MessageStore mockStore = Mockito.mock(MessageStore.class);
         Mockito.when(mockStore.getMinPhyOffset()).thenReturn(0L);
         Mockito.when(mockStore.getMessageStoreConfig()).thenReturn(new MessageStoreConfig());
@@ -61,27 +59,18 @@ public class CqCompactionFilterJniTest {
     }
 
     @Test
-    public void testNativeLibraryIsLoaded() {
-        Assert.assertTrue("Native library should be loaded", CqCompactionFilterJni.isLoaded());
-    }
-
-    @Test
     public void testCreateAndSetFilter() {
-        long ptr = CqCompactionFilterJni.createNativeFilter0();
-        Assert.assertTrue("Native filter pointer should be non-zero", ptr != 0);
+        Assert.assertTrue("Native library should be loaded", CqCompactionFilterJni.isLoaded());
 
-        try (ColumnFamilyOptions options = new ColumnFamilyOptions()) {
-            CqCompactionFilterJni.setNativeFilter(options, ptr);
-        }
-    }
-
-    @Test
-    public void testSetMinPhyOffset() {
         long ptr = CqCompactionFilterJni.createNativeFilter0();
         Assert.assertTrue("Native filter pointer should be non-zero", ptr != 0);
 
         CqCompactionFilterJni.setMinPhyOffset0(ptr, 1000);
         CqCompactionFilterJni.setMinPhyOffset0(ptr, Long.MAX_VALUE);
+
+        try (ColumnFamilyOptions options = new ColumnFamilyOptions()) {
+            CqCompactionFilterJni.setNativeFilter(options, ptr);
+        }
     }
 
     @Test

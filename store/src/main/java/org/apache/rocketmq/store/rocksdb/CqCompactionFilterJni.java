@@ -19,14 +19,13 @@ package org.apache.rocketmq.store.rocksdb;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
-import java.lang.reflect.Method;
 import java.nio.file.Files;
 import java.nio.file.StandardCopyOption;
 import java.util.concurrent.atomic.AtomicLong;
 import org.apache.rocketmq.common.constant.LoggerName;
 import org.rocksdb.ColumnFamilyOptions;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import org.apache.rocketmq.logging.org.slf4j.Logger;
+import org.apache.rocketmq.logging.org.slf4j.LoggerFactory;
 
 public class CqCompactionFilterJni {
 
@@ -34,11 +33,9 @@ public class CqCompactionFilterJni {
 
     private static final AtomicLong NATIVE_FILTER_PTR = new AtomicLong(0);
     private static volatile boolean loaded = false;
-    private static volatile Method setCompactionFilterHandleMethod;
 
     static {
         loadNativeShim();
-        initReflectionMethod();
     }
 
     private static synchronized void loadNativeShim() {
@@ -73,16 +70,6 @@ public class CqCompactionFilterJni {
             log.info("[CqCompactionFilterJni] Native library loaded from classpath: {}", tempLib.getAbsolutePath());
         } catch (IOException e) {
             log.error("[CqCompactionFilterJni] Failed to load native shim", e);
-        }
-    }
-
-    private static void initReflectionMethod() {
-        try {
-            setCompactionFilterHandleMethod = ColumnFamilyOptions.class
-                .getDeclaredMethod("setCompactionFilterHandle", long.class, long.class);
-            setCompactionFilterHandleMethod.setAccessible(true);
-        } catch (NoSuchMethodException e) {
-            log.error("[CqCompactionFilterJni] setCompactionFilterHandle method not found", e);
         }
     }
 
@@ -175,23 +162,16 @@ public class CqCompactionFilterJni {
     public static native void setMinPhyOffset0(long filterPtr, long minPhyOffset);
 
     /**
-     * Set the native compaction filter directly on the ColumnFamilyOptions
-     * via its private setCompactionFilterHandle method.
+     * Set the native compaction filter on the ColumnFamilyOptions via the
+     * public {@code setCompactionFilter} API.
      * <p>
-     * This bypasses the Java AbstractCompactionFilter wrapper entirely,
-     * avoiding lifecycle/disposal conflicts since the native filter is
-     * owned by the ColumnFamilyOptions.
+     * The wrapper uses {@code disOwnNativeHandle()} so that closing the
+     * ColumnFamilyOptions does not free the native filter — this prevents
+     * use-after-free when AbstractRocksDBStorage closes options before the DB.
      */
     public static void setNativeFilter(ColumnFamilyOptions options, long filterPtr) {
-        if (setCompactionFilterHandleMethod == null) {
-            log.error("[CqCompactionFilterJni] setCompactionFilterHandle not available");
-            return;
-        }
-        try {
-            setCompactionFilterHandleMethod.invoke(options, options.getNativeHandle(), filterPtr);
-        } catch (Exception e) {
-            log.error("[CqCompactionFilterJni] Failed to set native filter", e);
-        }
+        NativeCqCompactionFilter filter = new NativeCqCompactionFilter(filterPtr);
+        options.setCompactionFilter(filter);
     }
 
     /**
@@ -213,6 +193,7 @@ public class CqCompactionFilterJni {
         long ptr = NATIVE_FILTER_PTR.get();
         if (ptr != 0) {
             setMinPhyOffset0(ptr, minPhyOffset);
+            log.info("CqCompactionFilter setMinPhyOffset={}", minPhyOffset);
         }
     }
 }

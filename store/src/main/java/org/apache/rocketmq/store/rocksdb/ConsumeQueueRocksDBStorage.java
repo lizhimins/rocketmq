@@ -122,6 +122,9 @@ public class ConsumeQueueRocksDBStorage extends AbstractRocksDBStorage {
     }
 
     public void manualCompaction(final long minPhyOffset) {
+        if (CqCompactionFilterJni.isLoaded()) {
+            CqCompactionFilterJni.setMinPhyOffset(minPhyOffset);
+        }
         try {
             manualCompaction(minPhyOffset, this.compactRangeOptions);
         } catch (Exception e) {
@@ -145,9 +148,6 @@ public class ConsumeQueueRocksDBStorage extends AbstractRocksDBStorage {
     public void triggerCompactionSync(long minPhyOffset) throws RocksDBException {
         if (CqCompactionFilterJni.isLoaded()) {
             CqCompactionFilterJni.setMinPhyOffset(minPhyOffset);
-            log.info("triggerCompactionSync setMinPhyOffset: {}", minPhyOffset);
-        } else {
-            log.warn("CqCompactionFilterJni not loaded, compaction will not filter");
         }
         db.compactRange(this.defaultCFHandle);
     }
@@ -163,7 +163,7 @@ public class ConsumeQueueRocksDBStorage extends AbstractRocksDBStorage {
     }
 
     /**
-     * Count all entries in the default column family by iterating.
+     * Count all entries in the default column family by iterating. O(N), use only in tests.
      */
     public long countEntries() {
         long count = 0;
