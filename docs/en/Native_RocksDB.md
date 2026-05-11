@@ -1,4 +1,4 @@
-# Replace Forked RocksDB JNI with Official Artifact
+# Native RocksDB ConsumeQueue Compaction Filter
 
 ## Background
 
@@ -97,12 +97,13 @@ The `CqCompactionFilter` uses `std::atomic<int64_t>` with `memory_order_relaxed`
 |------|--------|
 | `pom.xml` | `rocksdb.version` → `rocksdbjni.version=8.4.4`; dependency changed to `org.rocksdb:rocksdbjni` |
 | `common/pom.xml` | `rocketmq-rocksdb` → `org.rocksdb:rocksdbjni` |
+| `common/.../config/AbstractRocksDBStorage.java` | `manualCompactionDefaultCfRange` enhanced with `estimateNumKeys` logging (before/after key count, elapsed time, reduction ratio) |
 | `store/.../rocksdb/ConsumeQueueCompactionFilterFactory.java` | **Deleted** — replaced by native shim |
 | `store/.../rocksdb/ConsumeQueueRocksDBStorage.java` | Use `CqCompactionFilterJni.createAndSetFilter()` instead of `CompactionFilterFactory`; added `triggerCompactionSync()` and `countEntries()` helpers |
 | `store/.../rocksdb/RocksDBOptionsFactory.java` | Remove `setCompactionFilterFactory()` call from `createCQCFOptions()` |
 | `store/.../rocksdb/CqCompactionFilterJni.java` | **Rewritten** — uses raw JNI pointer + `NativeCqCompactionFilter` wrapper via public API |
 | `store/.../rocksdb/NativeCqCompactionFilter.java` | **New** — thin `AbstractCompactionFilter<Slice>` wrapper with `disOwnNativeHandle()` |
-| `store/.../resources/native/cq_compaction_filter.cpp` | **Rewritten** — direct C++ subclassing, explicit linking |
+| `store/.../resources/native/cq_compaction_filter.cpp` | **Rewritten** — direct C++ subclassing, explicit linking, `std::atomic` for thread safety |
 | `store/.../resources/native/libcq_compaction_filter.so` | **New** — pre-compiled native library (Linux x86_64) |
 | `store/.../rocksdb/CqCompactionFilterJniTest.java` | **New** — integration test for compaction filter |
 
@@ -148,7 +149,7 @@ On macOS, the rocksdbjni jar provides `librocksdbjni-osx.jar` (or platform-speci
 
 ```bash
 # 1. Extract the macOS native library from rocksdbjni jar
-#    The jar contains librocksdbjni-osx.aarch64 (arm64) or librocksdbjni-osx-x86_64
+#    The jar contains librocksdbjni-osx-aarch64 (arm64) or librocksdbjni-osx-x86_64
 ROCKSDB_JAR=~/.m2/repository/org/rocksdb/rocksdbjni/8.4.4/rocksdbjni-8.4.4.jar
 
 # For Apple Silicon (arm64):
@@ -184,11 +185,9 @@ otool -L libcq_compaction_filter.dylib
 cp libcq_compaction_filter.dylib store/src/main/resources/native/
 ```
 
-**Note:** The C++ source uses `std::atomic<int64_t>` (C++17 standard library) for thread safety. No platform-specific threading APIs are needed.
-
 ### Windows (x86_64)
 
-Windows builds work with any C++17 compiler since the source now uses `std::atomic` instead of POSIX pthreads. Two options:
+Windows builds work with any C++17 compiler since the source uses `std::atomic` (no POSIX dependencies). Two options:
 
 **Option A: Use MSYS2/MinGW-w64**
 
@@ -215,7 +214,6 @@ x86_64-w64-mingw32-g++ -shared -fPIC -O2 -std=c++17 -fno-rtti -D_GLIBCXX_USE_CXX
     -o cq_compaction_filter.dll \
     -L/tmp/rocksdb-native \
     -l:librocksdbjni-win64.dll \
-    -lpthread \
     store/src/main/resources/native/cq_compaction_filter.cpp
 
 # 6. Verify dependencies
@@ -261,24 +259,25 @@ mvn test -pl store -Dtest=CqCompactionFilterJniTest -Djacoco.skip=true
 
 ## Platform support
 
-The repository ships pre-built native libraries for the following platforms:
+The repository ships a pre-built native library for Linux x86_64 only. The library name is hardcoded as `libcq_compaction_filter.so` in `CqCompactionFilterJni.java`.
 
 | Platform | Library name | Architecture | Status |
 |----------|-------------|--------------|--------|
 | Linux (glibc) | `libcq_compaction_filter.so` | x86_64 | Pre-built |
 | Linux (glibc) | `libcq_compaction_filter.so` | aarch64 | Requires rebuild |
-| macOS | `libcq_compaction_filter.dylib` | arm64 | Requires rebuild |
-| macOS | `libcq_compaction_filter.dylib` | x86_64 | Requires rebuild |
-| Windows | `cq_compaction_filter.dll` | x86_64 | Requires rebuild (Option A/B) |
+| macOS | `libcq_compaction_filter.dylib` | arm64 / x86_64 | Requires code change + rebuild |
+| Windows | `cq_compaction_filter.dll` | x86_64 | Requires code change + rebuild |
 
-For platforms without a pre-built library, follow the build instructions above. The `CqCompactionFilterJni.java` already handles platform detection via `System.mapLibraryName()` — just place the correct library in `store/src/main/resources/native/`.
+For non-Linux platforms, besides rebuilding the native library, you also need to update the hardcoded library name in `CqCompactionFilterJni.loadNativeShim()`.
 
 ## Limitations
 
 1. **Jacoco incompatibility** — The jacoco Java agent can cause native crashes when combined with dynamically loaded native libraries. Unit tests should be run with `-Djacoco.skip=true` when testing RocksDB functionality.
 
-2. **Single native filter per ColumnFamilyOptions** — Each `ColumnFamilyOptions` instance gets its own `CqCompactionFilter` instance with its own `min_phy_offset_`. Multiple `ConsumeQueueRocksDBStorage` instances (e.g., different topics) each have independent filter thresholds.
+2. **Global singleton filter** — `CqCompactionFilterJni` stores the native filter pointer in a static `AtomicLong NATIVE_FILTER_PTR`. Only one filter instance is tracked globally per JVM. If multiple `ConsumeQueueRocksDBStorage` instances exist (e.g., in tests or multi-Broker processes), `setMinPhyOffset()` always updates the last-created filter. Earlier instances lose their threshold updates silently.
 
 3. **C++17 required** — The C++ source uses `std::atomic<int64_t>` which requires a C++17-capable compiler. All modern compilers (GCC 7+, Clang 5+, MSVC 2017+) support this.
 
 4. **Shim depends on rocksdbjni native library at runtime** — The `libcq_compaction_filter.so` has a `DT_NEEDED` entry for `librocksdbjni-linux64.so` (~13 MB). The `CqCompactionFilterJni` class handles this by extracting the shim to the same temp directory as the rocksdbjni native library, so the `$ORIGIN` RPATH resolves correctly without requiring `LD_LIBRARY_PATH`.
+
+5. **Linux x86_64 only** — The pre-built `.so` and the hardcoded library name only support Linux x86_64. Other platforms require both a native rebuild and a code change to `CqCompactionFilterJni`.
