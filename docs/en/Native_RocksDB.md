@@ -97,7 +97,7 @@ The `CqCompactionFilter` uses `std::atomic<int64_t>` with `memory_order_relaxed`
 |------|--------|
 | `pom.xml` | `rocksdb.version` → `rocksdbjni.version=8.4.4`; dependency changed to `org.rocksdb:rocksdbjni` |
 | `common/pom.xml` | `rocketmq-rocksdb` → `org.rocksdb:rocksdbjni` |
-| `common/.../config/AbstractRocksDBStorage.java` | `manualCompactionDefaultCfRange` enhanced with `estimateNumKeys` logging (before/after key count, elapsed time, reduction ratio) |
+| `common/.../config/AbstractRocksDBStorage.java` | `manualCompactionDefaultCfRange` enhanced with `estimateNumKeys` logging (before/after key count, elapsed time, reduction ratio); `manualCompaction` removed unused `minPhyOffset` parameter |
 | `store/.../rocksdb/ConsumeQueueCompactionFilterFactory.java` | **Deleted** — replaced by native shim |
 | `store/.../rocksdb/ConsumeQueueRocksDBStorage.java` | Use `CqCompactionFilterJni.createAndSetFilter()` instead of `CompactionFilterFactory`; added `triggerCompactionSync()` and `countEntries()` helpers |
 | `store/.../rocksdb/RocksDBOptionsFactory.java` | Remove `setCompactionFilterFactory()` call from `createCQCFOptions()` |

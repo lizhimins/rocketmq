@@ -455,7 +455,7 @@ public abstract class AbstractRocksDBStorage {
         }
     }
 
-    protected void manualCompaction(long minPhyOffset, final CompactRangeOptions compactRangeOptions) {
+    protected void manualCompaction(final CompactRangeOptions compactRangeOptions) {
         this.manualCompactionThread.submit(new Runnable() {
             @Override
             public void run() {

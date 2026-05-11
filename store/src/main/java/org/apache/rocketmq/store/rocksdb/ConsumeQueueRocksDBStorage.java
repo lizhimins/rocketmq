@@ -126,7 +126,7 @@ public class ConsumeQueueRocksDBStorage extends AbstractRocksDBStorage {
             CqCompactionFilterJni.setMinPhyOffset(minPhyOffset);
         }
         try {
-            manualCompaction(minPhyOffset, this.compactRangeOptions);
+            super.manualCompaction(this.compactRangeOptions);
         } catch (Exception e) {
             log.error("manualCompaction Failed. minPhyOffset: {}", minPhyOffset, e);
         }
