@@ -429,12 +429,12 @@ public abstract class AbstractRocksDBStorage {
         }
         long before = getEstimateNumKeys();
         long startMs = System.currentTimeMillis();
-        boolean success = true;
+        boolean result = true;
         try {
             LOGGER.info("ManualCompaction started, dbPath={}, estimateNumKeys={}", this.dbPath, before);
             this.db.compactRange(this.defaultCFHandle, null, null, compactRangeOptions);
         } catch (RocksDBException e) {
-            success = false;
+            result = false;
             scheduleReloadRocksdb(e);
             LOGGER.error("ManualCompaction failed, dbPath={}, error={}", this.dbPath, getStatusError(e));
         } finally {
@@ -443,7 +443,7 @@ public abstract class AbstractRocksDBStorage {
             long elapsed = System.currentTimeMillis() - startMs;
             String ratio = before > 0 ? String.format("%.1f", (1.0 - (double) after / before) * 100) : "0.0";
             LOGGER.info("ManualCompaction finished, dbPath={}, elapsed={}ms, success={}, before={}, after={}, reduced={}%",
-                this.dbPath, elapsed, success, before, after, ratio);
+                this.dbPath, elapsed, result, before, after, ratio);
         }
     }
 
