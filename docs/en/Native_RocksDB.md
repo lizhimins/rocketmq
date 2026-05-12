@@ -101,10 +101,11 @@ The `CqCompactionFilter` uses `std::atomic<int64_t>` with `memory_order_relaxed`
 | `store/.../rocksdb/ConsumeQueueCompactionFilterFactory.java` | **Deleted** — replaced by native shim |
 | `store/.../rocksdb/ConsumeQueueRocksDBStorage.java` | Use `CqCompactionFilterJni.createAndSetFilter()` instead of `CompactionFilterFactory`; added `triggerCompactionSync()` and `countEntries()` helpers |
 | `store/.../rocksdb/RocksDBOptionsFactory.java` | Remove `setCompactionFilterFactory()` call from `createCQCFOptions()` |
-| `store/.../rocksdb/CqCompactionFilterJni.java` | **Rewritten** — uses raw JNI pointer + `NativeCqCompactionFilter` wrapper via public API |
+| `store/.../rocksdb/CqCompactionFilterJni.java` | **Rewritten** — uses raw JNI pointer + `NativeCqCompactionFilter` wrapper via public API; added platform-aware library name detection (macOS `.dylib` / Linux `.so`) |
 | `store/.../rocksdb/NativeCqCompactionFilter.java` | **New** — thin `AbstractCompactionFilter<Slice>` wrapper with `disOwnNativeHandle()` |
 | `store/.../resources/native/cq_compaction_filter.cpp` | **Rewritten** — direct C++ subclassing, explicit linking, `std::atomic` for thread safety |
 | `store/.../resources/native/libcq_compaction_filter.so` | **New** — pre-compiled native library (Linux x86_64) |
+| `store/.../resources/native/libcq_compaction_filter.dylib` | **New** — pre-compiled native library (macOS arm64) |
 | `store/.../rocksdb/CqCompactionFilterJniTest.java` | **New** — integration test for compaction filter |
 
 ## Building the native shim
@@ -145,44 +146,55 @@ cp libcq_compaction_filter.so store/src/main/resources/native/
 
 ### macOS (arm64 / x86_64)
 
-On macOS, the rocksdbjni jar provides `librocksdbjni-osx.jar` (or platform-specific entries). The approach is similar to Linux with a few differences:
+On macOS, the rocksdbjni jar uses `.jnilib` extension (not `.so` or bare names) and the native library names differ from Linux. Key gotchas:
+- Apple Silicon uses `librocksdbjni-osx-arm64.jnilib` (not `librocksdbjni-osx-aarch64` as the filename pattern might suggest)
+- macOS `ld` does NOT support the `-l:` syntax used on Linux — pass the `.jnilib` file directly
+- After linking, use `install_name_tool` to fix the absolute install name to `@loader_path`, otherwise the shim fails to resolve the rocksdbjni dependency at runtime
+- GitHub downloads may be blocked by corporate firewalls; use a mirror (e.g. `ghproxy.net`) or a local RocksDB checkout for headers
 
 ```bash
 # 1. Extract the macOS native library from rocksdbjni jar
-#    The jar contains librocksdbjni-osx-aarch64 (arm64) or librocksdbjni-osx-x86_64
+#    The jar contains librocksdbjni-osx-arm64.jnilib (arm64) or librocksdbjni-osx-x86_64.jnilib
 ROCKSDB_JAR=~/.m2/repository/org/rocksdb/rocksdbjni/8.4.4/rocksdbjni-8.4.4.jar
+mkdir -p /tmp/rocksdb-native
 
 # For Apple Silicon (arm64):
-unzip -j "$ROCKSDB_JAR" librocksdbjni-osx-aarch64 -d /tmp/rocksdb-native/
-cp /tmp/rocksdb-native/librocksdbjni-osx-aarch64 /tmp/rocksdb-native/librocksdbjni-osx.dylib
+unzip -j "$ROCKSDB_JAR" librocksdbjni-osx-arm64.jnilib -d /tmp/rocksdb-native/
 
 # For Intel Mac (x86_64):
-unzip -j "$ROCKSDB_JAR" librocksdbjni-osx-x86_64 -d /tmp/rocksdb-native/
-cp /tmp/rocksdb-native/librocksdbjni-osx-x86_64 /tmp/rocksdb-native/librocksdbjni-osx.dylib
+unzip -j "$ROCKSDB_JAR" librocksdbjni-osx-x86_64.jnilib -d /tmp/rocksdb-native/
 
 # 2. Download matching RocksDB headers
-curl -LO https://github.com/facebook/rocksdb/archive/refs/tags/v8.4.4.tar.gz
-tar xzf v8.4.4.tar.gz rocksdb-8.4.4/include --strip-components=1
+#    Use ghproxy.net mirror if github.com is blocked:
+curl -sL "https://ghproxy.net/https://github.com/facebook/rocksdb/archive/refs/tags/v8.4.4.tar.gz" -o /tmp/rocksdb-8.4.4.tar.gz
+tar xzf /tmp/rocksdb-8.4.4.tar.gz -C /tmp rocksdb-8.4.4/include --strip-components=1
+# Or use a local RocksDB checkout if available:
+# ROCKSDB_INCLUDE=/path/to/rocksdb/include
 
-# 3. Compile the shim
+# 3. Compile the shim — pass .jnilib directly (macOS ld does NOT support -l: syntax)
 export JAVA_HOME=$(/usr/libexec/java_home)
+ROCKSDB_INCLUDE=${ROCKSDB_INCLUDE:-./include}  # adjust to your headers location
+ROCKSDB_JNILIB=/tmp/rocksdb-native/librocksdbjni-osx-arm64.jnilib  # or -x86_64.jnilib
 clang++ -shared -fPIC -O2 -std=c++17 -fno-rtti \
-    -I./include \
+    -I"$ROCKSDB_INCLUDE" \
     -I${JAVA_HOME}/include \
     -I${JAVA_HOME}/include/darwin \
     -Wl,-undefined,error \
-    -Wl,-rpath,@loader_path \
-    -L/tmp/rocksdb-native \
-    -l:librocksdbjni-osx.dylib \
-    -o libcq_compaction_filter.dylib \
+    "$ROCKSDB_JNILIB" \
+    -o /tmp/rocksdb-native/libcq_compaction_filter.dylib \
     store/src/main/resources/native/cq_compaction_filter.cpp
 
-# 4. Verify dependencies
-otool -L libcq_compaction_filter.dylib
-# Should show @loader_path/librocksdbjni-osx.dylib
+# 4. Fix the install_name to use @loader_path for runtime resolution
+#    Without this, otool -L shows an absolute path to the build directory
+install_name_tool -change "$ROCKSDB_JNILIB" "@loader_path/$(basename $ROCKSDB_JNILIB)" \
+    /tmp/rocksdb-native/libcq_compaction_filter.dylib
 
-# 5. Place the output
-cp libcq_compaction_filter.dylib store/src/main/resources/native/
+# 5. Verify dependencies
+otool -L /tmp/rocksdb-native/libcq_compaction_filter.dylib
+# Should show @loader_path/librocksdbjni-osx-arm64.jnilib (or -x86_64.jnilib)
+
+# 6. Place the output
+cp /tmp/rocksdb-native/libcq_compaction_filter.dylib store/src/main/resources/native/
 ```
 
 ### Windows (x86_64)
@@ -259,16 +271,15 @@ mvn test -pl store -Dtest=CqCompactionFilterJniTest -Djacoco.skip=true
 
 ## Platform support
 
-The repository ships a pre-built native library for Linux x86_64 only. The library name is hardcoded as `libcq_compaction_filter.so` in `CqCompactionFilterJni.java`.
+`CqCompactionFilterJni.java` automatically detects the OS and architecture at runtime, selecting the correct library name and extension.
 
 | Platform | Library name | Architecture | Status |
 |----------|-------------|--------------|--------|
 | Linux (glibc) | `libcq_compaction_filter.so` | x86_64 | Pre-built |
 | Linux (glibc) | `libcq_compaction_filter.so` | aarch64 | Requires rebuild |
-| macOS | `libcq_compaction_filter.dylib` | arm64 / x86_64 | Requires code change + rebuild |
+| macOS | `libcq_compaction_filter.dylib` | arm64 | Pre-built |
+| macOS | `libcq_compaction_filter.dylib` | x86_64 | Requires rebuild |
 | Windows | `cq_compaction_filter.dll` | x86_64 | Requires code change + rebuild |
-
-For non-Linux platforms, besides rebuilding the native library, you also need to update the hardcoded library name in `CqCompactionFilterJni.loadNativeShim()`.
 
 ## Limitations
 

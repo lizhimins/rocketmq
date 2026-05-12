@@ -34,6 +34,27 @@ public class CqCompactionFilterJni {
     private static final AtomicLong NATIVE_FILTER_PTR = new AtomicLong(0);
     private static volatile boolean loaded = false;
 
+    /** Platform-specific shim library name and extension. */
+    private static final String SHIM_LIB_NAME;
+    private static final String SHIM_LIB_EXTENSION;
+    private static final String ROCKSDB_JNI_LIB_NAME;
+
+    static {
+        String os = System.getProperty("os.name").toLowerCase();
+        if (os.contains("mac") || os.contains("darwin") || os.contains("osx")) {
+            String arch = System.getProperty("os.arch");
+            SHIM_LIB_NAME = "libcq_compaction_filter.dylib";
+            SHIM_LIB_EXTENSION = ".dylib";
+            ROCKSDB_JNI_LIB_NAME = arch.contains("aarch") || arch.contains("arm")
+                ? "librocksdbjni-osx-aarch64"
+                : "librocksdbjni-osx-x86_64";
+        } else {
+            SHIM_LIB_NAME = "libcq_compaction_filter.so";
+            SHIM_LIB_EXTENSION = ".so";
+            ROCKSDB_JNI_LIB_NAME = "librocksdbjni-linux64.so";
+        }
+    }
+
     static {
         loadNativeShim();
     }
@@ -47,7 +68,7 @@ public class CqCompactionFilterJni {
         // when our compaction filter shim is loaded.
         String rocksdbDir = ensureRocksDBNativeLoaded();
 
-        String libName = "libcq_compaction_filter.so";
+        String libName = SHIM_LIB_NAME;
         try (InputStream is = CqCompactionFilterJni.class
             .getClassLoader().getResourceAsStream("native/" + libName)) {
             if (is == null) {
@@ -57,11 +78,11 @@ public class CqCompactionFilterJni {
             File tempLib;
             if (rocksdbDir != null) {
                 // Extract our shim to the same temp directory as the RocksDB JNI library,
-                // so that the DT_NEEDED dependency can be resolved.
+                // so that the DT_NEEDED / LC_LOAD_DYLIB dependency can be resolved.
                 tempLib = new File(rocksdbDir, libName);
             } else {
                 // RocksDB was loaded from java.library.path; our shim can go anywhere.
-                tempLib = File.createTempFile("cq_compaction_filter_", ".so");
+                tempLib = File.createTempFile("cq_compaction_filter_", SHIM_LIB_EXTENSION);
             }
             Files.copy(is, tempLib.toPath(), StandardCopyOption.REPLACE_EXISTING);
             tempLib.deleteOnExit();
@@ -126,7 +147,7 @@ public class CqCompactionFilterJni {
         try {
             jniLibName = org.rocksdb.util.Environment.getJniLibraryFileName("rocksdb");
         } catch (Exception e) {
-            jniLibName = "librocksdbjni-linux64.so";
+            jniLibName = ROCKSDB_JNI_LIB_NAME;
         }
 
         try (InputStream is = CqCompactionFilterJni.class.getClassLoader().getResourceAsStream(jniLibName)) {
