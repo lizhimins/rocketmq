@@ -30,8 +30,10 @@ import org.apache.rocketmq.common.constant.LoggerName;
 import org.apache.rocketmq.logging.org.slf4j.Logger;
 import org.apache.rocketmq.logging.org.slf4j.LoggerFactory;
 import org.apache.rocketmq.store.config.BrokerRole;
+import org.apache.rocketmq.store.config.MessageStoreConfig;
 import org.apache.rocketmq.store.logfile.DefaultMappedFile;
 import org.apache.rocketmq.store.logfile.MappedFile;
+import org.apache.rocketmq.store.prewrite.Ext4Prewrite;
 
 /**
  * Create MappedFile in advance
@@ -46,6 +48,8 @@ public class AllocateMappedFileService extends ServiceThread {
     private volatile boolean hasException = false;
     private DefaultMessageStore messageStore;
     private PreprocessHandler preprocessHandler;
+    /** null until first evaluated, then whether the prewrite path is usable. See {@link #evaluatePrewrite}. */
+    private volatile Boolean prewriteActive;
 
     public AllocateMappedFileService(DefaultMessageStore messageStore) {
         this.messageStore = messageStore;
@@ -224,6 +228,13 @@ public class AllocateMappedFileService extends ServiceThread {
                         this.messageStore.getMessageStoreConfig().getFlushLeastPagesWhenWarmMapedFile());
                 }
 
+                // Runs here, in the allocation thread, rather than in PreprocessHandler: that handler
+                // executes on the write path and its exceptions are swallowed while allocation proceeds,
+                // so it cannot carry an initialization step whose failure has to be observable.
+                if (isPrewriteActive()) {
+                    prewriteMappedFile(mappedFile);
+                }
+
                 req.setMappedFile(mappedFile);
                 this.hasException = false;
                 isSuccess = true;
@@ -247,6 +258,97 @@ public class AllocateMappedFileService extends ServiceThread {
                 req.getCountDownLatch().countDown();
         }
         return true;
+    }
+
+    /**
+     * Evaluates once whether the prewrite path can be used, and logs the reason when it cannot.
+     */
+    private boolean isPrewriteActive() {
+        Boolean active = this.prewriteActive;
+        if (active != null) {
+            return active;
+        }
+        synchronized (this) {
+            if (this.prewriteActive == null) {
+                this.prewriteActive = evaluatePrewrite();
+            }
+            return this.prewriteActive;
+        }
+    }
+
+    private boolean evaluatePrewrite() {
+        MessageStoreConfig config = this.messageStore.getMessageStoreConfig();
+        String problem = prewriteConfigProblem(config);
+        if (problem != null) {
+            if (config.isEnableCommitLogPrewrite()) {
+                // Allocating extents without zeroing them exposes whatever the freed blocks previously
+                // held, which on this broker is almost always a CommitLog file that retention just
+                // deleted. That content parses as valid messages and passes CRC, so the offset check is
+                // the only thing that tells the two generations apart. Without it this trades a
+                // performance problem for a correctness problem, so refuse rather than warn and continue.
+                log.error("enableCommitLogPrewrite is on but {}, so prewrite stays disabled. Set "
+                    + "checkCommitLogOffsetOnRecover=true to enable it.", problem);
+            }
+            return false;
+        }
+        if (!Ext4Prewrite.load(config.getCommitLogPrewriteLibPath())) {
+            log.error("enableCommitLogPrewrite is on but the native library is unavailable: {}. CommitLog "
+                + "keeps the existing allocation path.", Ext4Prewrite.getLoadFailure());
+            return false;
+        }
+        if (!Ext4Prewrite.isSupported()) {
+            log.error("enableCommitLogPrewrite is on but the kernel module is not usable ({}). CommitLog "
+                + "keeps the existing allocation path.", Ext4Prewrite.getProbeDetail());
+            return false;
+        }
+        log.info("CommitLog prewrite enabled: {}", Ext4Prewrite.getProbeDetail());
+        return true;
+    }
+
+    /**
+     * Configuration-level gate for the prewrite path, kept free of native state so it can be verified
+     * without the kernel module present.
+     *
+     * @return null when the configuration permits prewrite, otherwise why it does not
+     */
+    static String prewriteConfigProblem(MessageStoreConfig config) {
+        if (!config.isEnableCommitLogPrewrite()) {
+            return "not enabled";
+        }
+        if (!config.isCheckCommitLogOffsetOnRecover()) {
+            return "checkCommitLogOffsetOnRecover is off";
+        }
+        return null;
+    }
+
+    /**
+     * Converts the new file's extents to written so later first writes produce no metadata transaction.
+     *
+     * <p>Failure is logged and the file is still published: it remains a perfectly valid sparse file, so
+     * the only consequence is that this file keeps the existing write amplification. Blocking allocation
+     * here would stall writes to gain nothing.
+     */
+    private void prewriteMappedFile(MappedFile mappedFile) {
+        int status;
+        try {
+            status = Ext4Prewrite.prepare(mappedFile.getFileName(), mappedFile.getFileSize(),
+                Ext4Prewrite.PREPARE_FSYNC_DIR);
+        } catch (Throwable t) {
+            log.warn("CommitLog prewrite threw for {}, keeping the existing allocation path",
+                mappedFile.getFileName(), t);
+            return;
+        }
+        if (status == Ext4Prewrite.OK) {
+            return;
+        }
+        if (status == Ext4Prewrite.VERIFY_FAILED) {
+            log.warn("CommitLog prewrite could not confirm written extents for {}: {}. The file is still "
+                    + "valid but keeps write amplification.", mappedFile.getFileName(),
+                Ext4Prewrite.statusText(status));
+        } else {
+            log.warn("CommitLog prewrite skipped for {}: {}", mappedFile.getFileName(),
+                Ext4Prewrite.statusText(status));
+        }
     }
 
     /**

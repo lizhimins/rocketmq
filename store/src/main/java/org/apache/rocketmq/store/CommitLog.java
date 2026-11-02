@@ -341,6 +341,34 @@ public class CommitLog implements Swappable {
     }
 
     /**
+     * Verifies that a message's embedded {@code commitLogOffset} equals the physical position it was
+     * actually read from, and returns false (with a warning) when they differ.
+     *
+     * <p>A message is always written with its own physical offset, so a mismatch means the bytes at that
+     * position did not come from this generation of the file. This happens when a file's blocks are
+     * allocated without being zeroed: the readable content is then whatever the freed blocks previously
+     * held, typically messages from an older CommitLog file of this same broker. Those bytes are
+     * structurally valid and pass CRC, so neither the size nor the CRC check can tell them apart.
+     *
+     * <p>Equality is required rather than "somewhere inside this file": a stale message carries an offset
+     * belonging to an older file, and only an exact comparison against the scan position detects it
+     * regardless of how file sizes were configured across generations.
+     *
+     * @return true if the message sits at {@code expectedPhyOffset}; false if the scan must stop here
+     */
+    private boolean isMessageAtExpectedOffset(DispatchRequest dispatchRequest, long expectedPhyOffset,
+        MappedFile mappedFile) {
+        long actual = dispatchRequest.getCommitLogOffset();
+        if (actual == expectedPhyOffset) {
+            return true;
+        }
+        log.warn("found misplaced commitlog offset {} in {}, expected {}, it will be truncated.",
+            actual, mappedFile.getFileName(), expectedPhyOffset);
+        log.info("recover physics file end, {} pos={}", mappedFile.getFileName(), expectedPhyOffset);
+        return false;
+    }
+
+    /**
      * When the normal exit, data recovery, all memory data have been flush
      *
      * @throws RocksDBException only in rocksdb mode
@@ -348,6 +376,7 @@ public class CommitLog implements Swappable {
     public void recoverNormally(long dispatchFromPhyOffset) throws RocksDBException {
         boolean checkCRCOnRecover = this.defaultMessageStore.getMessageStoreConfig().isCheckCRCOnRecover();
         boolean checkDupInfo = this.defaultMessageStore.getMessageStoreConfig().isDuplicationEnable();
+        boolean checkCommitLogOffsetOnRecover = this.defaultMessageStore.getMessageStoreConfig().isCheckCommitLogOffsetOnRecover();
         int maxRecoverNum = this.defaultMessageStore.getMessageStoreConfig().getCommitLogRecoverMaxNum();
         if (maxRecoverNum <= 0) {
             maxRecoverNum = 10;
@@ -379,6 +408,10 @@ public class CommitLog implements Swappable {
                 boolean doDispatch = dispatchRequest.getCommitLogOffset() > dispatchFromPhyOffset;
                 // Normal data
                 if (dispatchRequest.isSuccess() && size > 0) {
+                    if (checkCommitLogOffsetOnRecover
+                        && !isMessageAtExpectedOffset(dispatchRequest, processOffset + mappedFileOffset, mappedFile)) {
+                        break;
+                    }
                     lastValidMsgPhyOffset = processOffset + mappedFileOffset;
                     mappedFileOffset += size;
                     this.getMessageStore().onCommitLogDispatch(dispatchRequest, doDispatch, mappedFile, true, false);
@@ -824,16 +857,13 @@ public class CommitLog implements Swappable {
                 DispatchRequest dispatchRequest = this.checkMessageAndReturnSize(byteBuffer, checkCRCOnRecover, checkDupInfo);
                 int size = dispatchRequest.getMsgSize();
                 if (dispatchRequest.isSuccess()) {
-                    // Check commitlog offset validity if enabled
-                    if (size > 0 && checkCommitLogOffsetOnRecover) {
-                        if (dispatchRequest.getCommitLogOffset() < mappedFile.getFileFromOffset()
-                            || dispatchRequest.getCommitLogOffset() > mappedFile.getFileFromOffset() + mappedFile.getFileSize()) {
-                            log.warn("found illegal commitlog offset {} in {}, current pos={}, it will be truncated.",
-                                dispatchRequest.getCommitLogOffset(), mappedFile.getFileName(), processOffset + mappedFileOffset);
-                            log.info("recover physics file end, {} pos={}", mappedFile.getFileName(), byteBuffer.position());
-
-                            break;
-                        }
+                    // Check commitlog offset validity if enabled.
+                    // Exact equality, not "within this file's range": a stale message inherited from an
+                    // older file is out of range only by luck of how file offsets advance, and the same
+                    // rule must hold in recoverNormally so both paths behave identically.
+                    if (size > 0 && checkCommitLogOffsetOnRecover
+                        && !isMessageAtExpectedOffset(dispatchRequest, processOffset + mappedFileOffset, mappedFile)) {
+                        break;
                     }
                     // Normal data
                     if (size > 0) {

@@ -207,9 +207,17 @@ public class MessageStoreConfig {
     // This ensures no on-the-wire or on-disk corruption to the messages occurred.
     // This check adds some overhead,so it may be disabled in cases seeking extreme performance.
     private boolean checkCRCOnRecover = true;
-    // Whether check the commitlog offset validity during abnormal recovery.
-    // This helps detect and truncate old file data that may pass CRC checks but contains invalid offsets.
+    // Whether a message's embedded commitlog offset must equal the physical position it was read from,
+    // during both normal and abnormal recovery. Rejects data inherited from an older generation of the
+    // file, which is structurally valid and passes CRC. Mandatory when enableCommitLogPrewrite is on.
     private boolean checkCommitLogOffsetOnRecover = false;
+    // Allocate a new CommitLog file's extents as written instead of leaving them unwritten/sparse, so the
+    // first write to each page no longer changes the extent tree and no longer produces a jbd2 transaction
+    // that a synchronous flush must wait for. Requires the ext4_prewrite kernel module and
+    // checkCommitLogOffsetOnRecover; silently falls back to the existing path when unavailable.
+    private boolean enableCommitLogPrewrite = false;
+    // Absolute path of librocketmq_ext4_prewrite.so. Empty resolves it from java.library.path.
+    private String commitLogPrewriteLibPath = "";
     // How many pages are to be flushed when flush CommitLog
     private int flushCommitLogLeastPages = 4;
     // How many pages are to be committed when commit data to file
@@ -887,6 +895,22 @@ public class MessageStoreConfig {
 
     public void setCheckCommitLogOffsetOnRecover(boolean checkCommitLogOffsetOnRecover) {
         this.checkCommitLogOffsetOnRecover = checkCommitLogOffsetOnRecover;
+    }
+
+    public boolean isEnableCommitLogPrewrite() {
+        return enableCommitLogPrewrite;
+    }
+
+    public void setEnableCommitLogPrewrite(boolean enableCommitLogPrewrite) {
+        this.enableCommitLogPrewrite = enableCommitLogPrewrite;
+    }
+
+    public String getCommitLogPrewriteLibPath() {
+        return commitLogPrewriteLibPath;
+    }
+
+    public void setCommitLogPrewriteLibPath(String commitLogPrewriteLibPath) {
+        this.commitLogPrewriteLibPath = commitLogPrewriteLibPath;
     }
 
     public boolean isForceVerifyPropCRC() {
